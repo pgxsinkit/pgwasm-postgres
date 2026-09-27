@@ -31,6 +31,68 @@ export function queryMessage(sql: string): Uint8Array {
   return frame("Q", encoder.encode(`${sql}\0`));
 }
 
+/** Sync (`S`): ends an extended-query batch, and any skip-till-Sync after an error in one. */
+export function syncMessage(): Uint8Array {
+  return frame("S", new Uint8Array(0));
+}
+
+/** CopyFail (`f`): the frontend abandons a `COPY … FROM STDIN`, which then fails with `reason`. */
+export function copyFailMessage(reason: string): Uint8Array {
+  return frame("f", encoder.encode(`${reason}\0`));
+}
+
+/** An ErrorResponse (`E`) with the given fields, by code (`S`, `V`, `C`, `M`, …). */
+export function errorResponseMessage(fields: Readonly<Record<string, string>>): Uint8Array {
+  const text = Object.entries(fields)
+    .map(([code, value]) => `${code}${value}\0`)
+    .join("");
+  return frame("E", encoder.encode(`${text}\0`));
+}
+
+/** The longest startup packet a server accepts (MAX_STARTUP_PACKET_LENGTH, pqcomm.h). */
+export const MAX_STARTUP_PACKET_LENGTH = 10000;
+const CANCEL_REQUEST_CODE = 80877102;
+const SSL_REQUEST_CODE = 80877103;
+const GSSENC_REQUEST_CODE = 80877104;
+
+/** A startup-phase packet: an encryption request, a cancel request, or the startup message itself. */
+export type StartupPacket =
+  | { readonly kind: "ssl" }
+  | { readonly kind: "gssenc" }
+  | { readonly kind: "cancel" }
+  | {
+      readonly kind: "startup";
+      readonly major: number;
+      readonly minor: number;
+      /** `user`, `database`, `options`, `application_name`, GUCs, `_pq_.*` protocol options, … */
+      readonly parameters: Readonly<Record<string, string>>;
+    };
+
+/** Parses one whole startup-phase packet (its Int32 length first; no type byte). */
+export function parseStartupPacket(packet: Uint8Array): StartupPacket {
+  const view = new DataView(packet.buffer, packet.byteOffset, packet.byteLength);
+  if (packet.length < 8 || view.getInt32(0) !== packet.length) {
+    throw new Error(`wire: a startup packet of ${packet.length} bytes does not match its length field`);
+  }
+  const code = view.getInt32(4);
+  if (code === SSL_REQUEST_CODE) return { kind: "ssl" };
+  if (code === GSSENC_REQUEST_CODE) return { kind: "gssenc" };
+  if (code === CANCEL_REQUEST_CODE) return { kind: "cancel" };
+  const strings = decoder.decode(packet.subarray(8)).split("\0");
+  if (strings.at(-1) !== "" || strings.at(-2) !== "") throw new Error("wire: the startup packet is not terminated");
+  const pairs = strings.slice(0, -2);
+  if (pairs.length % 2 !== 0) throw new Error("wire: the startup packet has a parameter without a value");
+  const parameters: Record<string, string> = {};
+  for (let index = 0; index < pairs.length; index += 2) parameters[pairs[index] ?? ""] = pairs[index + 1] ?? "";
+  return { kind: "startup", major: code >>> 16, minor: code & 0xffff, parameters };
+}
+
+/** The transaction status of the last ReadyForQuery (`I` idle, `T` in a block, `E` in a failed block). */
+export function readyStatus(messages: readonly BackendMessage[]): string | undefined {
+  const ready = messages.findLast((message) => message.type === "Z");
+  return ready === undefined ? undefined : String.fromCharCode(ready.body[0] ?? 0);
+}
+
 export interface BackendMessage {
   /** The message's type byte, as a character (`T`, `D`, `C`, `E`, `Z`, …). */
   readonly type: string;
