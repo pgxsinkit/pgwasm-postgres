@@ -53,9 +53,9 @@ Postgres's own regression suite has never run on the wasm build.
    applied with `git am --3way`), `overlay/` (files copied into the tree verbatim, never patched), the
    Bun scripts, the workflows and the docs. Postgres source never enters its history.
    - The overlay starts as ElectricSQL's additions: `pglite/` (host C, static files, scripts, and the
-     builder Dockerfile at `pglite/builder/`), `build-pglite.sh`, `build-with-docker.sh`,
-     `contrib/dist.mk` and `README-PGLITE-DEV.md`. It only adds files: a path that exists upstream is
-     changed by a patch, and a patch never touches an overlay path.
+     builder Dockerfile at `pglite/builder/`, unused: see decision 9), `build-pglite.sh`,
+     `build-with-docker.sh`, `contrib/dist.mk` and `README-PGLITE-DEV.md`. It only adds files: a path
+     that exists upstream is changed by a patch, and a patch never touches an overlay path.
    - `bun run patches:work <tag>` materialises a gitignored worktree with the series as commits;
      `bun run patches:export` writes them back; `bun run patches:check` proves the series (below). The
      export is deterministic: no commit ids, no git version, full blob ids, no rename detection, no
@@ -73,11 +73,16 @@ Postgres's own regression suite has never run on the wasm build.
      (`identity/b133782.json`: tree `a3b4114a08d20cc5d97313d23c4e93376cd5861b`, with the commands that
      derive it). A temporary `extensions.json` records the gitlinks (path, URL, commit) in their place.
      `patches:check` enforces it in `validate` and in CI until `18.3.0`; it needs no build.
-   - Byte identity (next): the materialised tree, built by the reproduction recipe (source at
-     `/home/runner/_work/pglite/pglite/postgres-pglite`, `PGLITE_VERSION=0.5.8`, the pinned draft
-     image), reproduces the sha256s of the seven reproducible files (`pglite.wasm`, `pglite.data`,
-     `pglite.js`, `initdb.wasm`, `initdb.js`, `pg_dump.wasm`, `pg_dump.js`), and `amcheck.tar.gz`'s
-     unpacked files, modes and owners are identical. The split is done only then.
+   - Byte identity: the materialised tree (the proven tree, with the nine extensions of
+     `extensions.json` checked out at their commits and no `.git` anywhere), built by the reproduction
+     recipe (source at `/home/runner/_work/pglite/pglite/postgres-pglite`, `PGLITE_VERSION=0.5.8`, root
+     with umask 022 and no `TZ` or locale variables, the builder image of decision 9), reproduces the
+     sha256s of the seven reproducible files (`pglite.wasm`, `pglite.data`, `pglite.js`, `initdb.wasm`,
+     `initdb.js`, `pg_dump.wasm`, `pg_dump.js`), and `amcheck.tar.gz`'s unpacked files, modes and owners
+     are identical. Proven 2026-09-27: `bun run build` builds it, and `bun run build:verify` checks its
+     `dist/` against `identity/0.5.8-artefacts.json` (the published sizes and sha256s, and the published
+     `amcheck.tar.gz`'s members). Neither runs in `validate` or CI: the build takes about 15 minutes and
+     the image is not published yet. The split is done.
    - Five patches, cut by topic in dependency order: `build-emscripten`, `backend-single-process`,
      `startup-packet-export`, `encoding-shim`, `main-loop-unroll`. Each commit message says what the
      patch does and why, and names `b133782` as its source. ElectricSQL's 22 commits are not kept one
@@ -140,19 +145,23 @@ Postgres's own regression suite has never run on the wasm build.
    stores cross a `dataFormat` change is a pgwasm decision, still open; it blocks the first major, not
    the patch work.
 
-9. **Our own builder image, and every release reproducible.** `ghcr.io/pgxsinkit/pgwasm-builder` is
-   built from a Dockerfile in the overlay by a workflow that runs when the Dockerfile changes, and the
-   build references it by digest; podman everywhere, locally and in CI. The Dockerfile starts from the
+9. **Our own builder image, and every release reproducible.** The builder image is defined in
+   `builder/` at the repository root (its `Containerfile`, the runner stage's package set, and the
+   `make -j` resource cap), not in the overlay: replacing the overlay's `pglite/builder/Dockerfile` would
+   break tree identity, so ElectricSQL's copy stays there, unused, and is deleted at `18.3.0`.
+   `bun run builder:image` builds it locally (`localhost/pgwasm-postgres-builder:3.1.74-p1`);
+   `ghcr.io/pgxsinkit/pgwasm-builder` is built from `builder/` by a workflow that runs when it changes,
+   and the build references it by digest; podman everywhere, locally and in CI. The Containerfile is the
    reproduction's pinned draft (amd64, emsdk by digest, apt snapshot, every source by checksum, clones
-   by commit); sources that are not stable byte streams (GitLab on-demand archives, zlib) are mirrored
-   as release assets here. The source sits at a fixed in-container path (`/build`) wherever the host
-   checkout is; `-ffile-prefix-map` keeps debug builds pointing at host paths; `SOURCE_DATE_EPOCH`
-   comes from the commit; the build runs under `LC_ALL=C`; extension tarballs are deterministic (sorted
-   members, fixed mtimes, `gzip -n`). The tag's release job rebuilds from scratch and must reproduce
-   every sha256 of the build the PR's gate tested, tarballs included, so what was gated is provably
-   what ships. Emscripten stays at 3.1.74 until `18.3.0` (byte identity needs it; the reason goes next
-   to the pin), then moves to the latest Emscripten (6.0.10 on 2026-09-27) as its own release through
-   both gates, because the glue under `pgwasm-c`'s host code changes.
+   by commit), every instruction unchanged; sources that are not stable byte streams (GitLab on-demand
+   archives, zlib) are mirrored as release assets here. The source sits at a fixed in-container path
+   (`/build`) wherever the host checkout is; `-ffile-prefix-map` keeps debug builds pointing at host
+   paths; `SOURCE_DATE_EPOCH` comes from the commit; the build runs under `LC_ALL=C`; extension tarballs
+   are deterministic (sorted members, fixed mtimes, `gzip -n`). The tag's release job rebuilds from
+   scratch and must reproduce every sha256 of the build the PR's gate tested, tarballs included, so what
+   was gated is provably what ships. Emscripten stays at 3.1.74 until `18.3.0` (byte identity needs it;
+   the reason goes next to the pin), then moves to the latest Emscripten (6.0.10 on 2026-09-27) as its
+   own release through both gates, because the glue under `pgwasm-c`'s host code changes.
 
 10. **This repository runs its artefacts with its own minimal driver,** a few hundred lines of Bun
     TypeScript written against the Emscripten glue (MEMFS, initdb via `callMain`, server boot, byte
@@ -177,8 +186,13 @@ Postgres's own regression suite has never run on the wasm build.
 13. **Order of work.**
     1. This repository: tooling, the `REL_18_3` pin, the overlay, the five patches, the temporary
        extension manifest, tree identity in CI.
-    2. Byte identity through the reproduction recipe; the pinned draft image moves into the overlay,
-       and the unstable sources are mirrored as release assets.
+    2. Byte identity through the reproduction recipe, in two parts.
+       - 2a (done 2026-09-27): the pinned draft image as `builder/`, `bun run build` and
+         `bun run build:verify`, and byte identity proven with them.
+       - 2b: once this repository is pushed, the unstable sources (the GitLab on-demand archives of
+         libxml2, libxslt and libtiff, and zlib; OSSP uuid, whose own site is gone, with them) are
+         mirrored as release assets here and the Containerfile's URLs swapped to them. The checksums
+         stay, so the bytes cannot change.
     3. The driver, the compatibility tuple, the pg_regress bridge and its 18.3 baseline, the
        prepopulated asset.
     4. `18.3.0`: amcheck only, the manifest and extension libraries deleted, the fixed-path

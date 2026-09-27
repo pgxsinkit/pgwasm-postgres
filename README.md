@@ -11,20 +11,22 @@ The mechanics and the plan are in [ADR-0001](docs/adr/0001-postgres-as-a-patch-s
 
 The series is the split of ElectricSQL's PGlite fork (`electric-sql/postgres-pglite` at `b133782`, the
 PostgreSQL 18.3 tree PGlite 0.5.8 was built from). `patches:check` proves that the pinned `REL_18_3` +
-the patches + the overlay gives exactly that tree, without its extension submodules. Proving that the
-tree builds the 0.5.8 artefacts byte for byte comes next; there is no release yet.
+the patches + the overlay gives exactly that tree, without its extension submodules. `build` and
+`build:verify` prove that the tree, with those extensions, builds PGlite 0.5.8's artefacts byte for byte
+(2026-09-27). There is no release yet.
 
 ## Layout
 
-| Path              | What                                                                                            |
-| ----------------- | ----------------------------------------------------------------------------------------------- |
-| `upstream.json`   | The pin: upstream repository, tag, and the commit the tag must resolve to                       |
-| `patches/`        | The series: `git format-patch` output, applied in order with `git am --3way`                    |
-| `overlay/`        | Files copied into the tree verbatim, mirroring tree paths; never patched                        |
-| `extensions.json` | Temporary: the nine third-party extensions `b133782` pins as submodules (path, URL, commit)     |
-| `identity/`       | Temporary: the tree-identity record `patches:check` enforces until the first release (`18.3.0`) |
-| `scripts/`        | The Bun scripts below                                                                           |
-| `docs/adr/`       | Decisions                                                                                       |
+| Path              | What                                                                                                         |
+| ----------------- | ------------------------------------------------------------------------------------------------------------ |
+| `upstream.json`   | The pin: upstream repository, tag, and the commit the tag must resolve to                                    |
+| `patches/`        | The series: `git format-patch` output, applied in order with `git am --3way`                                 |
+| `overlay/`        | Files copied into the tree verbatim, mirroring tree paths; never patched                                     |
+| `extensions.json` | Temporary: the nine third-party extensions `b133782` pins as submodules (path, URL, commit)                  |
+| `identity/`       | Temporary: the identity records `patches:check` and `build:verify` check, until the first release (`18.3.0`) |
+| `builder/`        | The builder image: its pinned `Containerfile`, the package set it must have, the `make -j` cap               |
+| `scripts/`        | The Bun scripts below                                                                                        |
+| `docs/adr/`       | Decisions                                                                                                    |
 
 The source tree is the pinned tag, with the patches applied as commits and the overlay copied on top.
 The overlay only adds files: an upstream file changes through a patch, and no patch touches an overlay
@@ -75,6 +77,39 @@ and `git rebase -i --autosquash REL_18_3` work as usual; a new topic is a new co
 `<topic>: <summary>`; its body says what the patch does and why. Never edit a patch file by hand.
 Overlay files are edited in `overlay/` directly.
 
+## Building
+
+Requirements: podman (rootless is fine) on an amd64 host, the network on the first run, and about 6 GB
+of free disk (the image is 2.8 GB; podman's layer cache and the 0.6 GB build tree take the rest).
+
+```sh
+bun run builder:image   # build the builder image from builder/ (about 40 min from scratch, seconds when cached)
+bun run build           # build the source in it (about 15 min)
+bun run build:verify    # check the artefacts against identity/0.5.8-artefacts.json
+```
+
+- **`builder:image`** builds `builder/Containerfile` with podman as
+  `localhost/pgwasm-postgres-builder:3.1.74-p1`, capped at 4 CPUs and 16 GiB, with `builder/bin/make`
+  turning every bare `make -j` into `make -j4`, then checks the image's packages against
+  `builder/dpkg-expected.txt`. The log goes to `.cache/builder-image.log`.
+- **`build`** runs `patches:check`, then checks the proven tree out into `.cache/build/postgres-pglite`
+  (replacing the previous build) with the extensions of `extensions.json` at their commits (fetched once
+  into `.cache/extensions.git`) and no `.git` anywhere, and runs the tree's `build-pglite.sh` in the builder
+  image as ElectricSQL's CI ran it for 0.5.8: the source mounted at
+  `/home/runner/_work/pglite/pglite/postgres-pglite` (the artefacts embed that path), `PGLITE_VERSION=0.5.8`
+  and `DEBUG=false`, as root with umask 022 and no `TZ` or locale variables, under the same resource caps.
+  The artefacts land in `.cache/build/postgres-pglite/dist/`, the log in `.cache/build/build.log`. It
+  refuses to start without podman or the image, or while another `pgwasm-postgres-*` container exists.
+- **`build:verify [<dist dir>]`** checks a `dist/` against `identity/0.5.8-artefacts.json`: the seven
+  reproducible files (`pglite.wasm`, `pglite.data`, `pglite.js`, `initdb.wasm`, `initdb.js`,
+  `pg_dump.wasm`, `pg_dump.js`) by size and sha256, and `amcheck.tar.gz` by its members (path, mode,
+  owner, bytes), because its archive bytes carry the member mtimes and the directory order of the build,
+  which nobody can reproduce. It prints a table and exits 1 on any mismatch.
+
+None of them runs in `validate` or CI: they take too long, and the image is not published yet. Run
+`build` and `build:verify` after changing anything that reaches the build: `builder/`, `extensions.json`,
+the build scripts. A mismatch is diagnosed and fixed in the build, never by editing the record.
+
 ## Scripts
 
 | Script                    | Does                                                                   |
@@ -86,6 +121,9 @@ Overlay files are edited in `overlay/` directly.
 | `check`                   | typecheck + lint + test                                                |
 | `validate`                | format + check + `patches:check`: the pre-commit hook                  |
 | `validate:full`           | The same, for now: what CI runs on pushes to main and on pull requests |
+| `builder:image`           | Build the builder image from `builder/` and check its package set      |
+| `build`                   | Build the materialised source in the builder image (not in CI)         |
+| `build:verify`            | Check a build's `dist/` against the byte-identity record (not in CI)   |
 
 ## Versions and releases
 

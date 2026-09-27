@@ -21,8 +21,11 @@ consumes the releases. Read [README.md](README.md) and
 ## Tools
 
 - **Bun only.** Never use the `npm` CLI for anything. Run tools through `bun run <script>`, not directly.
-- **podman only**, never docker. (The overlay's `build-with-docker.sh` is ElectricSQL's, carried
-  verbatim for tree identity; it changes after byte identity, see ADR-0001.)
+- **podman only**, never docker. (The overlay's `build-with-docker.sh` and `pglite/builder/Dockerfile` are
+  ElectricSQL's, carried verbatim and unused for tree identity; the build is `bun run build` in the image
+  `builder/` defines, see ADR-0001.) Every container this repository starts is named `pgwasm-postgres-*`
+  and started with `--rm`; never remove, retag or prune an image or container this repository did not
+  create, and never run `podman system prune` or `podman image prune`.
 - **mise** pins the toolchain (`mise.toml`).
 - **Latest versions, always.** Every dependency and tool goes in at its latest published version,
   verified with a real command (`bun info <pkg> version`, `mise latest <tool>`). A non-latest pin needs a
@@ -40,6 +43,11 @@ consumes the releases. Read [README.md](README.md) and
   patch; a patch never touches an overlay path (`patches:check` and `patches:export` refuse it).
 - **Until `18.3.0`, tree identity must hold** (`identity/b133782.json`): the patches and overlay stay
   exactly ElectricSQL's, oddities included. No cleanups before then, however obvious.
+- **Until `18.3.0`, byte identity must hold too** (`identity/0.5.8-artefacts.json`). `bun run build` (about
+  15 minutes) and `bun run build:verify` prove it; they are not in `validate` or CI, so run them after
+  any change that reaches the build (`builder/`, `extensions.json`, the build scripts). A mismatch is
+  diagnosed in the build; the record is never edited to make it pass. Run long builds in the background
+  and wait on the process, never with a long fixed `sleep`.
 - Never commit PostgreSQL source, build outputs or the contents of `.cache/` or `work/`.
 
 ## Directory hygiene
