@@ -62,6 +62,18 @@ export interface PostgresOptions {
   readonly database?: string;
 }
 
+/**
+ * An exchange that streams, as a socket does: the backend's output goes to `write` whenever it flushes, and
+ * a backend that has consumed the message and reads on (a `COPY … FROM STDIN` waiting for its data) gets
+ * its next bytes from `read`, which may block until they exist.
+ */
+export interface ExchangeStream {
+  /** The backend's output, as it is flushed; the chunk is the caller's to keep. */
+  write(chunk: Uint8Array): void;
+  /** More frontend bytes (never empty), or `null` for the end of the input, which the backend reads as EOF. */
+  read(): Uint8Array | null;
+}
+
 /** Protocol codes of the startup-phase requests a server answers without a session. */
 const SSL_REQUEST = 80877103;
 const GSSENC_REQUEST = 80877104;
@@ -126,12 +138,14 @@ export class Postgres {
   #input: Uint8Array = new Uint8Array(0);
   #readOffset = 0;
   #output: Uint8Array[] = [];
+  #stream: ExchangeStream | undefined;
   #commandStream: number | null = null;
   readonly #functions: number[] = [];
   /** The last lines the backend printed, shared with the module's print callbacks. */
   readonly #recentLines: string[];
   readonly #stack: ShadowStack;
   #started = false;
+  #stopped = false;
   #failed = false;
   #disposed = false;
 
@@ -248,13 +262,22 @@ export class Postgres {
       }, "pi"),
     );
     const read = this.#addFunction((pointer: number, maxLength: number) => {
+      if (this.#readOffset >= this.#input.length && this.#stream !== undefined) {
+        const more = this.#stream.read();
+        if (more === null) return 0;
+        if (more.length === 0) throw new Error("ExchangeStream.read returned no bytes; return null for the end");
+        this.#input = more;
+        this.#readOffset = 0;
+      }
       const length = Math.min(this.#input.length - this.#readOffset, maxLength);
       mod.HEAPU8.set(this.#input.subarray(this.#readOffset, this.#readOffset + length), pointer);
       this.#readOffset += length;
       return length;
     }, "iii");
     const write = this.#addFunction((pointer: number, length: number) => {
-      this.#output.push(mod.HEAPU8.slice(pointer, pointer + length));
+      const chunk = mod.HEAPU8.slice(pointer, pointer + length);
+      if (this.#stream === undefined) this.#output.push(chunk);
+      else this.#stream.write(chunk);
       return length;
     }, "iii");
     mod._pgl_set_rw_cbs(read, write);
@@ -347,19 +370,22 @@ export class Postgres {
 
   /**
    * One exchange on the session: `message` (a startup packet, or one or more whole frontend messages) goes
-   * in, and every byte the backend writes in response comes back. SSL and GSS encryption requests are
-   * refused with `N`, as a server without either does; a cancel request and a Terminate are ignored, since
-   * the session ends with the instance. A throw that is not the runtime's own unwind means the wasm stack
-   * was abandoned mid-function, and an exit ({@link BackendExit}) means the backend tore its session down:
-   * either is rethrown, and every later exchange is refused.
+   * in, and every byte the backend writes in response comes back, or, with a `stream`, goes to its `write`
+   * as it is flushed (and an empty array comes back). SSL and GSS encryption requests are refused with `N`,
+   * as a server without either does; a cancel request and a Terminate are ignored, since the session ends
+   * with the instance. A throw that is not the runtime's own unwind means the wasm stack was abandoned
+   * mid-function, and an exit ({@link BackendExit}) means the backend tore its session down: either is
+   * rethrown, and every later exchange is refused.
    */
-  exchange(message: Uint8Array): Uint8Array {
+  exchange(message: Uint8Array, stream?: ExchangeStream): Uint8Array {
     if (!this.#started) throw new Error("Start the backend before exchanging messages");
     if (this.#failed) throw new Error("The session failed and cannot be used again");
+    if (this.#stopped) throw new Error("The backend was shut down");
     if (message.length === 0 || message[0] === 0x58) return new Uint8Array(0);
     this.#input = message;
     this.#readOffset = 0;
     this.#output = [];
+    this.#stream = stream;
     try {
       if (message[0] === 0) this.#startupPhase(message);
       else this.#runMainLoop();
@@ -371,7 +397,20 @@ export class Postgres {
     } finally {
       this.#input = new Uint8Array(0);
       this.#output = [];
+      this.#stream = undefined;
     }
+  }
+
+  /**
+   * Mounts a host directory at the same path in the module's filesystem (Emscripten's NODEFS), so the
+   * backend reads and writes the host's files there, as a server running on the host would.
+   */
+  mountHostDirectory(path: string): void {
+    const FS = this.module.FS;
+    const nodefs = FS.filesystems["NODEFS"];
+    if (nodefs === undefined) throw new Error("This build's runtime has no NODEFS");
+    if (!FS.analyzePath(path).exists) FS.mkdirTree(path);
+    FS.mount(nodefs, { root: path }, path);
   }
 
   #startupPhase(message: Uint8Array): void {
@@ -391,7 +430,8 @@ export class Postgres {
 
   #runMainLoop(): void {
     const mod = this.module;
-    // The loop returns after each message; a batch runs until the input is consumed.
+    // The loop returns after each message; a batch runs until the input (including whatever a streaming
+    // exchange read on) is consumed.
     while (this.#readOffset < this.#input.length || mod._pq_buffer_remaining_data() > 0) {
       const stack = this.#stack.save();
       try {
@@ -409,7 +449,17 @@ export class Postgres {
 
   /** Shuts the backend down cleanly (its exit callbacks: the shutdown checkpoint), then disposes of it. */
   close(): void {
-    if (this.#started && !this.#failed && !this.#disposed) {
+    this.shutdown();
+    this.dispose();
+  }
+
+  /**
+   * Shuts the backend down cleanly (its exit callbacks: the shutdown checkpoint) and leaves the instance
+   * undisposed, so its data directory can still be read. Does nothing unless it is running.
+   */
+  shutdown(): void {
+    if (this.#started && !this.#stopped && !this.#failed && !this.#disposed) {
+      this.#stopped = true;
       try {
         preservingExitCode(() => {
           this.module._pgl_setPGliteActive(0);
@@ -420,7 +470,6 @@ export class Postgres {
         if (!(exit.name === "ExitStatus" && exit.status === 0)) throw error;
       }
     }
-    this.dispose();
   }
 
   /** Releases the callbacks and exits the runtime, which `noExitRuntime` otherwise keeps alive. */

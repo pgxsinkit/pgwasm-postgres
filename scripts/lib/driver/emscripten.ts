@@ -25,6 +25,8 @@ export interface EmscriptenFS {
   unlink(path: string): void;
   /** A character device whose reads call `input` once per byte. */
   createDevice(parent: string, name: string, input: () => number | null): unknown;
+  /** The filesystem types the runtime was built with (`MEMFS`, `NODEFS`, …), for `mount`. */
+  readonly filesystems: Readonly<Record<string, unknown>>;
 }
 
 /** What the module factories accept; only the members the driver sets. */
