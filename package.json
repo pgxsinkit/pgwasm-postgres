@@ -1,0 +1,30 @@
+{
+  "name": "pgwasm-postgres",
+  "version": "0.0.0",
+  "private": true,
+  "license": "PostgreSQL",
+  "type": "module",
+  "scripts": {
+    "check": "bun run typecheck && bun run lint && bun run test",
+    "format": "oxfmt --config .oxfmtrc.jsonc --check .",
+    "format:write": "oxfmt --config .oxfmtrc.jsonc --write .",
+    "lint": "oxlint -c .oxlintrc.jsonc scripts tests",
+    "lint:fix": "oxlint --fix -c .oxlintrc.jsonc scripts tests",
+    "patches:check": "bun scripts/patches-check.ts",
+    "patches:export": "bun scripts/patches-export.ts",
+    "patches:work": "bun scripts/patches-work.ts",
+    "prepare": "git config core.hooksPath .githooks || true",
+    "test": "bun test ./tests",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "validate": "bun run format && bun run check",
+    "validate:full": "bun run validate"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.2",
+    "oxfmt": "0.70.0",
+    "oxlint": "1.85.0",
+    "oxlint-tsgolint": "7.0.2003",
+    "typescript": "7.0.2"
+  },
+  "packageManager": "bun@1.4.2"
+}

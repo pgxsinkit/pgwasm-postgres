@@ -1,0 +1,3 @@
+[tools]
+# The same version as package.json's packageManager, which CI's setup-bun reads.
+bun = "1.4.2"
