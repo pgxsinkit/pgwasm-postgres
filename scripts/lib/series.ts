@@ -90,12 +90,8 @@ export function findConflictRegions(file: string, text: string): ConflictRegion[
   return regions;
 }
 
-/**
- * Applies the series with `git am --3way`. On failure git's am state is left in place (the caller aborts
- * or hands the worktree to a human) and the failure is described: which patch, which hunks, which files.
- */
-export function applySeries(layout: Layout, worktree: string, patches: readonly string[]): AmFailure | undefined {
-  if (patches.length === 0) return undefined;
+/** `git am --3way` of patch files, in order; the result's output is git's stdout and stderr together. */
+function runAm(layout: Layout, worktree: string, patches: readonly string[]): { exitCode: number; output: string } {
   const am = gitTree(
     layout,
     worktree,
@@ -108,9 +104,53 @@ export function applySeries(layout: Layout, worktree: string, patches: readonly 
     ],
     { allowFailure: true },
   );
-  if (am.exitCode === 0) return undefined;
+  return { exitCode: am.exitCode, output: `${am.stdout}${am.stderr}`.trim() };
+}
 
-  const output = `${am.stdout}${am.stderr}`.trim();
+/**
+ * Applies the series with `git am --3way`. On failure git's am state is left in place (the caller aborts
+ * or hands the worktree to a human) and the failure is described: which patch, which hunks, which files.
+ */
+export function applySeries(layout: Layout, worktree: string, patches: readonly string[]): AmFailure | undefined {
+  if (patches.length === 0) return undefined;
+  const am = runAm(layout, worktree, patches);
+  return am.exitCode === 0 ? undefined : amFailure(layout, worktree, patches, am.output);
+}
+
+/** How one patch of the series applied: plainly, or only through `git am --3way`'s fallback to a 3-way merge. */
+export interface PatchApplied {
+  readonly patch: string;
+  readonly threeWay: boolean;
+  /** git am's own output for the patch. */
+  readonly output: string;
+}
+
+export interface SeriesApplication {
+  /** The patches that applied, in order. */
+  readonly applied: readonly PatchApplied[];
+  /** The patch that did not, when one did not; git's am state is then left in place, as by {@link applySeries}. */
+  readonly failure: AmFailure | undefined;
+}
+
+/** git am's message when a patch does not apply as it is and it falls back to a 3-way merge (LC_ALL=C). */
+const THREE_WAY_FALLBACK = "Falling back to patching base and 3-way merge";
+
+/**
+ * Applies the series one patch at a time with `git am --3way`, as {@link applySeries} does, recording for each
+ * patch whether it needed the 3-way fallback. It stops at the first patch that does not apply.
+ */
+export function applyEach(layout: Layout, worktree: string, patches: readonly string[]): SeriesApplication {
+  const applied: PatchApplied[] = [];
+  for (const patch of patches) {
+    const am = runAm(layout, worktree, [patch]);
+    if (am.exitCode !== 0) return { applied, failure: amFailure(layout, worktree, [patch], am.output) };
+    applied.push({ patch, threeWay: am.output.includes(THREE_WAY_FALLBACK), output: am.output });
+  }
+  return { applied, failure: undefined };
+}
+
+/** Describes a failed `git am` of `patches` from the am state it left in a worktree. */
+function amFailure(layout: Layout, worktree: string, patches: readonly string[], output: string): AmFailure {
   const nextFile = gitTree(layout, worktree, ["rev-parse", "--git-path", "rebase-apply/next"]).stdout.trim();
   const nextPath = nextFile.startsWith("/") ? nextFile : join(worktree, nextFile);
   const next = existsSync(nextPath) ? Number.parseInt(readFileSync(nextPath, "utf8").trim(), 10) : Number.NaN;

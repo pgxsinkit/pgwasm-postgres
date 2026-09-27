@@ -10,12 +10,13 @@ import { addWorktree, removeWorktree, resolveTag } from "./upstream.ts";
 
 export type Log = (line: string) => void;
 
-function scratchDir(layout: Layout, purpose: string): string {
+/** A scratch path under .cache/ for one run: `<purpose>-<pid>-<time>`. */
+export function scratchDir(layout: Layout, purpose: string): string {
   return join(layout.cacheDir, `${purpose}-${process.pid}-${Date.now().toString(36)}`);
 }
 
 /** Paths the patched tree already has that the overlay would overwrite: overlay files must be new files. */
-function overlayCollisions(layout: Layout, worktree: string, overlay: readonly OverlayEntry[]): string[] {
+export function overlayCollisions(layout: Layout, worktree: string, overlay: readonly OverlayEntry[]): string[] {
   if (overlay.length === 0) return [];
   const tracked = new Set(
     gitTree(layout, worktree, ["ls-tree", "-r", "--name-only", "-z", "HEAD"])
@@ -25,7 +26,7 @@ function overlayCollisions(layout: Layout, worktree: string, overlay: readonly O
   return overlay.filter((entry) => tracked.has(entry.path)).map((entry) => entry.path);
 }
 
-function collisionError(paths: readonly string[], where: string): UserError {
+export function collisionError(paths: readonly string[], where: string): UserError {
   return new UserError(
     [
       `These overlay paths already exist in ${where}:`,

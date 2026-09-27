@@ -9,6 +9,7 @@
     "build:verify": "bun scripts/build-verify.ts",
     "builder:image": "bun scripts/builder-image.ts",
     "builder:lock": "bun scripts/builder-lock.ts",
+    "bump": "bun scripts/bump.ts",
     "check": "bun run typecheck && bun run lint && bun run test",
     "data-format:check": "bun scripts/data-format-check.ts",
     "driver:smoke": "bun scripts/driver-smoke.ts",
