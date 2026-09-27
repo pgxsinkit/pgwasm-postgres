@@ -18,24 +18,28 @@ import, names itself `PostgreSQL 18.3 (pgwasm-postgres 18.3.0)`, and gives the s
 checkout. Its artefacts run under this repository's own minimal driver, which also makes the prepopulated
 data directory as a deterministic asset; `data-format:check` guards the on-disk format, `exports:check`
 the export list, and Postgres's own regression suite runs on the build through a TCP bridge against a
-checked-in baseline: of the 230 tests of `parallel_schedule`, 178 pass, 49 fail the same way in every run
-and 3 are unstable. There is no release yet: CI for the image, the gate and the release (4b), then
-pgxsinkit's adoption (4c).
+checked-in baseline: of the 230 tests of `parallel_schedule`, 178 pass, 48 fail the same way in every run
+and 4 are unstable. CI runs that whole engine gate on every pull request and every push to develop and main,
+from scratch, and a tag releases exactly the build the gate passed (step 4b, 2026-09-27). There is no
+release yet: the builder image is published and its digest recorded, then `18.3.0` is tagged; pgxsinkit's
+adoption follows (4c).
 
 ## Layout
 
-| Path                     | What                                                                                           |
-| ------------------------ | ---------------------------------------------------------------------------------------------- |
-| `upstream.json`          | The pin: upstream repository, tag, and the commit the tag must resolve to                      |
-| `patches/`               | The series: `git format-patch` output, applied in order with `git am --3way`                   |
-| `overlay/`               | Files copied into the tree verbatim, mirroring tree paths; never patched                       |
-| `exported_functions.txt` | The reference export list of `pglite.wasm`, which `exports:check` diffs a build's against      |
-| `data-format.json`       | The declared `dataFormat` and its compatibility tuple, which `data-format:check` enforces      |
-| `identity/`              | The prepopulated asset's record, which `prepopulated --check` reproduces                       |
-| `regress/`               | The pg_regress baseline: every test's result, the failing tests' diffs, why each group fails   |
-| `builder/`               | The builder image: its pinned `Containerfile`, the package set it must have, the `make -j` cap |
-| `scripts/`               | The Bun scripts below                                                                          |
-| `docs/adr/`              | Decisions                                                                                      |
+| Path                      | What                                                                                           |
+| ------------------------- | ---------------------------------------------------------------------------------------------- |
+| `upstream.json`           | The pin: upstream repository, tag, and the commit the tag must resolve to                      |
+| `patches/`                | The series: `git format-patch` output, applied in order with `git am --3way`                   |
+| `overlay/`                | Files copied into the tree verbatim, mirroring tree paths; never patched                       |
+| `exported_functions.txt`  | The reference export list of `pglite.wasm`, which `exports:check` diffs a build's against      |
+| `data-format.json`        | The declared `dataFormat` and its compatibility tuple, which `data-format:check` enforces      |
+| `identity/`               | The prepopulated asset's record, which `prepopulated --check` reproduces                       |
+| `regress/`                | The pg_regress baseline: every test's result, the failing tests' diffs, why each group fails   |
+| `builder/`                | The builder image: its pinned `Containerfile`, the package set it must have, the `make -j` cap |
+| `builder/image.lock.json` | The published builder image: its digest, and the content of `builder/` it was built from       |
+| `.github/workflows/`      | CI: `validate:full`, the builder image's publication, the engine gate, the release             |
+| `scripts/`                | The Bun scripts below                                                                          |
+| `docs/adr/`               | Decisions                                                                                      |
 
 The source tree is the pinned tag, with the patches applied as commits and the overlay copied on top.
 The overlay only adds files: an upstream file changes through a patch, and no patch touches an overlay
@@ -92,8 +96,9 @@ Requirements: podman (rootless is fine) on an amd64 host, the network on the fir
 of free disk (the image is 2.65 GB; podman's layer cache and the 0.5 GB build tree take the rest).
 
 ```sh
-bun run builder:image                     # build the builder image from builder/ (about 10 min from scratch, seconds when cached)
-bun run build [--debug]                   # build the source in it (about 8 min)
+bun run builder:image [--push]            # build the builder image from builder/ (about 10 min from scratch, seconds when cached)
+bun run builder:lock                      # the published image's lock, and what the gate does with it
+bun run build [--debug] [--image <ref>]   # build the source in it (about 8 min)
 bun run build:verify <manifest> [<dist>]  # check that a build reproduces another's manifest
 bun run exports:check [--record]          # diff the build's export list against exported_functions.txt
 ```
@@ -103,7 +108,15 @@ bun run exports:check [--record]          # diff the build's export list against
   turning every bare `make -j` into `make -j4`, then checks the image's packages against
   `builder/dpkg-expected.txt`. The log goes to `.cache/builder-image.log`. The image builds what the core
   links: zlib, libxml2 and ICU, at 0.5.8's versions, on Emscripten 3.1.74 (its pins are the documented
-  exception to the latest-versions rule; the reasons are next to them).
+  exception to the latest-versions rule; the reasons are next to them). A cap podman cannot apply (rootless
+  podman without the `cpu` or `memory` cgroup controller delegated, as on a CI runner) is left out; the
+  caps change no compiler input. `--push` publishes it (see [The engine gate, CI and
+  releases](#the-engine-gate-ci-and-releases)).
+- **`builder:lock [--digest <sha256:…> --id <image id> [--content <sha256>] | --unpublished]`** shows
+  `builder/image.lock.json` (the published image by tag, its digest and image id, and the content of
+  `builder/` it was built from) against `builder/` now, and says whether the gate pulls the published image
+  or builds one; with `--digest` and `--id` it records a publication, refusing (with `--content`) a
+  `builder/` that is not the one the image was built from. The lock changes only through it.
 - **`build`** runs `patches:check`, checks the proven tree out into `.cache/build/postgres-pglite`
   (replacing the previous build) with no `.git`, and runs the tree's `build-pglite.sh` in the builder image,
   reproducibly from any checkout: the source mounted at `/build`, the candidate version of HEAD (derived
@@ -117,8 +130,9 @@ bun run exports:check [--record]          # diff the build's export list against
   commit, tree, epoch, builder image, the compatibility tuple of a fresh initdb and its `dataFormat`, and
   every release artefact's bytes and sha256. The log goes to `.cache/build/build.log`. `--debug` makes a
   debug build whose debug info points at the materialised source on the host (`-ffile-prefix-map`); a
-  release build never sees the host path. It refuses to start without podman or the image, or while
-  another `pgwasm-postgres-*` container exists.
+  release build never sees the host path. `--image` builds in another image of podman's local storage (the
+  published one, by digest); the manifest records the reference and its id. It refuses to start without
+  podman or the image, or while another `pgwasm-postgres-*` container exists.
 - **`build:verify <manifest> [<dist dir>]`** checks a `dist/` (default: the build's) against another
   build's manifest: every release artefact by bytes and sha256, the extension archives included, and the
   version, epoch and tuple of the dist's own manifest. It prints a table and exits 1 on any difference.
@@ -127,9 +141,10 @@ bun run exports:check [--record]          # diff the build's export list against
   reference at the repository root: a core symbol (one of `included.pglite.exports`) missing fails, any
   other symbol added or removed is reported. `--record` rewrites the reference after a deliberate change.
 
-None of them runs in `validate` or CI: they take too long, and the image is not published yet. Run
-`build`, then `exports:check` and the driver's checks below, after changing anything that reaches the
-build: `builder/`, `patches/`, `overlay/`, the build scripts.
+None of them runs in `validate`: they take too long. The engine gate (`bun run gate`, below) runs them in CI
+on every pull request and push. Run the gate (or `build`, then `exports:check` and the driver's checks
+below) after changing anything that reaches the build: `builder/`, `patches/`, `overlay/`, the build
+scripts.
 
 | File          | 0.5.8 (bytes) | 18.3.0 (bytes) | Change            |
 | ------------- | ------------: | -------------: | ----------------- |
@@ -184,8 +199,9 @@ artefact directory as a build's `dist/` (`bin/`, `extensions/`) or a flat direct
   segment's page magic. It fails unless the tuple is the one `data-format.json` declares for the current
   `dataFormat`, and unless the declaration keeps its rules (formats numbered 1, 2, …, no two with one tuple).
 
-None of them runs in `validate` or CI, which have no build. Run them after a change that reaches the build
-or the driver; `bun test` covers their pure logic (the parsers, the tar writer, the determinism helpers).
+None of them runs in `validate`, which has no build; the engine gate runs them. Run them after a change that
+reaches the build or the driver; `bun test` covers their pure logic (the parsers, the tar writer, the
+determinism helpers).
 
 ## Regression tests
 
@@ -240,52 +256,146 @@ bun run regress:bridge [--artefacts <dir>] [--port <n>] [--database <name>] [--s
   wasm first, depending on how far JavaScriptCore had compiled it. `regress:bridge` on its own runs on the
   stack it is started with.
 
-The baseline (4 runs on the `18.3.0` build) has 230 tests: 178 pass, 49 fail the same way in every run and 3
+The baseline (8 runs on the `18.3.0` build) has 230 tests: 178 pass, 48 fail the same way in every run and 4
 are unstable; each run reports 52 failures, and no backend fails. The failures, by group
 (`regress/baseline.json` has the full reasons):
 
-| Group                     | Tests | Why                                                                                           |
-| ------------------------- | ----- | --------------------------------------------------------------------------------------------- |
-| `session-authorization`   | 21    | `RESET SESSION AUTHORIZATION` does nothing in single-user mode; the test runs on as the role  |
-| `regress-library`         | 17    | The tests' C functions: the tree's `regress.so` imports symbols `pglite.wasm` does not export |
-| `single-process`          | 3     | No checkpointer, no background or parallel workers                                            |
-| `session-persistence`     | 3     | `\c` gets the same backend back: login triggers, `temp_buffers`, loaded libraries             |
-| `extended-protocol-ready` | 2     | An extended-query error sends an early ReadyForQuery, which desynchronises psql (unstable)    |
-| `wasm-stack`              | 2     | The JSON parser's recursion takes no shadow stack, so `max_stack_depth` never trips           |
-| `walreceiver-libpq`       | 1     | libpqwalreceiver's static libpq calls the backend's libpgcommon, so connections fail          |
-| `clock-resolution`        | 1     | The wasm's wall clock has millisecond resolution (unstable)                                   |
-| `start-parameters`        | 1     | PGlite's start parameters: `search_path=public` (and `-O`)                                    |
-| `icu-locales`             | 1     | The only ICU collations are `und-x-icu` and `unicode`                                         |
+| Group                     | Tests | Why                                                                                                        |
+| ------------------------- | ----- | ---------------------------------------------------------------------------------------------------------- |
+| `session-authorization`   | 21    | `RESET SESSION AUTHORIZATION` does nothing in single-user mode; the test runs on as the role               |
+| `regress-library`         | 17    | The tests' C functions: the tree's `regress.so` imports symbols `pglite.wasm` does not export              |
+| `single-process`          | 3     | No checkpointer, no background or parallel workers                                                         |
+| `session-persistence`     | 3     | `\c` gets the same backend back: login triggers, `temp_buffers`, loaded libraries                          |
+| `extended-protocol-ready` | 2     | An extended-query error sends an early ReadyForQuery, which desynchronises psql (unstable)                 |
+| `wasm-stack`              | 2     | The JSON parser's recursion takes no shadow stack, so `max_stack_depth` never trips                        |
+| `walreceiver-libpq`       | 1     | libpqwalreceiver's static libpq calls the backend's libpgcommon, so connections fail (unstable: the clock) |
+| `clock-resolution`        | 1     | The wasm's wall clock has millisecond resolution (unstable)                                                |
+| `start-parameters`        | 1     | PGlite's start parameters: `search_path=public` (and `-O`)                                                 |
+| `icu-locales`             | 1     | The only ICU collations are `und-x-icu` and `unicode`                                                      |
 
 Against the byte-identity build's baseline (172 pass, 51 fail, 7 unstable), euc_kr, copyencoding (the
 conversion modules' imports), object_address, tsearch, tsdicts (libpqwalreceiver loads, so no failed
 `dlopen` poisons the later ones) and infinite_recurse (the raised stack) pass, and json, jsonb, conversion
 and alter_table fail the same way in every run instead of unstably.
 
-Neither script runs in `validate` or CI: they need a build and podman. Run `regress` after any change that
-reaches the build or the driver, and `--record` only after a deliberate change, with each new failure given a
+Neither script runs in `validate`: they need a build and podman; the engine gate runs `regress`. Run it after
+any change that reaches the build or the driver, and `--record` only after a deliberate change, with each new failure given a
 group and a reason.
+
+## The engine gate, CI and releases
+
+Requirements: as for [building](#building); the release scripts also need the GitHub CLI (`gh`).
+
+```sh
+bun run gate [--image <ref> | --lock [--published]] [--summary <file>]   # the engine gate of HEAD, from clean
+bun run release:check <tag>                                 # the tag is HEAD's candidate version
+bun run release:gated <commit> [--out <dir>]                # download the gated build of a commit
+bun run release:publish <tag> --gated <dir> [--dry-run]     # identical manifests, then the GitHub release
+```
+
+- **`gate`** is the whole engine gate (ADR-0001 decision 6) of the current commit, in about 12 minutes. It
+  refuses a working tree with changes, sets `SOURCE_DATE_EPOCH` to the commit's time, and runs `build`,
+  `driver:smoke`, `exports:check`, `data-format:check`, `prepopulated` (at that epoch),
+  `prepopulated --check` and `regress`, stopping at the first that fails, whose own message says why. Then it
+  writes `.cache/gate/<commit>/`, which exists only for a commit whose gate passed: the release. The builder
+  image is the local one by default, or `--image`; `--lock` lets `builder/image.lock.json` decide, as CI does:
+  the published image, pulled by digest, when the lock records `builder/`'s content published, and otherwise
+  the image built from `builder/` in the job; `--published` (the release) accepts only the published image.
+  `--summary` appends a Markdown summary of the manifest (the job summary in CI).
+- **`release:check <tag>`** refuses a tag that is not `N.N.N`, does not point at HEAD, or is not HEAD's
+  candidate version.
+- **`release:gated <commit> [--out <dir>]`** downloads the `gate-<commit>` artifact of the latest successful
+  `gate.yml` run on the commit (`gh run list`, `gh run download`; it waits for a run still going) into
+  `.cache/gated/<commit>` and checks it against its own manifest and `SHA256SUMS`.
+- **`release:publish <tag> --gated <dir> [--gate <dir>] [--dry-run] [--summary <file>]`** checks both gate
+  directories, requires this gate (default: `.cache/gate/<HEAD>`) to be of HEAD and of the tag's version,
+  built in the published image, and its manifest identical to the gated build's, writes the notes
+  (`.cache/gate/<HEAD>.notes.md`) and runs `gh release create <tag> --verify-tag` with every file of the gate
+  directory. `--dry-run` stops before that, printing the notes and the command, and reports a missing tag or
+  a local builder image instead of refusing.
+
+A release, and the gate directory it is made from, holds:
+
+| File                                      | What                                                                                       |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `pglite.wasm`, `pglite.data`, `pglite.js` | The backend, its filesystem bundle and its Emscripten glue                                 |
+| `initdb.wasm`, `initdb.js`                | initdb                                                                                     |
+| `pg_dump.wasm`, `pg_dump.js`              | pg_dump                                                                                    |
+| `amcheck.tar.gz`                          | The amcheck extension                                                                      |
+| `prepopulated.tar.gz`                     | The prepopulated data directory, made at the commit's `SOURCE_DATE_EPOCH`                  |
+| `exported_functions.txt`                  | The export list `pglite.wasm` was linked with                                              |
+| `data-format.json`                        | The declared `dataFormat` and its compatibility tuple                                      |
+| `manifest.json`                           | Every other file's bytes and sha256, and what they were built from and what the gate found |
+| `SHA256SUMS`                              | `sha256sum -c` lines for every file but itself                                             |
+
+`manifest.json` records the version, the commit, its tree and its time (the `SOURCE_DATE_EPOCH`), the
+upstream tag and commit, the `dataFormat` and tuple, the builder image (the reference the build ran, its id,
+its published digest, and the content of `builder/`), the export list against `exported_functions.txt`, and
+pg_regress as the baseline the run matched (its summary, a digest of `regress/`, the recorded failures that
+passed). Nothing in it varies between two gates of one commit: the runs' own counts and times stay in
+`.cache/regress/outcome.json`. The release notes are generated from it: the upstream tag and commit, each
+asset's size and sha256, the `dataFormat`, pg_regress, the export list against the previous release's, and
+the builder image's digest.
+
+The workflows are thin: every step that does work is one of these scripts, and gives the same result
+locally.
+
+| Workflow            | On                                                                          | Runs                                                                                                                               |
+| ------------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `ci.yml`            | pull requests, pushes to develop and main                                   | `validate:full`                                                                                                                    |
+| `builder-image.yml` | pushes to develop and main that change `builder/` (not the lock); on demand | `builder:image --push` to `ghcr.io/pgxsinkit/pgwasm-builder`; the digest and the `builder:lock` command in the job summary         |
+| `gate.yml`          | pull requests (their head commit), pushes to develop and main               | `gate --lock`; the gate directory uploaded as the artifact `gate-<commit>`; the manifest in the job summary                        |
+| `release.yml`       | a tag `N.N.N` (never `builder-sources-<n>`)                                 | `release:check`, `gate --lock --published`, `release:gated`, `release:publish`: the release, only if its manifest is the gated one |
+
+The builder image is published from `builder/` by `builder-image.yml` as
+`ghcr.io/pgxsinkit/pgwasm-builder:<tag>` (`3.1.74-p2`, the local image's tag), in Docker's v2s2 format so that
+a pull by digest gives the local image's id. It publishes a content of `builder/` once per tag: when the lock
+already records it, nothing is pushed, and when the lock records the tag published from other content, it
+refuses. A change to `builder/` is therefore a new tag (`-p3`: `BUILDER_IMAGE` in `scripts/lib/builder.ts`
+and the Containerfile's header). Until its publication is recorded, CI builds the image in the job (up to an
+hour more), and no release can be made. The job summary prints the command that records it:
+`bun run builder:lock --digest <sha256:…> --id <image id> --content <sha256>`, run on the commit the workflow
+ran on, and committed.
+
+Releasing, once the lock records the published image (`bun run builder:lock` says the gate pulls it):
+
+1. The commit is on develop and `gate.yml` passed on it (on its pull request's head or on a push).
+2. Fast-forward main to it and push main; `release.yml` finds the gate run through `gate.yml` on main, the
+   default branch.
+3. Tag the commit with its candidate version, the version the gate built (`18.3.0`), unprefixed, and push the
+   tag. `release.yml` rebuilds the commit from scratch in the published image, runs the gate again, requires
+   its manifest to be identical to the gated build's, and publishes the release with its assets and notes.
+
+A tag that is not the commit's candidate, a lock that does not record the published image, or a build that
+differs from the gated one fails the job before anything is published; the tag can then be deleted and set
+again. A gate artifact lives as long as the repository's artifact retention (90 days by default); for an older
+commit, re-run `gate.yml` on it before tagging.
 
 ## Scripts
 
-| Script                    | Does                                                                                    |
-| ------------------------- | --------------------------------------------------------------------------------------- |
-| `format` / `format:write` | oxfmt, check / write                                                                    |
-| `lint` / `lint:fix`       | oxlint (type-aware), check / fix                                                        |
-| `typecheck`               | TypeScript 7                                                                            |
-| `test`                    | Unit tests (`bun test`)                                                                 |
-| `check`                   | typecheck + lint + test                                                                 |
-| `validate`                | format + check + `patches:check`: the pre-commit hook                                   |
-| `validate:full`           | The same, for now: what CI runs on pushes to main and on pull requests                  |
-| `builder:image`           | Build the builder image from `builder/` and check its package set                       |
-| `build`                   | Build the materialised source in the builder image, with its manifest (not in CI)       |
-| `build:verify`            | Check that a build reproduces another build's manifest (not in CI)                      |
-| `exports:check`           | Diff a build's export list against `exported_functions.txt`; `--record` it (not in CI)  |
-| `driver:smoke`            | Drive a build's artefacts: initdb, boot, a wire-protocol smoke test (not in CI)         |
-| `prepopulated`            | Make the prepopulated data directory asset; `--check` it against its record (not in CI) |
-| `data-format:check`       | Check a build's compatibility tuple against `data-format.json` (not in CI)              |
-| `regress:bridge`          | Serve a build's backend over TCP to native clients (not in CI)                          |
-| `regress`                 | Run pg_regress on a build and compare it with the baseline; `--record` it (not in CI)   |
+| Script                    | Does                                                                                      |
+| ------------------------- | ----------------------------------------------------------------------------------------- |
+| `format` / `format:write` | oxfmt, check / write                                                                      |
+| `lint` / `lint:fix`       | oxlint (type-aware), check / fix                                                          |
+| `typecheck`               | TypeScript 7                                                                              |
+| `test`                    | Unit tests (`bun test`)                                                                   |
+| `check`                   | typecheck + lint + test                                                                   |
+| `validate`                | format + check + `patches:check`: the pre-commit hook                                     |
+| `validate:full`           | The same, for now: what `ci.yml` runs on pushes to develop and main and on pull requests  |
+| `builder:image`           | Build the builder image from `builder/` and check its package set; `--push` publishes it  |
+| `builder:lock`            | Show the published image's lock against `builder/`; record a publication                  |
+| `build`                   | Build the materialised source in the builder image, with its manifest (in the gate)       |
+| `build:verify`            | Check that a build reproduces another build's manifest (not in CI)                        |
+| `exports:check`           | Diff a build's export list against `exported_functions.txt`; `--record` it (in the gate)  |
+| `driver:smoke`            | Drive a build's artefacts: initdb, boot, a wire-protocol smoke test (in the gate)         |
+| `prepopulated`            | Make the prepopulated data directory asset; `--check` it against its record (in the gate) |
+| `data-format:check`       | Check a build's compatibility tuple against `data-format.json` (in the gate)              |
+| `regress:bridge`          | Serve a build's backend over TCP to native clients (not in CI)                            |
+| `regress`                 | Run pg_regress on a build and compare it with the baseline; `--record` it (in the gate)   |
+| `gate`                    | The engine gate of HEAD, from clean, and the release it would publish (`gate.yml`)        |
+| `release:check`           | Refuse a tag that is not HEAD's candidate version (`release.yml`)                         |
+| `release:gated`           | Download and check the gated build of a commit from `gate.yml` (`release.yml`)            |
+| `release:publish`         | Require identical manifests, then create the GitHub release; `--dry-run` (`release.yml`)  |
 
 ## Versions and releases
 
@@ -295,8 +405,9 @@ only version input, and `package.json`'s `0.0.0` is a placeholder. The build der
 the latest release tag's revision + 1 when that tag is of the pinned major.minor, and `<major>.<minor>.0`
 otherwise. Only the tags of HEAD's strict ancestors count, so a tagged commit builds as its own tag, and tags
 that are not `N.N.N` (`builder-sources-1`) are ignored; today the candidate is `18.3.0`. Releases are GitHub
-release assets with a checksum manifest, not npm packages. History is linear: changes are rebased, never
-merged.
+release assets with a checksum manifest, not npm packages, made only by `release.yml` from the gated build (see
+[The engine gate, CI and releases](#the-engine-gate-ci-and-releases)). History is linear: changes are rebased,
+never merged, and main is fast-forwarded from the command line.
 
 ## License
 

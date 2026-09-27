@@ -207,7 +207,7 @@ Postgres's own regression suite has never run on the wasm build.
      or port). A new failure, a changed diff or a newly unstable test fails the gate; a vanished failure is
      reported so the baseline tightens; a test the baseline records as unstable is reported apart.
      `--record` runs at least twice, and a test whose outcome or diff differs between the runs is recorded
-     as unstable. The gate needs a build and podman, so it is not in `validate` or CI.
+     as unstable. The gate needs a build and podman, so it is not in `validate`; CI runs it (below).
    - The 18.3 baseline (2026-09-27, 4 runs on the byte-identity build, about two minutes each): of 230
      tests, 172 pass, 51 fail the same way in every run and 7 are unstable. Tablespaces and `\c` work
      (in-place tablespaces; `\c` through the reset). What fails is the engine's and the build's, not the
@@ -238,6 +238,13 @@ Postgres's own regression suite has never run on the wasm build.
      conversion and alter_table no longer depend on a restart); opr_sanity, alter_generic and
      subscription get further, and fail on what is left: the tests' C functions, `RESET SESSION
      AUTHORIZATION`, and libpqwalreceiver's libpq.
+   - Re-recorded in 4b (2026-09-27, 8 runs on the same artefacts): the second gate from clean failed on a
+     changed diff of subscription, which resets its subscription's statistics twice and expects the second
+     `stats_reset` to be later; two resets in one millisecond give the same time (the clock's resolution
+     again). The four runs of the first record never showed it; three of the eight did. subscription is
+     recorded as unstable, in its group walreceiver-libpq: of 230 tests, 178 pass, 48 fail the same way in
+     every run and 4 are unstable. A test's instability can hide from a record of a few runs, and the gate
+     then fails on it at random; each one found is recorded the same way.
    - Known issues, left for later patches: `RESET SESSION AUTHORIZATION` does nothing in single-user
      mode (`session_authorization` never gets a value); an error in an extended-query batch sends an
      early ReadyForQuery (`pgl_longjmp` sets `send_ready_for_query` before the error handling sets
@@ -251,6 +258,20 @@ Postgres's own regression suite has never run on the wasm build.
      `max_stack_depth` refused every statement. The driver now restores it after each unwound call.
      pgxsinkit's `pgwasm-c` host (`postgres-instance.ts`) drives the main loop the same way, without a
      restore.
+   - As built in 4b (2026-09-27), the whole engine gate is one command, `bun run gate`, which runs the same
+     locally and in CI. It gates a commit: it refuses a working tree with changes, sets `SOURCE_DATE_EPOCH`
+     to the commit's time, and runs `build` (which starts with the clean apply, `patches:check`),
+     `driver:smoke`, `exports:check`, `data-format:check` (decision 8), `prepopulated` at that epoch and
+     `prepopulated --check` (decision 10), and `regress`, stopping at the first that fails, whose own
+     message says why. Only then does it write `.cache/gate/<commit>/`, the release it would publish
+     (decision 9). `gate.yml` runs it on every pull request (its head commit, not GitHub's merge commit: the
+     gated commit is the one main is fast-forwarded to) and every push to develop and main, and uploads that
+     directory as the artifact `gate-<commit>`, with the manifest in the job summary. `validate:full` stays
+     the fast check without a build.
+   - A pg_regress run's own counts can differ between two gates of one commit (a test the baseline records
+     as unstable may pass or fail), so the manifest records what does not: the baseline the run matched (its
+     summary and a digest of `regress/`) and the recorded failures that passed. The run's counts and times
+     go to `.cache/regress/outcome.json`, which `regress` writes for the gate.
 
 7. **Trigger and automation.** A weekly `git ls-remote` poll finds a new tag of the current major; the
    Bun bump script applies the series, refreshes `patches/`, builds, runs the engine gate and opens a
@@ -259,6 +280,22 @@ Postgres's own regression suite has never run on the wasm build.
    the command line and tags; the tag's release job publishes. The next major's betas and RCs update
    one rolling "Postgres 19 readiness" issue with apply, build and (once it builds) regress results,
    with no PR.
+
+   The release job, as built in 4b (2026-09-27), is `release.yml`, on a pushed tag `N.N.N` only (the filter
+   `[0-9]+.[0-9]+.[0-9]+`; `builder-sources-<n>` never matches). In order: `bun run release:check <tag>`
+   refuses a tag that is not the commit's candidate version (decision 5); `bun run gate --lock --published`
+   runs the engine gate at the tag, from scratch, in the published builder image; `bun run release:gated`
+   downloads the gated build of the same commit, the `gate-<commit>` artifact of the latest successful
+   `gate.yml` run on it (`gh run list` and `gh run download` with `actions: read`; it waits for a run still
+   going); and `bun run release:publish` requires the two manifests to be identical (decision 9) and creates
+   the GitHub release with every file of the gate directory as an asset and notes generated from the
+   manifest: the upstream tag and commit, each asset's size and sha256, the `dataFormat`, pg_regress, the
+   export list against the previous release's, and the builder image's digest. A failed job publishes
+   nothing, and the tag can be set again. The maintainer's part is to fast-forward main to a commit
+   `gate.yml` passed on and push the tag; `release.yml` looks the gate run up through `gate.yml` on main,
+   the default branch. The workflows are thin: every step that does work is a `bun run` script that gives
+   the same result locally, and `release:publish --dry-run` stops before `gh release create`. The bump
+   script, the poll and the readiness issue are steps 5 and 7.
 
 8. **Majors are adopted deliberately, and on-disk compatibility is guarded mechanically.** Main tracks
    one major. The trigger to move is a feature we need, or the current major coming within 12 months of
@@ -330,6 +367,42 @@ Postgres's own regression suite has never run on the wasm build.
    - Proven 2026-09-27 on the candidate commit: two builds from clean in this checkout and one from a
      clone at another host path gave byte-identical manifests, every sha256 equal, `amcheck.tar.gz`
      included. A build takes about 8 minutes.
+   - Published and gated in 4b (2026-09-27). `builder-image.yml` runs `bun run builder:image --push` on a
+     push to develop or main that changes `builder/` (not the lock) and on demand, with `GITHUB_TOKEN`
+     (`packages: write`): it pushes the image as `ghcr.io/pgxsinkit/pgwasm-builder:3.1.74-p2`, the local
+     image's tag, in Docker's v2s2 format, which keeps the config, so a pull by digest gives the local
+     image's id. The Containerfile labels it with this repository (`org.opencontainers.image.source`), which
+     links the package to it; the label adds no layer. `builder/image.lock.json` records the published
+     image: its reference by tag, its digest and image id, and the content of `builder/` it was built from
+     (a digest of every file under `builder/` but the lock: paths, contents and the execute bit). It changes
+     only through `bun run builder:lock`, which the job summary prints with the digest. A content is
+     published once per tag: when the lock records it, nothing is pushed; when the lock records the tag from
+     other content, the push is refused, so a change to `builder/` is a new tag (`-p3`), and a published tag
+     never moves.
+   - The gate chooses its image from the lock (`bun run gate --lock`): the published image, pulled by digest
+     and checked against the lock's id, when the lock records `builder/`'s content; otherwise the image
+     built from `builder/` in the job (a pull request that changes the builder, until its image is
+     published). A release requires the published image (`--published`). `build` and `regress` take the
+     image as `--image`; the local default stays `localhost/pgwasm-postgres-builder:3.1.74-p2`. The resource
+     caps are passed only when podman can apply them: rootless podman needs the `cpu` and `memory` cgroup
+     controllers delegated, which a runner's service user may not have, and the caps change no compiler
+     input.
+   - The gate directory is the release: `pglite.{wasm,data,js}`, `initdb.{wasm,js}`, `pg_dump.{wasm,js}`,
+     `amcheck.tar.gz`, `prepopulated.tar.gz`, `exported_functions.txt`, `data-format.json`, `manifest.json`
+     and `SHA256SUMS`. The manifest holds every other file's bytes and sha256, the version, the commit, its
+     tree and time, the upstream tag and commit, the `dataFormat` and tuple, the builder image (the
+     reference the build ran, its id, its published digest, `builder/`'s content), the export list against
+     the reference, and pg_regress (decision 6); nothing in it varies between two gates of one commit. The
+     release job requires its gate's manifest to be identical to the gated build's, field by field and file
+     by file: that is "what was gated is provably what ships".
+   - Proven 2026-09-27 at `94a48dd`: two gates from nothing (the build, the upstream clone, the regress
+     tools and runs, the prepopulated asset and the gate directory removed first) gave byte-identical
+     manifests (sha256 `150db3e3551f`) and `SHA256SUMS`, every file equal, in about 15 minutes each
+     (fetching the upstream tag, the build in 8m12s and 8m26s, the regress tools in 33 s, a pg_regress run
+     in 1m31s). `release:publish --dry-run` found the two identical and wrote the notes, and refused a copy
+     with a file changed and one whose manifest differs. The image was the local `3.1.74-p2`, not yet
+     published, so the dry run reported that and the missing tag instead of refusing them. The first pair,
+     at `6034634`, found subscription's instability (decision 6).
 
 10. **This repository runs its artefacts with its own minimal driver,** Bun TypeScript written against
     the Emscripten glue, importing nothing from pgxsinkit (`scripts/lib/driver/`: MEMFS, initdb via
@@ -404,7 +477,13 @@ Postgres's own regression suite has never run on the wasm build.
          `exports:check`; the fixed-path reproducible build with its manifest and `build:verify`; the
          `pgwasm-postgres` label from the derived version; our prepopulated data directory regenerated;
          the pg_regress baseline re-recorded with the raised stack (decisions 2, 3, 5, 6 and 9).
-       - 4b: CI: the builder image on GHCR, by digest; the engine gate and release workflows; the tag.
+       - 4b (done 2026-09-27, but for publishing): `bun run gate`, the builder image's publication and lock,
+         and the release scripts, each runnable locally; `builder-image.yml`, `gate.yml` and `release.yml`
+         (decisions 6, 7 and 9). Publishing is the maintainer's, in order: push develop, where
+         `builder-image.yml` publishes the image (the GHCR package made public if it is private, so that
+         anyone can pull it); record its digest with the `bun run builder:lock` command the job summary
+         prints, and commit the lock; confirm that `gate.yml` passed on that commit, in the published image;
+         fast-forward main to it; tag it `18.3.0`.
        - 4c: pgxsinkit adopts the release with `pgwasm:pin`.
     5. The bump script, run by hand first, then `18.6.0` through it.
     6. The Emscripten update and the browser floor as `18.6.1`, through both gates.
