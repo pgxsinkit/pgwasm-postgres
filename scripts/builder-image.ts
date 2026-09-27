@@ -16,7 +16,7 @@
  *
  * Not part of validate: it takes too long.
  */
-import { appendFileSync, existsSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 
 import { buildBuilderImage, pushBuilderImage } from "./lib/builder-image.ts";
@@ -56,13 +56,15 @@ await runCliAsync(async () => {
   requirePodman();
   refuseOtherContainers();
   const report = (publication: Publication): void => {
-    const record = join(layout.cacheDir, "builder-image.json");
-    writeFileSync(record, `${JSON.stringify(publication, null, 2)}\n`);
+    mkdirSync(layout.cacheDir, { recursive: true });
+    writeFileSync(join(layout.cacheDir, "builder-image.json"), `${JSON.stringify(publication, null, 2)}\n`);
     info(
       `builder:image: ${publication.image} is ${publication.digest}${publication.id === null ? "" : `, id ${publication.id}`}`,
     );
-    info(`builder:image: record it in ${relative(layout.root, lockPath(layout.builderDir))} with`);
-    info(`  ${lockCommand(publication)}`);
+    if (publication.pushed) {
+      info(`builder:image: record it in ${relative(layout.root, lockPath(layout.builderDir))} with`);
+      info(`  ${lockCommand(publication)}`);
+    }
     if (args.summary !== undefined) appendFileSync(args.summary, publicationSummary(publication));
   };
 
