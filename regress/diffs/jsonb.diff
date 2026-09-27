@@ -1,0 +1,21 @@
+diff -U3 expected/jsonb.out results/jsonb.out
+--- expected/jsonb.out
++++ results/jsonb.out
+@@ -212,11 +212,13 @@
+ -- Recursion.
+ SET max_stack_depth = '100kB';
+ SELECT repeat('[', 10000)::jsonb;
+-ERROR:  stack depth limit exceeded
+-HINT:  Increase the configuration parameter "max_stack_depth" (currently 100kB), after ensuring the platform's stack depth limit is adequate.
++ERROR:  invalid input syntax for type json
++DETAIL:  The input string ended unexpectedly.
++CONTEXT:  JSON data, line 1: ...[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[
+ SELECT repeat('{"a":', 10000)::jsonb;
+-ERROR:  stack depth limit exceeded
+-HINT:  Increase the configuration parameter "max_stack_depth" (currently 100kB), after ensuring the platform's stack depth limit is adequate.
++ERROR:  invalid input syntax for type json
++DETAIL:  The input string ended unexpectedly.
++CONTEXT:  JSON data, line 1: ..."a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":
+ RESET max_stack_depth;
+ -- Miscellaneous stuff.
+ SELECT 'true'::jsonb;			-- OK

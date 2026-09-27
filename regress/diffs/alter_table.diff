@@ -1,0 +1,344 @@
+diff -U3 expected/alter_table.out results/alter_table.out
+--- expected/alter_table.out
++++ results/alter_table.out
+@@ -1109,9 +1109,8 @@
+ -- alter table / alter column [set/drop] not null tests
+ -- try altering system catalogs, should fail
+ alter table pg_class alter column relname drop not null;
+-ERROR:  permission denied: "pg_class" is a system catalog
++ERROR:  cache lookup failed for not-null constraint on column "relname" of relation "pg_class"
+ alter table pg_class alter relname set not null;
+-ERROR:  permission denied: "pg_class" is a system catalog
+ -- try altering non-existent table, should fail
+ alter table non_existent alter column bar set not null;
+ ERROR:  relation "non_existent" does not exist
+@@ -1349,7 +1348,7 @@
+ -- alter table / drop column tests
+ -- try altering system catalogs, should fail
+ alter table pg_class drop column relname;
+-ERROR:  permission denied: "pg_class" is a system catalog
++ERROR:  cannot drop column relname of table pg_class because it is required by the database system
+ -- try altering non-existent table, should fail
+ alter table nosuchtable drop column bar;
+ ERROR:  relation "nosuchtable" does not exist
+@@ -3587,28 +3586,39 @@
+ SHOW allow_system_table_mods;
+  allow_system_table_mods 
+ -------------------------
+- off
++ on
+ (1 row)
+ 
+ -- disallowed because of search_path issues with pg_dump
+ CREATE TABLE pg_catalog.new_system_table();
+-ERROR:  permission denied to create "pg_catalog.new_system_table"
+-DETAIL:  System catalog modifications are currently disallowed.
+ -- instead create in public first, move to catalog
+ CREATE TABLE new_system_table(id serial primary key, othercol text);
+ ALTER TABLE new_system_table SET SCHEMA pg_catalog;
+ ALTER TABLE new_system_table SET SCHEMA public;
++ERROR:  relation "new_system_table" already exists in schema "public"
+ ALTER TABLE new_system_table SET SCHEMA pg_catalog;
+ -- will be ignored -- already there:
+ ALTER TABLE new_system_table SET SCHEMA pg_catalog;
+ ALTER TABLE new_system_table RENAME TO old_system_table;
+ CREATE INDEX old_system_table__othercol ON old_system_table (othercol);
++ERROR:  column "othercol" does not exist
+ INSERT INTO old_system_table(othercol) VALUES ('somedata'), ('otherdata');
++ERROR:  column "othercol" of relation "old_system_table" does not exist
++LINE 1: INSERT INTO old_system_table(othercol) VALUES ('somedata'), ...
++                                     ^
+ UPDATE old_system_table SET id = -id;
++ERROR:  column "id" does not exist
++LINE 1: UPDATE old_system_table SET id = -id;
++                                          ^
+ DELETE FROM old_system_table WHERE othercol = 'somedata';
++ERROR:  column "othercol" does not exist
++LINE 1: DELETE FROM old_system_table WHERE othercol = 'somedata';
++                                           ^
+ TRUNCATE old_system_table;
+ ALTER TABLE old_system_table DROP CONSTRAINT new_system_table_pkey;
++ERROR:  constraint "new_system_table_pkey" of relation "old_system_table" does not exist
+ ALTER TABLE old_system_table DROP COLUMN othercol;
++ERROR:  column "othercol" of relation "old_system_table" does not exist
+ DROP TABLE old_system_table;
+ -- set logged
+ CREATE UNLOGGED TABLE unlogged1(f1 SERIAL PRIMARY KEY, f2 TEXT); -- has sequence, toast
+@@ -4040,25 +4050,40 @@
+ ERROR:  must be owner of table not_owned_by_me
+ RESET SESSION AUTHORIZATION;
+ DROP TABLE owned_by_me, not_owned_by_me;
++ERROR:  must be owner of table not_owned_by_me
+ DROP ROLE regress_test_not_me;
++ERROR:  permission denied to drop role
++DETAIL:  Only roles with the CREATEROLE attribute and the ADMIN option on the target roles may drop roles.
+ DROP ROLE regress_test_me;
++ERROR:  permission denied to drop role
++DETAIL:  Only roles with the CREATEROLE attribute and the ADMIN option on the target roles may drop roles.
+ -- check that the table being attached is not part of regular inheritance
+ CREATE TABLE parent (LIKE list_parted);
++ERROR:  permission denied for table list_parted
+ CREATE TABLE child () INHERITS (parent);
++ERROR:  relation "parent" does not exist
+ ALTER TABLE list_parted ATTACH PARTITION child FOR VALUES IN (1);
+-ERROR:  cannot attach inheritance child as partition
++ERROR:  must be owner of table list_parted
+ ALTER TABLE list_parted ATTACH PARTITION parent FOR VALUES IN (1);
+-ERROR:  cannot attach inheritance parent as partition
++ERROR:  must be owner of table list_parted
+ DROP TABLE child;
++ERROR:  table "child" does not exist
+ -- now it should work, with a little tweak
+ ALTER TABLE parent ADD CONSTRAINT check_a CHECK (a > 0);
++ERROR:  relation "parent" does not exist
+ ALTER TABLE list_parted ATTACH PARTITION parent FOR VALUES IN (1);
++ERROR:  must be owner of table list_parted
+ -- test insert/update, per bug #18550
+ INSERT INTO parent VALUES (1);
++ERROR:  relation "parent" does not exist
++LINE 1: INSERT INTO parent VALUES (1);
++                    ^
+ UPDATE parent SET a = 2 WHERE a = 1;
+-ERROR:  new row for relation "parent" violates partition constraint
+-DETAIL:  Failing row contains (2, null).
++ERROR:  relation "parent" does not exist
++LINE 1: UPDATE parent SET a = 2 WHERE a = 1;
++               ^
+ DROP TABLE parent CASCADE;
++ERROR:  table "parent" does not exist
+ -- check any TEMP-ness
+ CREATE TEMP TABLE temp_parted (a int) PARTITION BY LIST (a);
+ CREATE TABLE perm_part (a int);
+@@ -4069,19 +4094,20 @@
+ CREATE TYPE mytype AS (a int);
+ CREATE TABLE fail_part OF mytype;
+ ALTER TABLE list_parted ATTACH PARTITION fail_part FOR VALUES IN (1);
+-ERROR:  cannot attach a typed table as partition
++ERROR:  must be owner of table list_parted
+ DROP TYPE mytype CASCADE;
+ NOTICE:  drop cascades to table fail_part
+ -- check that the table being attached has only columns present in the parent
+ CREATE TABLE fail_part (like list_parted, c int);
++ERROR:  permission denied for table list_parted
+ ALTER TABLE list_parted ATTACH PARTITION fail_part FOR VALUES IN (1);
+-ERROR:  table "fail_part" contains column "c" not found in parent "list_parted"
+-DETAIL:  The new partition may contain only the columns present in parent.
++ERROR:  must be owner of table list_parted
+ DROP TABLE fail_part;
++ERROR:  table "fail_part" does not exist
+ -- check that the table being attached has every column of the parent
+ CREATE TABLE fail_part (a int NOT NULL);
+ ALTER TABLE list_parted ATTACH PARTITION fail_part FOR VALUES IN (1);
+-ERROR:  child table is missing column "b"
++ERROR:  must be owner of table list_parted
+ DROP TABLE fail_part;
+ -- check that columns match in type, collation and NOT NULL status
+ CREATE TABLE fail_part (
+@@ -4089,10 +4115,10 @@
+ 	a int NOT NULL
+ );
+ ALTER TABLE list_parted ATTACH PARTITION fail_part FOR VALUES IN (1);
+-ERROR:  child table "fail_part" has different type for column "b"
++ERROR:  must be owner of table list_parted
+ ALTER TABLE fail_part ALTER b TYPE char (2) COLLATE "POSIX";
+ ALTER TABLE list_parted ATTACH PARTITION fail_part FOR VALUES IN (1);
+-ERROR:  child table "fail_part" has different collation for column "b"
++ERROR:  must be owner of table list_parted
+ DROP TABLE fail_part;
+ -- check that the table being attached has all constraints of the parent
+ CREATE TABLE fail_part (
+@@ -4100,11 +4126,11 @@
+ 	a int NOT NULL
+ );
+ ALTER TABLE list_parted ATTACH PARTITION fail_part FOR VALUES IN (1);
+-ERROR:  child table is missing constraint "check_a"
++ERROR:  must be owner of table list_parted
+ -- check that the constraint matches in definition with parent's constraint
+ ALTER TABLE fail_part ADD CONSTRAINT check_a CHECK (a >= 0);
+ ALTER TABLE list_parted ATTACH PARTITION fail_part FOR VALUES IN (1);
+-ERROR:  child table "fail_part" has different definition for check constraint "check_a"
++ERROR:  must be owner of table list_parted
+ DROP TABLE fail_part;
+ -- check the attributes and constraints after partition is attached
+ CREATE TABLE part_1 (
+@@ -4113,18 +4139,19 @@
+ 	CONSTRAINT check_a CHECK (a > 0)
+ );
+ ALTER TABLE list_parted ATTACH PARTITION part_1 FOR VALUES IN (1);
++ERROR:  must be owner of table list_parted
+ -- attislocal and conislocal are always false for merged attributes and constraints respectively.
+ SELECT attislocal, attinhcount FROM pg_attribute WHERE attrelid = 'part_1'::regclass AND attnum > 0;
+  attislocal | attinhcount 
+ ------------+-------------
+- f          |           1
+- f          |           1
++ t          |           0
++ t          |           0
+ (2 rows)
+ 
+ SELECT conislocal, coninhcount FROM pg_constraint WHERE conrelid = 'part_1'::regclass AND conname = 'check_a';
+  conislocal | coninhcount 
+ ------------+-------------
+- f          |           1
++ t          |           0
+ (1 row)
+ 
+ -- check that NOT NULL NO INHERIT cannot be merged to a normal NOT NULL
+@@ -4133,25 +4160,23 @@
+ 	CONSTRAINT check_a CHECK (a > 0)
+ );
+ ALTER TABLE list_parted ATTACH PARTITION part_fail FOR VALUES IN (2);
+-ERROR:  constraint "part_fail_a_not_null" conflicts with non-inherited constraint on child table "part_fail"
++ERROR:  must be owner of table list_parted
+ DROP TABLE part_fail;
+ -- check that the new partition won't overlap with an existing partition
+ CREATE TABLE fail_part (LIKE part_1 INCLUDING CONSTRAINTS);
+ ALTER TABLE list_parted ATTACH PARTITION fail_part FOR VALUES IN (1);
+-ERROR:  partition "fail_part" would overlap partition "part_1"
+-LINE 1: ...LE list_parted ATTACH PARTITION fail_part FOR VALUES IN (1);
+-                                                                    ^
++ERROR:  must be owner of table list_parted
+ DROP TABLE fail_part;
+ -- check that an existing table can be attached as a default partition
+ CREATE TABLE def_part (LIKE list_parted INCLUDING CONSTRAINTS);
++ERROR:  permission denied for table list_parted
+ ALTER TABLE list_parted ATTACH PARTITION def_part DEFAULT;
++ERROR:  must be owner of table list_parted
+ -- check attaching default partition fails if a default partition already
+ -- exists
+ CREATE TABLE fail_def_part (LIKE part_1 INCLUDING CONSTRAINTS);
+ ALTER TABLE list_parted ATTACH PARTITION fail_def_part DEFAULT;
+-ERROR:  partition "fail_def_part" conflicts with existing default partition "def_part"
+-LINE 1: ...ER TABLE list_parted ATTACH PARTITION fail_def_part DEFAULT;
+-                                                               ^
++ERROR:  must be owner of table list_parted
+ -- check validation when attaching list partitions
+ CREATE TABLE list_parted2 (
+ 	a int,
+@@ -4196,6 +4221,7 @@
+ 	a int,
+ 	b int
+ ) PARTITION BY RANGE (a, b);
++ERROR:  relation "range_parted" already exists
+ -- check that violating rows are correctly reported
+ CREATE TABLE part1 (
+ 	a int NOT NULL CHECK (a = 1),
+@@ -4204,10 +4230,11 @@
+ INSERT INTO part1 VALUES (1, 10);
+ -- Remember the TO bound is exclusive
+ ALTER TABLE range_parted ATTACH PARTITION part1 FOR VALUES FROM (1, 1) TO (1, 10);
+-ERROR:  partition constraint of relation "part1" is violated by some row
++ERROR:  must be owner of table range_parted
+ -- should be ok after deleting the bad row
+ DELETE FROM part1;
+ ALTER TABLE range_parted ATTACH PARTITION part1 FOR VALUES FROM (1, 1) TO (1, 10);
++ERROR:  must be owner of table range_parted
+ -- adding constraints that describe the desired partition constraint
+ -- (or more restrictive) will help skip the validation scan
+ CREATE TABLE part2 (
+@@ -4215,21 +4242,26 @@
+ 	b int NOT NULL CHECK (b >= 10 AND b < 18)
+ );
+ ALTER TABLE range_parted ATTACH PARTITION part2 FOR VALUES FROM (1, 10) TO (1, 20);
++ERROR:  must be owner of table range_parted
+ -- Create default partition
+ CREATE TABLE partr_def1 PARTITION OF range_parted DEFAULT;
++ERROR:  must be owner of table range_parted
+ -- Only one default partition is allowed, hence, following should give error
+ CREATE TABLE partr_def2 (LIKE part1 INCLUDING CONSTRAINTS);
+ ALTER TABLE range_parted ATTACH PARTITION partr_def2 DEFAULT;
+-ERROR:  partition "partr_def2" conflicts with existing default partition "partr_def1"
+-LINE 1: ...LTER TABLE range_parted ATTACH PARTITION partr_def2 DEFAULT;
+-                                                               ^
++ERROR:  must be owner of table range_parted
+ -- Overlapping partitions cannot be attached, hence, following should give error
+ INSERT INTO partr_def1 VALUES (2, 10);
++ERROR:  relation "partr_def1" does not exist
++LINE 1: INSERT INTO partr_def1 VALUES (2, 10);
++                    ^
+ CREATE TABLE part3 (LIKE range_parted);
++ERROR:  permission denied for table range_parted
+ ALTER TABLE range_parted ATTACH partition part3 FOR VALUES FROM (2, 10) TO (2, 20);
+-ERROR:  updated partition constraint for default partition "partr_def1" would be violated by some row
++ERROR:  must be owner of table range_parted
+ -- Attaching partitions should be successful when there are no overlapping rows
+ ALTER TABLE range_parted ATTACH partition part3 FOR VALUES FROM (3, 10) TO (3, 20);
++ERROR:  must be owner of table range_parted
+ -- check that leaf partitions are scanned when attaching a partitioned
+ -- table
+ CREATE TABLE part_5 (
+@@ -4582,13 +4614,12 @@
+                                               ^
+ -- dropping non-partition key columns should be allowed on the parent table.
+ ALTER TABLE list_parted DROP COLUMN b;
++ERROR:  must be owner of table list_parted
+ SELECT * FROM list_parted;
+- a 
+----
+-(0 rows)
+-
++ERROR:  permission denied for table list_parted
+ -- cleanup
+ DROP TABLE list_parted, list_parted2, range_parted, list_parted3;
++ERROR:  must be owner of table list_parted
+ DROP TABLE fail_def_part;
+ DROP TABLE hash_parted;
+ -- more tests for certain multi-level partitioning scenarios
+@@ -4636,6 +4667,8 @@
+ ANALYZE attmp;
+ DROP TABLE attmp;
+ DROP USER regress_alter_table_user1;
++ERROR:  permission denied to drop role
++DETAIL:  Only roles with the CREATEROLE attribute and the ADMIN option on the target roles may drop roles.
+ -- check that violating rows are correctly reported when attaching as the
+ -- default partition
+ create table defpart_attach_test (a int) partition by list (a);
+@@ -4698,11 +4731,16 @@
+     operator 1 < (int4, int4), operator 2 <= (int4, int4),
+     operator 3 = (int4, int4), operator 4 >= (int4, int4),
+     operator 5 > (int4, int4), function 1 at_test_sql_partop(int4, int4);
++ERROR:  must be superuser to create an operator class
+ create table at_test_sql_partop (a int) partition by range (a at_test_sql_partop);
++ERROR:  operator class "at_test_sql_partop" does not exist for access method "btree"
+ create table at_test_sql_partop_1 (a int);
+ alter table at_test_sql_partop attach partition at_test_sql_partop_1 for values from (0) to (10);
++ERROR:  relation "at_test_sql_partop" does not exist
+ drop table at_test_sql_partop;
++ERROR:  table "at_test_sql_partop" does not exist
+ drop operator class at_test_sql_partop using btree;
++ERROR:  operator class "at_test_sql_partop" does not exist for access method "btree"
+ drop function at_test_sql_partop;
+ /* Test case for bug #16242 */
+ -- We create a parent and child where the child has missing
+@@ -4841,21 +4879,23 @@
+ insert into attach_parted_part1 values (2, 1);
+ -- Test altering table having publication
+ create schema alter1;
++ERROR:  permission denied for database regression
+ create schema alter2;
++ERROR:  permission denied for database regression
+ create table alter1.t1 (a int);
++ERROR:  schema "alter1" does not exist
++LINE 1: create table alter1.t1 (a int);
++                     ^
+ set client_min_messages = 'ERROR';
+ create publication pub1 for table alter1.t1, tables in schema alter2;
++ERROR:  permission denied for database regression
+ reset client_min_messages;
+ alter table alter1.t1 set schema alter2;
++ERROR:  schema "alter1" does not exist
+ \d+ alter2.t1
+-                                    Table "alter2.t1"
+- Column |  Type   | Collation | Nullable | Default | Storage | Stats target | Description 
+---------+---------+-----------+----------+---------+---------+--------------+-------------
+- a      | integer |           |          |         | plain   |              | 
+-Publications:
+-    "pub1"
+-
+ drop publication pub1;
++ERROR:  publication "pub1" does not exist
+ drop schema alter1 cascade;
++ERROR:  schema "alter1" does not exist
+ drop schema alter2 cascade;
+-NOTICE:  drop cascades to table alter2.t1
++ERROR:  schema "alter2" does not exist

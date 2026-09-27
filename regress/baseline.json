@@ -7,30 +7,22 @@
   "schedule": "parallel_schedule",
   "runs": 4,
   "recordedWith": {
-    "pglite.js": "d7db324430326d0a2189a4aa10a11214fd0c92fdbf0df5781bb57f947b491707",
-    "pglite.wasm": "356b89f6fcb2ab3a397bec4128327b67b7137ec2a900b13251dade81bcbc0ef0",
-    "pglite.data": "c574cc331d96e33311470ec57bf58c579d972c111dbd9c0ab54bb42d79ec4c0d",
+    "pglite.js": "cabac9d6a431cac2e3d70f112fec2dfd7ce518acced85181c417502ba366da5b",
+    "pglite.wasm": "acbf58c590c85ce5837de71d40c5aac818e2c811cc9b8e7c0becbbea4b1b093a",
+    "pglite.data": "67dccef2c115b0b8e0853ed6139054436dbda07c79c609f498d3fab8a7b1731d",
     "initdb.js": "6852f5292d9528c7aa2093a853236f0ba2ee6777b9d43a10f17b04ef22886194",
     "initdb.wasm": "4c8988dca3b2f0bbfd23a0714023e4822a2909ead01804f37acffd9ff3ca9f8a"
   },
   "summary": {
     "tests": 230,
-    "passed": 172,
-    "failed": 51,
-    "unstable": 7
+    "passed": 178,
+    "failed": 49,
+    "unstable": 3
   },
   "groups": {
     "clock-resolution": {
       "reason": "Unstable. The wasm's wall clock has millisecond resolution (Emscripten's clock_gettime(CLOCK_REALTIME) reads Date.now()), so stats' `stats_reset > <the previous reset>` checks fail whenever two resets fall in the same millisecond. Its diff also carries single-process (no checkpointer, and checkpoint, WAL and I/O counters that do not move as it expects) and session-persistence (temp_buffers after \\c).",
       "tests": ["stats"]
-    },
-    "conversion-modules": {
-      "reason": "The encoding conversion modules in lib/postgresql (utf8_and_*.so, euc_*_and_*.so, latin_and_mic.so, …) import functions pglite.wasm does not export (LocalToUtf, UtfToLocal, report_invalid_encoding, pg_encoding_verifymbchar, …). Calling one throws a TypeError out of the wasm ('resolved is not a function'), which ends the backend: the bridge restarts it and the test loses its connection. opr_sanity gets there by converting through every default conversion, euc_kr through convert_from(…, 'EUC_KR'), copyencoding through client_encoding EUC_JP.",
-      "tests": ["opr_sanity", "euc_kr", "copyencoding"]
-    },
-    "dynamic-loading": {
-      "reason": "libpqwalreceiver.so does not load: it imports WalReceiverFunctions, pg_lsn_in and much of libpq's shared code, which pglite.wasm does not export, so CREATE SUBSCRIPTION … CONNECT fails (object_address, subscription). And once a dlopen has failed, every later one in the backend fails too ('missing magic block') until it restarts: tsearch passes on its own, but here object_address's failed dlopen comes first, and dict_snowball.so no longer loads (tsearch, tsdicts).",
-      "tests": ["object_address", "subscription", "tsearch", "tsdicts"]
     },
     "extended-protocol-ready": {
       "reason": "Unstable. An error in an extended-query batch sends a ReadyForQuery before the batch's Sync: pgl_longjmp (overlay pglite/src/pglitec/pglitec.c) sets send_ready_for_query before PostgresMainLongJmp sets ignore_till_sync, and PostgresMainLoopOnce sends it ahead of its next message. psql reports 'message type 0x5a arrived from server while idle' and then pairs results with the wrong queries; where it catches up depends on how the bytes are split between reads, so the diff differs from run to run.",
@@ -41,7 +33,7 @@
       "tests": ["collate.icu.utf8"]
     },
     "regress-library": {
-      "reason": "The tests' C functions are missing (binary_coercible, widget_in, interpt_pp, test_enc_conversion, make_tuple_indirect, trigger_return_old, test_fdw_handler, …), and so is everything built on them (the widget type, the iexit view, the test foreign-data wrapper). The run's --dlpath holds no regress.so: the build tree's own src/test/regress/regress.so imports 21 functions and several data symbols pglite.wasm does not export (IsBinaryCoercible, lseg_intersect, …), so its dlopen fails, and a failed dlopen breaks every later one (see dynamic-loading). Without the file, CREATE FUNCTION … AS :'regresslib' fails with 'could not access file' before any dlopen.",
+      "reason": "The tests' C functions are missing (binary_coercible, widget_in, interpt_pp, test_enc_setup, test_enc_conversion, make_tuple_indirect, trigger_return_old, test_fdw_handler, …), and so is everything built on them (the widget type, the iexit view, the test foreign-data wrapper, opr_sanity's binary_coercible checks, conversion's test_enc_* checks). The run's --dlpath holds no regress.so: the build tree's own src/test/regress/regress.so is not a module the build ships, so pglite.wasm does not export 29 of its imports (IsBinaryCoercible, pg_do_encoding_conversion_buf, lseg_intersect, cpu_operator_cost, …) and its dlopen fails, and in this runtime a failed dlopen breaks every later one. Without the file, CREATE FUNCTION … AS :'regresslib' fails with 'could not access file' before any dlopen. conversion's diff also shows session-authorization (DROP USER after RESET SESSION AUTHORIZATION).",
       "tests": [
         "test_setup",
         "type_sanity",
@@ -57,15 +49,13 @@
         "triggers",
         "copy2",
         "select_views",
-        "alter_generic"
+        "alter_generic",
+        "opr_sanity",
+        "conversion"
       ]
     },
-    "restart-dependent": {
-      "reason": "Unstable. Both load an encoding conversion module after json: whether that dlopen fails ('missing magic block': object_address's failed dlopen breaks every later one until the backend restarts, see dynamic-loading) depends on whether json's stack overflow restarted the backend in between (see wasm-stack). Their diffs also carry other groups' causes: conversion's test functions are in the missing regress library (regress-library); alter_table runs with -O (start-parameters) and shows session-authorization.",
-      "tests": ["conversion", "alter_table"]
-    },
     "session-authorization": {
-      "reason": "RESET SESSION AUTHORIZATION does not return to the superuser. Single-user mode (InitializeSessionUserIdStandalone) never gives the session_authorization setting a value, so its reset value is empty and RESET SESSION AUTHORIZATION (like SET SESSION AUTHORIZATION DEFAULT) changes nothing: after a test's first SET SESSION AUTHORIZATION, the rest of the test runs as that role, and ownership, privilege and role-management errors follow (and objects the test cannot drop). The bridge's reset sets the superuser back explicitly, so it ends with the test.",
+      "reason": "RESET SESSION AUTHORIZATION does not return to the superuser. Single-user mode (InitializeSessionUserIdStandalone) never gives the session_authorization setting a value, so its reset value is empty and RESET SESSION AUTHORIZATION (like SET SESSION AUTHORIZATION DEFAULT) changes nothing: after a test's first SET SESSION AUTHORIZATION, the rest of the test runs as that role, and ownership, privilege and role-management errors follow (and objects the test cannot drop). The bridge's reset sets the superuser back explicitly, so it ends with the test. alter_table's diff also shows start-parameters (-O).",
       "tests": [
         "alter_operator",
         "cluster",
@@ -86,7 +76,8 @@
         "select_into",
         "stats_ext",
         "update",
-        "updatable_views"
+        "updatable_views",
+        "alter_table"
       ]
     },
     "session-persistence": {
@@ -98,12 +89,16 @@
       "tests": ["select_parallel", "partition_prune", "plpgsql"]
     },
     "start-parameters": {
-      "reason": "The backend runs with PGlite's start parameters (the driver's START_PARAMS): search_path=public instead of \"$user\", public shows a table in the role's own schema qualified (create_schema). -O (allow_system_table_mods) also lets alter_table change system catalogs where it expects to be refused (see restart-dependent).",
+      "reason": "The backend runs with PGlite's start parameters (the driver's START_PARAMS): search_path=public instead of \"$user\", public shows a table in the role's own schema qualified (create_schema). -O (allow_system_table_mods) also lets alter_table change system catalogs where it expects to be refused (alter_table, in session-authorization).",
       "tests": ["create_schema"]
     },
+    "walreceiver-libpq": {
+      "reason": "libpqwalreceiver.so loads, and CREATE SUBSCRIPTION … WITH (connect = false) works, but a connection attempt fails with 'libpq is incorrectly linked to backend functions' where 'port=-1' expects libpq's own 'invalid port number': the module links libpq statically without libpgcommon's frontend build, so libpq's pg_link_canary_is_frontend() is the backend's, which says no (and libpq's pg_char_to_encoding and pg_encoding_to_char stay unresolved, since the backend has them only as *_private). Its diff also shows session-authorization (the role tests at its end) and clock-resolution (two pg_stat_reset_subscription_stats calls in the same millisecond, so the second stats_reset is not later).",
+      "tests": ["subscription"]
+    },
     "wasm-stack": {
-      "reason": "Deep recursion runs out of the host's native stack before Postgres' max_stack_depth check. check_stack_depth measures the wasm's shadow stack, which holds only the locals whose address is taken, while every wasm frame also takes native stack. infinite_recurse throws RangeError: Maximum call stack size exceeded out of the wasm, which ends the backend (the bridge restarts it; the test loses its connection). json and jsonb are unstable: whether their 10000-level nesting overflows too depends on how far JavaScriptCore has compiled the wasm by then (its tiers' frames differ in size). When json overflows, it loses its connection at its first nesting test and the backend restarts; when it does not, json and jsonb report the unterminated input instead of 'stack depth limit exceeded', and their to_tsvector tests then fail on dict_snowball.so, because without the restart object_address's failed dlopen still breaks every later one (see dynamic-loading).",
-      "tests": ["infinite_recurse", "json", "jsonb"]
+      "reason": "check_stack_depth() measures the wasm's shadow stack, which holds only the locals whose address is taken, and the JSON parser's recursion takes none: with max_stack_depth at 100kB, 10000 nested levels never trip it, and json and jsonb report the unterminated input ('invalid input syntax for type json') instead of 'stack depth limit exceeded'. The bridge's raised native stack (256 MiB, see scripts/lib/regress/run.ts) keeps the recursion from overflowing the host's stack first, so the result no longer depends on how far JavaScriptCore has compiled the wasm: on the default stack json and jsonb were unstable, and infinite_recurse threw out of the wasm; it passes now.",
+      "tests": ["json", "jsonb"]
     }
   },
   "tests": {
@@ -163,11 +158,11 @@
     "database": "ok",
     "stats_import": "ok",
     "encoding": "failed",
-    "euc_kr": "failed",
+    "euc_kr": "ok",
     "copy": "ok",
     "copyselect": "ok",
     "copydml": "ok",
-    "copyencoding": "failed",
+    "copyencoding": "ok",
     "insert": "ok",
     "insert_conflict": "ok",
     "create_function_c": "failed",
@@ -197,7 +192,7 @@
     "create_am": "ok",
     "hash_func": "ok",
     "errors": "ok",
-    "infinite_recurse": "failed",
+    "infinite_recurse": "ok",
     "sanity_check": "ok",
     "select_into": "failed",
     "select_distinct": "ok",
@@ -231,7 +226,7 @@
     "lock": "failed",
     "replica_identity": "ok",
     "rowsecurity": "failed",
-    "object_address": "failed",
+    "object_address": "ok",
     "tablesample": "ok",
     "groupingsets": "ok",
     "drop_operator": "ok",
@@ -282,8 +277,8 @@
     "guc": "failed",
     "bitmapops": "ok",
     "combocid": "ok",
-    "tsearch": "failed",
-    "tsdicts": "failed",
+    "tsearch": "ok",
+    "tsdicts": "ok",
     "foreign_data": "failed",
     "window": "ok",
     "xmlmap": "ok",
@@ -291,8 +286,8 @@
     "advisory_lock": "ok",
     "indirect_toast": "failed",
     "equivclass": "failed",
-    "json": "unstable",
-    "jsonb": "unstable",
+    "json": "failed",
+    "jsonb": "failed",
     "json_encoding": "ok",
     "jsonpath": "ok",
     "jsonpath_encoding": "ok",
@@ -308,9 +303,9 @@
     "domain": "ok",
     "rangefuncs": "ok",
     "prepare": "ok",
-    "conversion": "unstable",
+    "conversion": "failed",
     "truncate": "ok",
-    "alter_table": "unstable",
+    "alter_table": "failed",
     "sequence": "ok",
     "polymorphism": "ok",
     "rowtypes": "ok",

@@ -29,54 +29,7 @@ diff -U3 expected/alter_generic.out results/alter_generic.out
  --
  -- We would test collations here, but it's not possible because the error
  -- messages tend to be nonportable.
-@@ -117,98 +107,108 @@
- --
- SET SESSION AUTHORIZATION regress_alter_generic_user1;
- CREATE CONVERSION alt_conv1 FOR 'LATIN1' TO 'UTF8' FROM iso8859_1_to_utf8;
-+ERROR:  could not load library "/pglite/lib/postgresql/utf8_and_iso8859_1.so": Could not load dynamic lib: /pglite/lib/postgresql/utf8_and_iso8859_1.so
-+Error: bad export type for 'WalReceiverFunctions': undefined
- CREATE CONVERSION alt_conv2 FOR 'LATIN1' TO 'UTF8' FROM iso8859_1_to_utf8;
-+ERROR:  incompatible library "/pglite/lib/postgresql/utf8_and_iso8859_1.so": missing magic block
-+HINT:  Extension libraries are required to use the PG_MODULE_MAGIC macro.
- ALTER CONVERSION alt_conv1 RENAME TO alt_conv2;  -- failed (name conflict)
--ERROR:  conversion "alt_conv2" already exists in schema "alt_nsp1"
-+ERROR:  conversion "alt_conv1" does not exist
- ALTER CONVERSION alt_conv1 RENAME TO alt_conv3;  -- OK
-+ERROR:  conversion "alt_conv1" does not exist
- ALTER CONVERSION alt_conv2 OWNER TO regress_alter_generic_user2;  -- failed (no role membership)
--ERROR:  must be able to SET ROLE "regress_alter_generic_user2"
-+ERROR:  conversion "alt_conv2" does not exist
- ALTER CONVERSION alt_conv2 OWNER TO regress_alter_generic_user3;  -- OK
-+ERROR:  conversion "alt_conv2" does not exist
- ALTER CONVERSION alt_conv2 SET SCHEMA alt_nsp2;  -- OK
-+ERROR:  conversion "alt_conv2" does not exist
- SET SESSION AUTHORIZATION regress_alter_generic_user2;
- CREATE CONVERSION alt_conv1 FOR 'LATIN1' TO 'UTF8' FROM iso8859_1_to_utf8;
-+ERROR:  incompatible library "/pglite/lib/postgresql/utf8_and_iso8859_1.so": missing magic block
-+HINT:  Extension libraries are required to use the PG_MODULE_MAGIC macro.
- CREATE CONVERSION alt_conv2 FOR 'LATIN1' TO 'UTF8' FROM iso8859_1_to_utf8;
-+ERROR:  incompatible library "/pglite/lib/postgresql/utf8_and_iso8859_1.so": missing magic block
-+HINT:  Extension libraries are required to use the PG_MODULE_MAGIC macro.
- ALTER CONVERSION alt_conv3 RENAME TO alt_conv4;  -- failed (not owner)
--ERROR:  must be owner of conversion alt_conv3
-+ERROR:  conversion "alt_conv3" does not exist
- ALTER CONVERSION alt_conv1 RENAME TO alt_conv4;  -- OK
-+ERROR:  conversion "alt_conv1" does not exist
- ALTER CONVERSION alt_conv3 OWNER TO regress_alter_generic_user2;  -- failed (not owner)
--ERROR:  must be owner of conversion alt_conv3
-+ERROR:  conversion "alt_conv3" does not exist
- ALTER CONVERSION alt_conv2 OWNER TO regress_alter_generic_user3;  -- failed (no role membership)
--ERROR:  must be able to SET ROLE "regress_alter_generic_user3"
-+ERROR:  conversion "alt_conv2" does not exist
- ALTER CONVERSION alt_conv3 SET SCHEMA alt_nsp2;  -- failed (not owner)
--ERROR:  must be owner of conversion alt_conv3
-+ERROR:  conversion "alt_conv3" does not exist
- ALTER CONVERSION alt_conv2 SET SCHEMA alt_nsp2;  -- failed (name conflict)
--ERROR:  conversion "alt_conv2" already exists in schema "alt_nsp2"
-+ERROR:  conversion "alt_conv2" does not exist
- RESET SESSION AUTHORIZATION;
- SELECT n.nspname, c.conname, a.rolname
-   FROM pg_conversion c, pg_namespace n, pg_authid a
+@@ -145,70 +135,68 @@
    WHERE c.connamespace = n.oid AND c.conowner = a.oid
      AND n.nspname IN ('alt_nsp1', 'alt_nsp2')
    ORDER BY nspname, conname;
@@ -175,7 +128,7 @@ diff -U3 expected/alter_generic.out results/alter_generic.out
  --
  -- Operator
  --
-@@ -236,71 +236,89 @@
+@@ -236,71 +224,89 @@
    WHERE o.oprnamespace = n.oid AND o.oprowner = a.oid
      AND n.nspname IN ('alt_nsp1', 'alt_nsp2')
    ORDER BY nspname, oprname;
@@ -286,7 +239,7 @@ diff -U3 expected/alter_generic.out results/alter_generic.out
  RESET SESSION AUTHORIZATION;
  SELECT nspname, opfname, amname, rolname
    FROM pg_opfamily o, pg_am m, pg_namespace n, pg_authid a
-@@ -308,31 +326,18 @@
+@@ -308,31 +314,18 @@
      AND n.nspname IN ('alt_nsp1', 'alt_nsp2')
  	AND NOT opfname LIKE 'alt_opc%'
    ORDER BY nspname, opfname;
@@ -321,7 +274,7 @@ diff -U3 expected/alter_generic.out results/alter_generic.out
  ALTER OPERATOR FAMILY alt_opf4 USING btree ADD
    -- int4 vs int2
    OPERATOR 1 < (int4, int2) ,
-@@ -341,6 +346,7 @@
+@@ -341,6 +334,7 @@
    OPERATOR 4 >= (int4, int2) ,
    OPERATOR 5 > (int4, int2) ,
    FUNCTION 1 btint42cmp(int4, int2);
@@ -329,7 +282,7 @@ diff -U3 expected/alter_generic.out results/alter_generic.out
  ALTER OPERATOR FAMILY alt_opf4 USING btree DROP
    -- int4 vs int2
    OPERATOR 1 (int4, int2) ,
-@@ -349,32 +355,40 @@
+@@ -349,32 +343,40 @@
    OPERATOR 4 (int4, int2) ,
    OPERATOR 5 (int4, int2) ,
    FUNCTION 1 (int4, int2) ;
@@ -377,7 +330,7 @@ diff -U3 expected/alter_generic.out results/alter_generic.out
  RESET ROLE;
  ERROR:  current transaction is aborted, commands ignored until end of transaction block
  DROP OPERATOR FAMILY alt_opf5 USING btree;
-@@ -383,87 +397,120 @@
+@@ -383,87 +385,120 @@
  -- Should fail. Need rights to namespace for ALTER OPERATOR FAMILY .. ADD / DROP
  BEGIN TRANSACTION;
  CREATE ROLE regress_alter_generic_user6;
@@ -508,7 +461,7 @@ diff -U3 expected/alter_generic.out results/alter_generic.out
  ALTER OPERATOR FAMILY alt_opf17 USING btree ADD
    OPERATOR 1 < (int4, int2) ,
    OPERATOR 2 <= (int4, int2) ,
-@@ -472,7 +519,7 @@
+@@ -472,7 +507,7 @@
    OPERATOR 5 > (int4, int2) ,
    FUNCTION 1 btint42cmp(int4, int2) ,
    FUNCTION 1 btint42cmp(int4, int2);    -- procedure 1 appears twice in same statement
@@ -517,7 +470,7 @@ diff -U3 expected/alter_generic.out results/alter_generic.out
  ALTER OPERATOR FAMILY alt_opf17 USING btree ADD
    OPERATOR 1 < (int4, int2) ,
    OPERATOR 2 <= (int4, int2) ,
-@@ -480,6 +527,7 @@
+@@ -480,6 +515,7 @@
    OPERATOR 4 >= (int4, int2) ,
    OPERATOR 5 > (int4, int2) ,
    FUNCTION 1 btint42cmp(int4, int2);    -- procedure 1 appears first time
@@ -525,7 +478,7 @@ diff -U3 expected/alter_generic.out results/alter_generic.out
  ALTER OPERATOR FAMILY alt_opf17 USING btree ADD
    OPERATOR 1 < (int4, int2) ,
    OPERATOR 2 <= (int4, int2) ,
-@@ -487,13 +535,15 @@
+@@ -487,13 +523,15 @@
    OPERATOR 4 >= (int4, int2) ,
    OPERATOR 5 > (int4, int2) ,
    FUNCTION 1 btint42cmp(int4, int2);    -- procedure 1 requested again in separate statement
@@ -543,7 +496,7 @@ diff -U3 expected/alter_generic.out results/alter_generic.out
  ALTER OPERATOR FAMILY alt_opf18 USING btree ADD
    OPERATOR 1 < (int4, int2) ,
    OPERATOR 2 <= (int4, int2) ,
-@@ -501,29 +551,34 @@
+@@ -501,29 +539,34 @@
    OPERATOR 4 >= (int4, int2) ,
    OPERATOR 5 > (int4, int2) ,
    FUNCTION 1 btint42cmp(int4, int2);
@@ -585,7 +538,7 @@ diff -U3 expected/alter_generic.out results/alter_generic.out
  --
  -- Statistics
  --
-@@ -559,14 +614,7 @@
+@@ -559,14 +602,7 @@
   WHERE s.stxnamespace = n.oid AND s.stxowner = a.oid
     AND n.nspname in ('alt_nsp1', 'alt_nsp2')
   ORDER BY nspname, stxname;
@@ -601,7 +554,7 @@ diff -U3 expected/alter_generic.out results/alter_generic.out
  --
  -- Text Search Dictionary
  --
-@@ -600,14 +648,7 @@
+@@ -600,14 +636,7 @@
    WHERE t.dictnamespace = n.oid AND t.dictowner = a.oid
      AND n.nspname in ('alt_nsp1', 'alt_nsp2')
    ORDER BY nspname, dictname;
@@ -617,7 +570,7 @@ diff -U3 expected/alter_generic.out results/alter_generic.out
  --
  -- Text Search Configuration
  --
-@@ -641,119 +682,87 @@
+@@ -641,119 +670,87 @@
    WHERE t.cfgnamespace = n.oid AND t.cfgowner = a.oid
      AND n.nspname in ('alt_nsp1', 'alt_nsp2')
    ORDER BY nspname, cfgname;
