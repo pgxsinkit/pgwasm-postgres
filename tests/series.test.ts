@@ -92,7 +92,7 @@ function thrown(body: () => unknown): Error {
 }
 
 describe("patches:work, patches:export and patches:check", () => {
-  test("round-trip a series and prove tree identity", () => {
+  test("round-trip a series, and check gives the tree of the upstream with the change and the overlay", () => {
     const fixture = makeFixture();
     const { layout } = fixture;
 
@@ -109,7 +109,7 @@ describe("patches:work, patches:export and patches:check", () => {
     expect(patch).toContain("From: Test Author <author@example.invalid>");
     expect(patch).not.toMatch(/^-- \n\d/m);
 
-    // The same change and overlay committed straight onto the upstream is the tree the series must give.
+    // The same change and overlay committed straight onto the upstream is the tree the series gives.
     changeA(fixture, fixture.upstream, "2", "Source");
     for (const name of ["run.sh", "data.txt", "glue.js"]) {
       const mode = name === "run.sh" ? 0o755 : 0o644;
@@ -119,27 +119,12 @@ describe("patches:work, patches:export and patches:check", () => {
     git(["add", "-f", "tools"], { cwd: fixture.upstream, env: fixture.env });
     git(["commit", "--quiet", "-m", "Overlay"], { cwd: fixture.upstream, env: fixture.env });
     const expectedTree = git(["rev-parse", "HEAD^{tree}"], { cwd: fixture.upstream, env: fixture.env }).stdout.trim();
-
-    const pin = JSON.parse(readFileSync(layout.upstreamFile, "utf8")) as { commit: string };
-    write(
-      join(layout.identityDir, "source.json"),
-      JSON.stringify({
-        kind: "tree",
-        source: { repository: fixture.upstream, commit: pin.commit },
-        upstream: { tag: "v1", commit: pin.commit },
-        excludedPaths: [".gitmodules"],
-        expectedTree,
-      }),
-    );
     expect(checkSeries(layout, quiet)).toEqual({ tree: expectedTree, patches: ["0001-topic-return-2.patch"] });
 
-    // A changed overlay mode breaks the identity; the report names both trees.
+    // The tree carries the overlay's modes: a changed mode gives another tree.
     chmodSync(join(layout.overlayDir, "tools", "data.txt"), 0o755);
-    const error = thrown(() => checkSeries(layout, quiet));
-    expect(error).toBeInstanceOf(UserError);
-    expect(error.message).toContain("Tree identity failed (identity/source.json)");
-    expect(error.message).toContain(`expected ${expectedTree}`);
-    // No scratch worktree survives a failure.
+    expect(checkSeries(layout, quiet).tree).not.toBe(expectedTree);
+    // No scratch worktree survives a check.
     expect(readdirSync(layout.cacheDir).filter((name) => name.startsWith("check-"))).toEqual([]);
   });
 

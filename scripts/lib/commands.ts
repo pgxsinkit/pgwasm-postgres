@@ -1,8 +1,8 @@
 import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 
-import { isValidTag, readExtensionPaths, readIdentities, readUpstreamPin } from "./config.ts";
-import { gitCache, gitTree, UserError } from "./git.ts";
+import { isValidTag, readUpstreamPin } from "./config.ts";
+import { gitTree, UserError } from "./git.ts";
 import type { Layout } from "./layout.ts";
 import { copyOverlay, listOverlay, stageOverlay, type OverlayEntry } from "./overlay.ts";
 import { applySeries, comparePatchDirs, describeAmFailure, formatSeries, listPatches } from "./series.ts";
@@ -41,43 +41,14 @@ export interface CheckResult {
 }
 
 /**
- * `patches:check`: pinned tag + `git am --3way` of every patch + the overlay, then `git write-tree`. Proves
- * the export is round-trip stable (re-exporting the applied commits reproduces `patches/` byte for byte)
- * and, while identity records exist, that the tree equals the recorded one.
+ * `patches:check`: pinned tag + `git am --3way` of every patch + the overlay, then `git write-tree`. Proves that
+ * the series applies and that its export is round-trip stable (re-exporting the applied commits reproduces
+ * `patches/` byte for byte), and returns the tree the build is made from.
  */
 export function checkSeries(layout: Layout, log: Log): CheckResult {
   const pin = readUpstreamPin(layout);
   const patches = listPatches(layout.patchesDir);
   const overlay = listOverlay(layout.overlayDir);
-  const identities = readIdentities(layout);
-  for (const identity of identities) {
-    if (identity.upstreamCommit !== pin.commit || identity.upstreamTag !== pin.tag) {
-      throw new UserError(
-        [
-          `${identity.file} records the split of ${identity.upstreamTag} (${identity.upstreamCommit}),`,
-          `but upstream.json pins ${pin.tag} (${pin.commit}).`,
-          "Tree identity only holds on the base it was derived for; retire the record before moving the pin.",
-        ].join("\n"),
-      );
-    }
-  }
-
-  const extensionPaths = readExtensionPaths(layout);
-  if (extensionPaths !== undefined) {
-    const manifested = [".gitmodules", ...extensionPaths].sort();
-    for (const identity of identities) {
-      const excluded = [...identity.excludedPaths].sort();
-      if (excluded.join("\n") !== manifested.join("\n")) {
-        throw new UserError(
-          [
-            `${identity.file} excludes ${excluded.join(", ")},`,
-            `but extensions.json replaces ${manifested.join(", ")}.`,
-            "The manifest must stand in for exactly the paths tree identity leaves out.",
-          ].join("\n"),
-        );
-      }
-    }
-  }
 
   const base = resolveTag(layout, pin, log);
   const worktree = scratchDir(layout, "check");
@@ -108,38 +79,9 @@ export function checkSeries(layout: Layout, log: Log): CheckResult {
     stageOverlay(layout, worktree, overlay);
     const tree = gitTree(layout, worktree, ["write-tree"]).stdout.trim();
 
-    for (const identity of identities) {
-      if (tree !== identity.expectedTree) {
-        const known = gitCache(layout, ["cat-file", "-e", `${identity.expectedTree}^{tree}`], { allowFailure: true });
-        const detail =
-          known.exitCode === 0
-            ? gitCache(layout, ["diff-tree", "-r", "--name-status", identity.expectedTree, tree])
-                .stdout.trimEnd()
-                .split("\n")
-            : [
-                `To see the difference, fetch ${identity.sourceCommit} from ${identity.sourceRepository} into the cache`,
-                `(git --git-dir=${relative(layout.root, layout.cacheRepo)} fetch --depth 1 ${identity.sourceRepository} ${identity.sourceCommit})`,
-                "and run this check again.",
-              ];
-        throw new UserError(
-          [
-            `Tree identity failed (${identity.file}):`,
-            `  expected ${identity.expectedTree} (${identity.sourceCommit} without ${identity.excludedPaths.join(", ")})`,
-            `  actual   ${tree} (${pin.tag} + ${patches.length} patches + ${overlay.length} overlay files)`,
-            ...detail.map((line) => `  ${line}`),
-          ].join("\n"),
-        );
-      }
-    }
-
     log(`patches:check: ${patches.length} patches apply on ${pin.tag} (${base}); ${overlay.length} overlay files.`);
     log(`patches:check: export is round-trip stable (${patches.length} files byte-identical).`);
     log(`patches:check: tree ${tree}.`);
-    for (const identity of identities) {
-      log(
-        `patches:check: tree identity holds (${identity.file}: ${identity.sourceCommit} without the excluded paths).`,
-      );
-    }
     return { tree, patches };
   } finally {
     removeWorktree(layout, worktree);

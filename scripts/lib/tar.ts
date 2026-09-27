@@ -1,8 +1,7 @@
 /**
  * Tar archives. The reader handles those the build writes (`tar -czf`, GNU tar 1.34 in the builder image):
  * enough of ustar, GNU (`L`/`K` long names) and pax (`x` headers) to list every member with its path, type,
- * mode, owner and bytes. `build:verify` compares archives by these members, never by their archive bytes,
- * which carry the moment of `make install` (member mtimes) and the filesystem's directory order.
+ * mode, owner and bytes (the driver installs extension archives with it, and unpacks data directory archives).
  *
  * The writer makes deterministic archives (ADR-0001 decisions 9 and 10): plain ustar, members in the order
  * given, and every header field fixed by the caller's entries, so equal entries give equal bytes.

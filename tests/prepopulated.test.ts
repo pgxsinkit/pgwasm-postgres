@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { gunzipSync } from "node:zlib";
 
-import { IDENTITY_KINDS, readIdentities } from "../scripts/lib/config.ts";
+import { IDENTITY_KINDS } from "../scripts/lib/config.ts";
 import type { DataDirEntry } from "../scripts/lib/driver/postgres.ts";
 import { layoutFor, repoRoot } from "../scripts/lib/layout.ts";
 import { crc32c } from "../scripts/lib/pg-control.ts";
@@ -147,12 +147,11 @@ describe("the data directory archive", () => {
 });
 
 describe("identity/prepopulated.json", () => {
-  test("the committed record reads, and patches:check accepts its kind", () => {
+  test("the committed record reads", () => {
     const layout = layoutFor(repoRoot);
     const record = readPrepopulatedRecord(layout);
     expect(record?.entries).toBeGreaterThan(900);
     expect(record?.asset.sha256).toMatch(/^[0-9a-f]{64}$/);
-    expect(readIdentities(layout).every((identity) => identity.file !== "identity/prepopulated.json")).toBe(true);
   });
 
   test("a record round-trips through its JSON, and a wrong one is refused", () => {

@@ -6,7 +6,6 @@
   "type": "module",
   "scripts": {
     "build": "bun scripts/build.ts",
-    "build:verify": "bun scripts/build-verify.ts",
     "builder:image": "bun scripts/builder-image.ts",
     "check": "bun run typecheck && bun run lint && bun run test",
     "data-format:check": "bun scripts/data-format-check.ts",

@@ -9,12 +9,10 @@ export interface Layout {
   readonly patchesDir: string;
   /** Files copied into the tree verbatim, mirroring tree paths. Never patched. */
   readonly overlayDir: string;
-  /** Identity records (decision 2): the tree (`patches:check`) and the artefacts (`build:verify`), while they exist. */
+  /** Identity records: the prepopulated data directory's (decision 10). */
   readonly identityDir: string;
   /** The temporary manifest of the third-party extensions that were gitlinks in the source. */
   readonly extensionsFile: string;
-  /** The byte-identity record `build:verify` checks the build's output against (decision 2). */
-  readonly artefactsRecord: string;
   /** The record of the prepopulated data directory `prepopulated --check` reproduces (decision 10). */
   readonly prepopulatedRecord: string;
   /** The declared data format and its compatibility tuple (decision 8). */
@@ -57,7 +55,6 @@ export function layoutFor(root: string): Layout {
     overlayDir: join(root, "overlay"),
     identityDir: join(root, "identity"),
     extensionsFile: join(root, "extensions.json"),
-    artefactsRecord: join(root, "identity", "0.5.8-artefacts.json"),
     prepopulatedRecord: join(root, "identity", "prepopulated.json"),
     dataFormatFile: join(root, "data-format.json"),
     builderDir: join(root, "builder"),

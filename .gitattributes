@@ -1,5 +1,5 @@
-# Patches and overlay files are carried byte for byte: tree identity with the source includes every
-# byte and line ending, so git must never convert them.
+# Patches and overlay files are Postgres-side content: they reach the build byte for byte, line endings
+# included (`patches:check` proves patches/ round-trips exactly), so git must never convert them.
 /patches/** -text
 /overlay/** -text
 /tests/fixtures/** binary

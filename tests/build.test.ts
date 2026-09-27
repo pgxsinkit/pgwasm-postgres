@@ -11,11 +11,10 @@ import {
 } from "node:fs";
 import { dirname, join } from "node:path";
 
-import { readArtefactRecord } from "../scripts/lib/artefacts.ts";
-import { BUILD_CONTAINER, buildCommand, buildPaths } from "../scripts/lib/build.ts";
+import { BUILD_CONTAINER, buildCommand, buildPaths, RECIPE } from "../scripts/lib/build.ts";
 import { BUILDER_IMAGE } from "../scripts/lib/builder.ts";
 import { git, UserError } from "../scripts/lib/git.ts";
-import { layoutFor, repoRoot, type Layout } from "../scripts/lib/layout.ts";
+import { layoutFor, type Layout } from "../scripts/lib/layout.ts";
 import { CONTAINER_PREFIX } from "../scripts/lib/podman.ts";
 import { materialiseSource } from "../scripts/lib/source.ts";
 import { formatMode } from "../scripts/lib/tar.ts";
@@ -25,12 +24,9 @@ const fixtures = new Fixtures();
 afterEach(() => fixtures.cleanup());
 
 describe("the build command", () => {
-  const layout = layoutFor(repoRoot);
-
   test("the build runs as ElectricSQL's CI did", () => {
-    const record = readArtefactRecord(layout);
     const paths = buildPaths(layoutFor("/repo"));
-    const command = buildCommand(BUILDER_IMAGE, record.build, paths);
+    const command = buildCommand(BUILDER_IMAGE, RECIPE, paths);
     expect(command.slice(0, 5)).toEqual(["nice", "-n", "10", "podman", "run"]);
     expect(command.slice(-2)).toEqual([BUILDER_IMAGE, "./build-pglite.sh"]);
     const joined = command.join(" ");
@@ -49,7 +45,7 @@ describe("the build command", () => {
       expect(joined).toContain(part);
     }
     expect(BUILD_CONTAINER.startsWith(CONTAINER_PREFIX)).toBe(true);
-    expect(() => buildCommand(BUILDER_IMAGE, record.build, { ...paths, source: "/a:b" })).toThrow(/cannot|Cannot/);
+    expect(() => buildCommand(BUILDER_IMAGE, RECIPE, { ...paths, source: "/a:b" })).toThrow(/cannot|Cannot/);
   });
 });
 

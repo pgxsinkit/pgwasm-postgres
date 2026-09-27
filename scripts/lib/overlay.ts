@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { gitTree, UserError } from "./git.ts";
 import type { Layout } from "./layout.ts";
 
-/** Git's tree modes: tree identity includes them, so the executable bit and symlinks must survive. */
+/** Git's tree modes: the build's tree includes them, so the executable bit and symlinks must survive. */
 export type OverlayMode = "100644" | "100755" | "120000";
 
 export interface OverlayEntry {

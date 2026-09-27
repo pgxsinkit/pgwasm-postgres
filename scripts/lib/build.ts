@@ -1,6 +1,6 @@
 /**
- * The byte-identity build: ElectricSQL CI's `build-with-docker.sh` invocation for `@electric-sql/pglite@0.5.8`,
- * with podman and our builder image. From `build-with-docker.sh` (overlay, as at `b133782`):
+ * The build, still as ElectricSQL CI's `build-with-docker.sh` invocation for `@electric-sql/pglite@0.5.8` ran it
+ * (the byte-identity build of ADR-0001 decision 2), with podman and our builder image. From `build-with-docker.sh` (overlay, as at `b133782`):
  *
  *   docker run --rm -e DEBUG=false -e PGLITE_VERSION=0.5.8 --workdir=$(pwd) -v .:$(pwd):rw -v ./dist:/pglite:rw \
  *     electricsql/pglite-builder:3.1.74-7 ./build-pglite.sh
@@ -15,9 +15,22 @@
  */
 import { join } from "node:path";
 
-import type { BuildRecipe } from "./artefacts.ts";
 import type { Layout } from "./layout.ts";
 import { CONTAINER_PREFIX } from "./podman.ts";
+
+/** The build inputs besides the source and the image. */
+export interface BuildRecipe {
+  /** Where the source is mounted and the build runs (embedded in pglite.wasm and pglite.data). */
+  readonly sourcePath: string;
+  /** What `build-with-docker.sh` passes with `-e`, in order. */
+  readonly environment: Readonly<Record<string, string>>;
+}
+
+/** ElectricSQL CI's inputs for 0.5.8: the checkout path, and the environment `build-with-docker.sh` passes. */
+export const RECIPE: BuildRecipe = {
+  sourcePath: "/home/runner/_work/pglite/pglite/postgres-pglite",
+  environment: { DEBUG: "false", PGLITE_VERSION: "0.5.8" },
+};
 
 /** The build container's name: one build at a time. */
 export const BUILD_CONTAINER = `${CONTAINER_PREFIX}build`;

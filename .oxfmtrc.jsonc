@@ -9,8 +9,8 @@
   "sortPackageJson": {
     "sortScripts": true,
   },
-  // overlay/ and patches/ are Postgres-side content carried byte for byte (tree identity); docs/adr/ is
-  // immutable once accepted. .cache/ and work/ hold the upstream clone and its worktrees.
+  // overlay/ and patches/ are Postgres-side content that reaches the build byte for byte; docs/adr/ is
+  // written by hand, in its own style. .cache/ and work/ hold the upstream clone and its worktrees.
   "ignorePatterns": [".cache/**", "docs/adr/**", "node_modules/**", "overlay/**", "patches/**", "tmp/**", "work/**"],
   "useTabs": false,
   "tabWidth": 2,

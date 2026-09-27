@@ -1,5 +1,5 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join, relative } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { relative } from "node:path";
 
 import { UserError } from "./git.ts";
 import type { Layout } from "./layout.ts";
@@ -12,17 +12,6 @@ export interface UpstreamPin {
   readonly repository: string;
   readonly tag: string;
   readonly commit: string;
-}
-
-export interface TreeIdentity {
-  /** The identity file, relative to the repository root. */
-  readonly file: string;
-  readonly sourceRepository: string;
-  readonly sourceCommit: string;
-  readonly upstreamTag: string;
-  readonly upstreamCommit: string;
-  readonly excludedPaths: readonly string[];
-  readonly expectedTree: string;
 }
 
 export type Json = Record<string, unknown>;
@@ -79,10 +68,6 @@ export function readUpstreamPin(layout: Layout): UpstreamPin {
 
 /** What an `identity/*.json` record proves: its `kind`. */
 export const IDENTITY_KINDS = {
-  /** The tree the series gives (`patches:check`). */
-  tree: "tree",
-  /** The artefacts the build gives (`build:verify`, see `artefacts.ts`). */
-  artefacts: "artefacts",
   /** The prepopulated data directory the build's own initdb gives (`prepopulated --check`, see `prepopulated.ts`). */
   prepopulated: "prepopulated",
 } as const;
@@ -98,34 +83,6 @@ export function readIdentityRecord(layout: Layout, file: string): { name: string
     );
   }
   return { name, kind, json };
-}
-
-/**
- * Every tree-identity record (`identity/*.json` of kind "tree"), sorted by name. None once the split is
- * proven and the records are retired.
- */
-export function readIdentities(layout: Layout): TreeIdentity[] {
-  if (!existsSync(layout.identityDir)) return [];
-  return readdirSync(layout.identityDir)
-    .filter((entry) => entry.endsWith(".json"))
-    .sort()
-    .map((entry) => readIdentityRecord(layout, join(layout.identityDir, entry)))
-    .filter((record) => record.kind === IDENTITY_KINDS.tree)
-    .map(({ name, json }) => {
-      const excluded = field(json, "excludedPaths", name);
-      if (!Array.isArray(excluded) || excluded.some((path) => typeof path !== "string" || path === "")) {
-        throw new UserError(`${name}: \`excludedPaths\` must be an array of non-empty strings.`);
-      }
-      return {
-        file: name,
-        sourceRepository: stringField(json, "source.repository", name),
-        sourceCommit: stringField(json, "source.commit", name, SHA),
-        upstreamTag: stringField(json, "upstream.tag", name, TAG),
-        upstreamCommit: stringField(json, "upstream.commit", name, SHA),
-        excludedPaths: excluded as string[],
-        expectedTree: stringField(json, "expectedTree", name, SHA),
-      };
-    });
 }
 
 /** A third-party extension the source pinned as a gitlink: where it goes in the tree, and what is checked out there. */
