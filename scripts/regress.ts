@@ -18,8 +18,9 @@
  * The artefacts default to `bun run build`'s output, and the builder image (where pg_regress and psql are built
  * and run) to localhost/pgwasm-postgres-builder:3.1.74-p2. The tests' regress library is left out unless
  * `--regress-lib` names one (see scripts/lib/regress/run.ts: the build's own cannot load), and the baseline is
- * recorded without it. It needs podman and the builder image, and a run takes a minute or two, so it is not part
- * of validate.
+ * recorded without it. A comparison writes its outcome to .cache/regress/outcome.json for `bun run gate`. It
+ * needs podman and the builder image, and a run takes a minute or two, so it is not part of validate; CI runs it
+ * through `bun run gate`.
  */
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -42,6 +43,7 @@ import {
   writeBaseline,
   type RunResults,
 } from "./lib/regress/baseline.ts";
+import { baselineDigest, clearOutcome, writeOutcome } from "./lib/regress/outcome.ts";
 import { runSuite, SCHEDULE } from "./lib/regress/run.ts";
 import { ensureTools } from "./lib/regress/tools.ts";
 
@@ -123,6 +125,7 @@ await runCliAsync(async () => {
     throw new UserError(`regress: the builder image ${image} is missing; run \`bun run builder:image\`, or pull it.`);
   }
   refuseOtherContainers();
+  clearOutcome(layout);
 
   const artefactsDir = resolve(args.artefacts ?? layout.buildDist);
   const regressLib = args.regressLib === undefined ? undefined : resolve(args.regressLib);
@@ -141,6 +144,7 @@ await runCliAsync(async () => {
   const epoch = Number(gitCache(layout, ["log", "-1", "--format=%ct", pin.commit]).stdout.trim());
 
   const results: RunResults[] = [];
+  const runCounts: { tests: number; passed: number; failed: number; backendFailures: number; seconds: number }[] = [];
   for (let run = 1; run <= runs; run += 1) {
     const runDir = join(layout.regressCache, "runs", String(run));
     info(`regress: run ${run} of ${runs}: ${SCHEDULE} from ${pin.tag} (output: ${relative(layout.root, runDir)})`);
@@ -162,6 +166,13 @@ await runCliAsync(async () => {
     );
     for (const failure of output.backendFailures) info(`  backend failed in ${failure.test}: ${failure.error}`);
     results.push(output.results);
+    runCounts.push({
+      tests: tests.length,
+      passed: tests.length - failed,
+      failed,
+      backendFailures: output.backendFailures.length,
+      seconds: output.seconds,
+    });
   }
 
   const combined = combineRuns(results);
@@ -210,6 +221,16 @@ await runCliAsync(async () => {
   info(
     `regress: baseline ${summary.tests} tests: ${summary.passed} passed, ${summary.failed} failed, ${summary.unstable} unstable`,
   );
+  writeOutcome(layout, {
+    upstream: { tag: pin.tag, commit: pin.commit },
+    schedule: SCHEDULE,
+    image,
+    ranWith: recordedWith,
+    baseline: { sha256: baselineDigest(layout), summary },
+    passed: passes(comparison),
+    comparison: { ...comparison, unstable: comparison.unstable.map((test) => test.name) },
+    runs: runCounts,
+  });
   if (!passes(comparison)) throw new UserError("regress: FAILED: the results differ from the baseline.");
   info(
     `regress: ok: no new failure, no changed diff${comparison.vanished.length > 0 ? `; ${comparison.vanished.length} vanished` : ""}.`,

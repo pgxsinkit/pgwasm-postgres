@@ -15,6 +15,7 @@
     "exports:check": "bun scripts/exports-check.ts",
     "format": "oxfmt --config .oxfmtrc.jsonc --check .",
     "format:write": "oxfmt --config .oxfmtrc.jsonc --write .",
+    "gate": "bun scripts/gate.ts",
     "lint": "oxlint -c .oxlintrc.jsonc scripts tests",
     "lint:fix": "oxlint --fix -c .oxlintrc.jsonc scripts tests",
     "patches:check": "bun scripts/patches-check.ts",
