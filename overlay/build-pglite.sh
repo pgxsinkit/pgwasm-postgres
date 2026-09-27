@@ -131,8 +131,20 @@ emmake make PORTNAME=emscripten install || { echo 'error: emmake make PORTNAME=e
 PGLITE_CONTRIB="amcheck"
 emmake make PORTNAME=emscripten -C contrib/ $(for module in $PGLITE_CONTRIB; do echo "$module.tar.gz"; done) || { echo 'error: emmake make PORTNAME=emscripten -C contrib/ <module>.tar.gz' ; exit 31; }
 
-# Step 4: get exported functions
-emmake make PORTNAME=emscripten -j -C src/backend pglite-exported-functions || { echo 'emmake make PORTNAME=emscripten -j -C src/backend pglite-exported-functions' ; exit 41; }
+# Step 4: pglite.wasm's export list. pglite.wasm is linked with -sMAIN_MODULE=2, which exports only the symbols
+# exported_functions.txt lists, and a shared module loads (and runs) only if pglite.wasm exports every symbol it
+# imports. So the list is pglite/static/included.pglite.exports (what the host calls) plus the imports of every
+# module the build ships: the core modules pglite.data carries (lib/postgresql/*.so) and those of the extension
+# archives; less libpq's API, which the backend does not define (see the script). It is an output too:
+# pgwasm-postgres diffs it against its reference.
+SHIPPED_MODULES=$(mktemp -d)
+for archive in "$INSTALL_FOLDER"/extensions/*.tar.gz; do
+    tar -xzf "$archive" -C "$SHIPPED_MODULES" --wildcards 'lib/postgresql/*.so' || { echo "error: no modules in $archive" ; exit 41; }
+done
+pglite/scripts/exported-functions.sh pglite/static/included.pglite.exports src/interfaces/libpq/exports.list \
+    "$INSTALL_FOLDER"/lib/postgresql/*.so "$SHIPPED_MODULES"/lib/postgresql/*.so \
+    > "$INSTALL_FOLDER/exported_functions.txt" || { echo 'error: pglite/scripts/exported-functions.sh' ; exit 42; }
+rm -rf "$SHIPPED_MODULES"
 
 # Step 5: make and install pglite
 PGROOT=/pglite
@@ -158,7 +170,7 @@ POSTGRES_PGLITE_FLAGS="\
 -sINITIAL_MEMORY=128MB \
 -sIMPORTED_MEMORY=1 \
 -sEXPORTED_RUNTIME_METHODS=$PGLITE_EXPORTED_RUNTIME_METHODS \
--sEXPORTED_FUNCTIONS=@/install/pglite/exported_functions.txt \
+-sEXPORTED_FUNCTIONS=@$INSTALL_FOLDER/exported_functions.txt \
 $PGPRELOAD \
 -lnodefs.js -lidbfs.js"
 

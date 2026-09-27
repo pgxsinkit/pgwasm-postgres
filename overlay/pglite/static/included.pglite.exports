@@ -648,13 +648,7 @@ usleep
 utime
 utimensat
 uuid_cmp
-uuid_create
-uuid_error
-uuid_export
-uuid_import
 uuid_in
-uuid_load
-uuid_make
 uuid_out
 vacuum_delay_point
 vasprintf

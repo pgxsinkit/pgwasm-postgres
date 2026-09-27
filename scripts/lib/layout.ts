@@ -11,6 +11,8 @@ export interface Layout {
   readonly overlayDir: string;
   /** Identity records: the prepopulated data directory's (decision 10). */
   readonly identityDir: string;
+  /** The reference export list `exports:check` diffs a build's against (decision 6). */
+  readonly exportsReference: string;
   /** The record of the prepopulated data directory `prepopulated --check` reproduces (decision 10). */
   readonly prepopulatedRecord: string;
   /** The declared data format and its compatibility tuple (decision 8). */
@@ -50,6 +52,7 @@ export function layoutFor(root: string): Layout {
     patchesDir: join(root, "patches"),
     overlayDir: join(root, "overlay"),
     identityDir: join(root, "identity"),
+    exportsReference: join(root, "exported_functions.txt"),
     prepopulatedRecord: join(root, "identity", "prepopulated.json"),
     dataFormatFile: join(root, "data-format.json"),
     builderDir: join(root, "builder"),

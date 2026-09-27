@@ -10,6 +10,7 @@
     "check": "bun run typecheck && bun run lint && bun run test",
     "data-format:check": "bun scripts/data-format-check.ts",
     "driver:smoke": "bun scripts/driver-smoke.ts",
+    "exports:check": "bun scripts/exports-check.ts",
     "format": "oxfmt --config .oxfmtrc.jsonc --check .",
     "format:write": "oxfmt --config .oxfmtrc.jsonc --write .",
     "lint": "oxlint -c .oxlintrc.jsonc scripts tests",
