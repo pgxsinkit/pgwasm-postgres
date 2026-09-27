@@ -1,103 +1,86 @@
 /**
- * bun run builder:image
+ * bun run builder:image [--push] [--summary <file>]
  *
  * Builds the builder image from builder/Containerfile with podman, as localhost/pgwasm-postgres-builder:3.1.74-p2
  * (amd64 only), capped at 4 CPUs, 16 GiB and `make -j4`. From scratch it takes about 40 minutes; podman's layer
  * cache makes an unchanged rebuild take seconds. Then checks the image's package set against
  * builder/dpkg-expected.txt. The full log goes to .cache/builder-image.log.
  *
- * Not part of validate or CI: it takes too long, and the image is not published yet.
+ * --push     then publish it (ADR-0001 decision 9) as ghcr.io/pgxsinkit/pgwasm-builder:<the same tag>, as
+ *            `builder-image.yml` does; podman must be logged in to ghcr.io. It pushes a content of builder/ once
+ *            per tag: when builder/image.lock.json already records this content published under the tag, nothing
+ *            is built or pushed; when it records the tag published from other content, it refuses (a changed
+ *            builder/ gets a new tag). It prints the digest and the `bun run builder:lock` command that records
+ *            it, and writes them to .cache/builder-image.json.
+ * --summary  append a Markdown summary of the publication to <file> (the job summary in CI).
+ *
+ * Not part of validate: it takes too long.
  */
-import { closeSync, mkdirSync, openSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 
+import { buildBuilderImage, pushBuilderImage } from "./lib/builder-image.ts";
 import {
-  BUILDER_IMAGE,
-  builderPaths,
-  diffPackages,
-  DPKG_QUERY,
-  imageBuildCommand,
-  sortedLines,
-} from "./lib/builder.ts";
+  builderContent,
+  lockCommand,
+  lockPath,
+  publicationSummary,
+  pushDecision,
+  readLock,
+  type Publication,
+} from "./lib/builder-lock.ts";
+import { BUILDER_IMAGE, publishedImage } from "./lib/builder.ts";
 import { info, runCliAsync } from "./lib/cli.ts";
 import { UserError } from "./lib/git.ts";
 import { layoutFor, repoRoot } from "./lib/layout.ts";
-import {
-  CONTAINER_PREFIX,
-  imageId,
-  podman,
-  refuseOtherContainers,
-  removeContainer,
-  requirePodman,
-} from "./lib/podman.ts";
+import { refuseOtherContainers, requirePodman, resourceCaps } from "./lib/podman.ts";
+
+const USAGE = "Usage: bun run builder:image [--push] [--summary <file>]";
+
+function options(args: readonly string[]): { push: boolean; summary: string | undefined } {
+  let push = false;
+  let summary: string | undefined;
+  for (let index = 0; index < args.length; index += 1) {
+    if (args[index] === "--push") push = true;
+    else if (args[index] === "--summary" && args[index + 1] !== undefined) {
+      summary = args[index + 1];
+      index += 1;
+    } else throw new UserError(USAGE);
+  }
+  return { push, summary };
+}
 
 await runCliAsync(async () => {
-  if (process.argv.length > 2) throw new UserError("Usage: bun run builder:image");
+  const args = options(process.argv.slice(2));
   const layout = layoutFor(repoRoot);
-  const paths = builderPaths(layout.builderDir);
   requirePodman();
-  if (process.arch !== "x64") {
-    throw new UserError(
-      `The builder image is amd64 only (its toolchain is pinned by amd64 digest); this is ${process.arch}.`,
-    );
-  }
   refuseOtherContainers();
-
-  mkdirSync(layout.cacheDir, { recursive: true });
-  const logFile = join(layout.cacheDir, "builder-image.log");
-  const command = imageBuildCommand(paths);
-  info(`builder:image: ${command.join(" ")}`);
-  info(`builder:image: log at ${relative(layout.root, logFile)} (about 40 minutes without the layer cache)`);
-  const log = openSync(logFile, "w");
-  const started = Date.now();
-  const child = Bun.spawn(command, { stdin: "ignore", stdout: log, stderr: log });
-  const exitCode = await child.exited;
-  closeSync(log);
-  const seconds = Math.round((Date.now() - started) / 1000);
-  if (exitCode !== 0) {
-    const tail = readFileSync(logFile, "utf8").trimEnd().split("\n").slice(-30);
-    throw new UserError(
-      [
-        `builder:image: podman build failed (exit ${exitCode}) after ${seconds} s:`,
-        ...tail.map((line) => `  | ${line}`),
-      ].join("\n"),
+  const report = (publication: Publication): void => {
+    const record = join(layout.cacheDir, "builder-image.json");
+    writeFileSync(record, `${JSON.stringify(publication, null, 2)}\n`);
+    info(
+      `builder:image: ${publication.image} is ${publication.digest}${publication.id === null ? "" : `, id ${publication.id}`}`,
     );
-  }
-  const id = imageId(BUILDER_IMAGE);
-  if (id === undefined)
-    throw new UserError(`builder:image: podman build succeeded, but ${BUILDER_IMAGE} is not there.`);
-  info(`builder:image: built ${BUILDER_IMAGE} (${id.slice(0, 12)}) in ${seconds} s.`);
+    info(`builder:image: record it in ${relative(layout.root, lockPath(layout.builderDir))} with`);
+    info(`  ${lockCommand(publication)}`);
+    if (args.summary !== undefined) appendFileSync(args.summary, publicationSummary(publication));
+  };
 
-  const checker = `${CONTAINER_PREFIX}dpkg-check`;
-  const query = podman(
-    [
-      "run",
-      "--rm",
-      "--name",
-      checker,
-      "--pull=never",
-      "--entrypoint",
-      DPKG_QUERY[0],
-      BUILDER_IMAGE,
-      ...DPKG_QUERY.slice(1),
-    ],
-    { allowFailure: true },
-  );
-  removeContainer(checker);
-  if (query.exitCode !== 0)
-    throw new UserError(`builder:image: dpkg-query failed in the image:\n${query.stderr.trim()}`);
-  const expected = sortedLines(readFileSync(paths.dpkgExpected, "utf8"));
-  const differences = diffPackages(expected, sortedLines(query.stdout));
-  if (differences.length > 0) {
-    throw new UserError(
-      [
-        `builder:image: the image's package set differs from ${relative(layout.root, paths.dpkgExpected)}:`,
-        ...differences.map((line) => `  ${line}`),
-        "The runner stage's apt comes from a dated snapshot, so it cannot drift by itself: check the Containerfile.",
-      ].join("\n"),
-    );
+  const target = publishedImage();
+  const content = builderContent(layout.builderDir);
+  if (args.push) {
+    const lock = existsSync(lockPath(layout.builderDir)) ? readLock(layout.builderDir, layout.root) : undefined;
+    const decision = pushDecision(lock, content, target);
+    if (decision.kind === "refuse") throw new UserError(`builder:image: ${decision.reason}`);
+    if (decision.kind === "published") {
+      info(`builder:image: ${target} is already published from this content of builder/; nothing to push.`);
+      report({ image: target, digest: decision.digest, id: lock?.id ?? null, contentSha256: content, pushed: false });
+      return;
+    }
   }
-  info(
-    `builder:image: the package set matches ${relative(layout.root, paths.dpkgExpected)} (${expected.length} packages).`,
-  );
+
+  const id = await buildBuilderImage(layout, BUILDER_IMAGE, resourceCaps(info), info);
+  if (!args.push) return;
+  const digest = await pushBuilderImage(layout, BUILDER_IMAGE, target, info);
+  report({ image: target, digest, id, contentSha256: content, pushed: true });
 });

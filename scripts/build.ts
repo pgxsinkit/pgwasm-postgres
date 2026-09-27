@@ -1,5 +1,5 @@
 /**
- * bun run build [--debug]
+ * bun run build [--debug] [--image <reference>]
  *
  * The build (ADR-0001 decisions 3, 5 and 9): proves the series (`patches:check`), materialises its tree into
  * .cache/build/postgres-pglite (gitignored; the previous build there is deleted), and runs `build-pglite.sh` on
@@ -10,8 +10,10 @@
  * Two builds of one commit, from any checkout, give identical manifests (`bun run build:verify <manifest>`).
  *
  * --debug  a debug build (-g, no wasm-opt), whose debug info points at the materialised source on the host.
+ * --image  the builder image to build in (default localhost/pgwasm-postgres-builder:3.1.74-p2), which must be in
+ *          podman's local storage: the published one by digest, as the gate pulls it, or any other build of builder/.
  *
- * Not part of validate or CI: it takes minutes, and the image is not published yet.
+ * Not part of validate: it takes minutes. CI runs it through `bun run gate`.
  */
 import { closeSync, mkdirSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -27,7 +29,14 @@ import { initdb } from "./lib/driver/initdb.ts";
 import { git, UserError } from "./lib/git.ts";
 import { layoutFor, repoRoot } from "./lib/layout.ts";
 import { digestArtefacts, formatManifest, MANIFEST_FILE, type BuildManifest } from "./lib/manifest.ts";
-import { imageId, refuseOtherContainers, removeBuildOutput, removeContainer, requirePodman } from "./lib/podman.ts";
+import {
+  imageId,
+  refuseOtherContainers,
+  removeBuildOutput,
+  removeContainer,
+  requirePodman,
+  resourceCaps,
+} from "./lib/podman.ts";
 import { materialiseSource } from "./lib/source.ts";
 import { repositoryCandidate } from "./lib/version.ts";
 
@@ -38,26 +47,32 @@ function duration(ms: number): string {
 
 await runCliAsync(async () => {
   const args = process.argv.slice(2);
-  if (args.length > 1 || (args.length === 1 && args[0] !== "--debug")) {
-    throw new UserError("Usage: bun run build [--debug]");
+  let debug = false;
+  let image = BUILDER_IMAGE;
+  for (let index = 0; index < args.length; index += 1) {
+    if (args[index] === "--debug") debug = true;
+    else if (args[index] === "--image" && args[index + 1] !== undefined) {
+      image = args[index + 1] ?? image;
+      index += 1;
+    } else throw new UserError("Usage: bun run build [--debug] [--image <reference>]");
   }
   const layout = layoutFor(repoRoot);
   const pin = readUpstreamPin(layout);
-  const image = BUILDER_IMAGE;
 
   requirePodman();
   const id = imageId(image);
   if (id === undefined) {
     throw new UserError(
-      `The builder image ${image} is not in podman's local storage; build it with \`bun run builder:image\`.`,
+      `The builder image ${image} is not in podman's local storage; build it with \`bun run builder:image\`, or pull it.`,
     );
   }
   refuseOtherContainers();
+  const caps = resourceCaps(info);
 
   const inputs: BuildInputs = {
     version: repositoryCandidate(layout.root, pin.tag),
     sourceDateEpoch: sourceDateEpoch(layout.root),
-    debug: args[0] === "--debug",
+    debug,
   };
   const commit = git(["rev-parse", "HEAD"], { cwd: layout.root }).stdout.trim();
   const worktreeClean = git(["status", "--porcelain"], { cwd: layout.root }).stdout.trim() === "";
@@ -75,7 +90,7 @@ await runCliAsync(async () => {
   const record = { ...inputs, commit, worktreeClean, tree: source.tree, image, imageId: id };
   writeFileSync(recordFile, `${JSON.stringify({ ...record, startedAt: started.toISOString() }, null, 2)}\n`);
 
-  const command = buildCommand(image, inputs, paths);
+  const command = buildCommand(image, inputs, paths, caps);
   info(
     `build: ${inputs.version}${inputs.debug ? " (debug)" : ""} from ${commit.slice(0, 12)}${worktreeClean ? "" : " with a modified working tree"}, SOURCE_DATE_EPOCH=${inputs.sourceDateEpoch} (${new Date(inputs.sourceDateEpoch * 1000).toISOString()})`,
   );

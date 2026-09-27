@@ -14,13 +14,13 @@
  * on the host. A release build never sees the host path.
  *
  * Resource caps that change no compiler input: `builder/bin/make` over `/usr/local/bin/make` turns the script's
- * bare `make -j` into `make -j4`; the container gets 4 CPUs and 16 GiB; podman (and so the build) runs under
- * `nice -n 10`.
+ * bare `make -j` into `make -j4`; the container gets 4 CPUs and 16 GiB (the caps podman can apply here, see
+ * podman.ts); podman (and so the build) runs under `nice -n 10`.
  */
 import { join } from "node:path";
 
 import type { Layout } from "./layout.ts";
-import { CONTAINER_PREFIX } from "./podman.ts";
+import { ALL_CAPS, CONTAINER_PREFIX, type ResourceCaps } from "./podman.ts";
 
 /** The build container's name: one build at a time. */
 export const BUILD_CONTAINER = `${CONTAINER_PREFIX}build`;
@@ -75,7 +75,12 @@ function mountable(path: string): string {
 }
 
 /** The command `bun run build` runs. */
-export function buildCommand(image: string, inputs: BuildInputs, paths: BuildPaths): string[] {
+export function buildCommand(
+  image: string,
+  inputs: BuildInputs,
+  paths: BuildPaths,
+  caps: ResourceCaps = ALL_CAPS,
+): string[] {
   return [
     "nice",
     "-n",
@@ -86,10 +91,8 @@ export function buildCommand(image: string, inputs: BuildInputs, paths: BuildPat
     "--name",
     BUILD_CONTAINER,
     "--pull=never",
-    "--cpus",
-    "4",
-    "--memory",
-    "16g",
+    ...(caps.cpu ? ["--cpus", "4"] : []),
+    ...(caps.memory ? ["--memory", "16g"] : []),
     "--umask",
     "0022",
     "--unsetenv",

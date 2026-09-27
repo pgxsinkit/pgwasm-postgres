@@ -6,7 +6,7 @@ import { BUILD_CONTAINER, buildCommand, buildEnvironment, buildPaths, SOURCE_MOU
 import { BUILDER_IMAGE } from "../scripts/lib/builder.ts";
 import { git, UserError } from "../scripts/lib/git.ts";
 import { layoutFor, type Layout } from "../scripts/lib/layout.ts";
-import { CONTAINER_PREFIX } from "../scripts/lib/podman.ts";
+import { capsOf, CONTAINER_PREFIX } from "../scripts/lib/podman.ts";
 import { materialiseSource } from "../scripts/lib/source.ts";
 import { formatMode } from "../scripts/lib/tar.ts";
 import { Fixtures, thrown, write } from "./helpers.ts";
@@ -42,6 +42,17 @@ describe("the build command", () => {
     expect(joined).not.toContain("HOST_SOURCE_DIR");
     expect(BUILD_CONTAINER.startsWith(CONTAINER_PREFIX)).toBe(true);
     expect(() => buildCommand(BUILDER_IMAGE, inputs, { ...paths, source: "/a:b" })).toThrow(/Cannot/);
+  });
+
+  test("leaves out the resource caps podman cannot apply (a CI runner's undelegated cgroup controllers)", () => {
+    expect(capsOf(["cpu", "memory", "pids"])).toEqual({ cpu: true, memory: true });
+    expect(capsOf(["memory", "pids"])).toEqual({ cpu: false, memory: true });
+    expect(capsOf([])).toEqual({ cpu: false, memory: false });
+    const memoryOnly = buildCommand(BUILDER_IMAGE, inputs, paths, capsOf(["memory"])).join(" ");
+    expect(memoryOnly).not.toContain("--cpus");
+    expect(memoryOnly).toContain("--pull=never --memory 16g --umask 0022");
+    const full = buildCommand(BUILDER_IMAGE, inputs, paths, capsOf(["cpu", "memory"]));
+    expect(full).toEqual(buildCommand(BUILDER_IMAGE, inputs, paths));
   });
 
   test("a debug build maps /build back to the host's source", () => {

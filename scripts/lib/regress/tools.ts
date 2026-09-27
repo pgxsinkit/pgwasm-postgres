@@ -4,7 +4,8 @@
  * under test is ours), with the host gcc of the builder image. They are cached per tag under
  * `.cache/regress/<tag>/`: `source/` (the tag's tree, which also holds the tests), `build/` (a VPATH build),
  * `install/` (the prefix, `/pgwasm-regress` inside the containers that run them) and `tools.json`, which
- * records what they were built from. A build takes about half a minute.
+ * records what they were built from: the tag, the configure flags and the builder image's id (they run in that
+ * image, against its libc). A build takes about half a minute.
  */
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -12,7 +13,7 @@ import { join, relative } from "node:path";
 import type { UpstreamPin } from "../config.ts";
 import { UserError } from "../git.ts";
 import type { Layout } from "../layout.ts";
-import { CONTAINER_PREFIX, removeBuildOutput, removeContainer } from "../podman.ts";
+import { CONTAINER_PREFIX, removeBuildOutput, removeContainer, type ResourceCaps } from "../podman.ts";
 import { checkoutTree } from "../source.ts";
 import { resolveTag } from "../upstream.ts";
 
@@ -88,6 +89,7 @@ function built(paths: ToolsPaths, wanted: Stamp): boolean {
   return (
     stamp.tag === wanted.tag &&
     stamp.commit === wanted.commit &&
+    stamp.imageId === wanted.imageId &&
     JSON.stringify(stamp.configure) === JSON.stringify(wanted.configure)
   );
 }
@@ -98,6 +100,7 @@ export async function ensureTools(
   pin: UpstreamPin,
   image: string,
   imageId: string,
+  caps: ResourceCaps,
   log: (line: string) => void,
 ): Promise<ToolsPaths> {
   const paths = toolsPaths(layout, pin.tag);
@@ -123,10 +126,8 @@ export async function ensureTools(
     "--name",
     TOOLS_CONTAINER,
     "--pull=never",
-    "--cpus",
-    "4",
-    "--memory",
-    "8g",
+    ...(caps.cpu ? ["--cpus", "4"] : []),
+    ...(caps.memory ? ["--memory", "8g"] : []),
     "-v",
     `${paths.source}:${SOURCE_MOUNT}:ro`,
     "-v",

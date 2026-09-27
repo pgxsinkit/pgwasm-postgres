@@ -36,6 +36,9 @@
 #   podman build --format docker -t localhost/pgwasm-postgres-builder:3.1.74-p2 builder
 # capped at 4 CPUs and 16 GiB, with builder/bin/make turning every bare `make -j` into `make -j4`.
 # builder/dpkg-expected.txt is the runner stage's package set (identical to Electric's image); the script checks it.
+# Published by .github/workflows/builder-image.yml as ghcr.io/pgxsinkit/pgwasm-builder:3.1.74-p2;
+# builder/image.lock.json records its digest and the content of this directory it was built from, and CI builds
+# in it by digest. A change here is a new revision (-p3), never the published tag pushed again.
 
 # PIN (toolchain exception): Emscripten 3.1.74 by digest, until its own release (see PINNING POLICY). This is
 # the linux/amd64 image BuildKit recorded as a material of electricsql/pglite-builder:3.1.74-7 in its provenance
@@ -135,3 +138,7 @@ COPY --from=builder /install/libs ${INSTALL_PREFIX}
 
 # allow access to anyone
 RUN chmod -R 777 /install
+
+# Links the published image to this repository on GHCR (its package page and access). Metadata only: no layer, and
+# so nothing a build sees, changes.
+LABEL org.opencontainers.image.source="https://github.com/pgxsinkit/pgwasm-postgres"

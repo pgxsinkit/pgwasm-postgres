@@ -1,5 +1,6 @@
 /**
- * bun run regress [--artefacts <dir>] [--regress-lib <regress.so>] [--runs <n>] [--timeout <minutes>] [--record]
+ * bun run regress [--artefacts <dir>] [--image <reference>] [--regress-lib <regress.so>] [--runs <n>]
+ *                 [--timeout <minutes>] [--record]
  *
  * The engine gate's pg_regress (ADR-0001 decision 6): builds (or reuses) upstream's native pg_regress and psql
  * for the pinned tag, then runs `parallel_schedule` against the build through the TCP bridge, `--runs` times
@@ -14,10 +15,11 @@
  * whose outcome or diff differs between them is recorded as unstable. It keeps the hand-written groups; a new
  * failure lands in `unclassified`, which `bun test` refuses until it has a group and a reason.
  *
- * The artefacts default to `bun run build`'s output. The tests' regress library is left out unless
+ * The artefacts default to `bun run build`'s output, and the builder image (where pg_regress and psql are built
+ * and run) to localhost/pgwasm-postgres-builder:3.1.74-p2. The tests' regress library is left out unless
  * `--regress-lib` names one (see scripts/lib/regress/run.ts: the build's own cannot load), and the baseline is
  * recorded without it. It needs podman and the builder image, and a run takes a minute or two, so it is not part
- * of validate or CI.
+ * of validate.
  */
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -29,7 +31,7 @@ import { readUpstreamPin } from "./lib/config.ts";
 import { loadArtefacts } from "./lib/driver/artefacts.ts";
 import { gitCache, UserError } from "./lib/git.ts";
 import { layoutFor, repoRoot } from "./lib/layout.ts";
-import { imageId, refuseOtherContainers, requirePodman } from "./lib/podman.ts";
+import { imageId, refuseOtherContainers, requirePodman, resourceCaps } from "./lib/podman.ts";
 import {
   combineRuns,
   compare,
@@ -44,10 +46,11 @@ import { runSuite, SCHEDULE } from "./lib/regress/run.ts";
 import { ensureTools } from "./lib/regress/tools.ts";
 
 const USAGE =
-  "Usage: bun run regress [--artefacts <dir>] [--regress-lib <regress.so>] [--runs <n>] [--timeout <minutes>] [--record]";
+  "Usage: bun run regress [--artefacts <dir>] [--image <reference>] [--regress-lib <regress.so>] [--runs <n>] [--timeout <minutes>] [--record]";
 
 interface Options {
   artefacts: string | undefined;
+  image: string;
   regressLib: string | undefined;
   runs: number | undefined;
   timeout: number;
@@ -55,7 +58,14 @@ interface Options {
 }
 
 function options(args: readonly string[]): Options {
-  const parsed: Options = { artefacts: undefined, regressLib: undefined, runs: undefined, timeout: 60, record: false };
+  const parsed: Options = {
+    artefacts: undefined,
+    image: BUILDER_IMAGE,
+    regressLib: undefined,
+    runs: undefined,
+    timeout: 60,
+    record: false,
+  };
   for (let index = 0; index < args.length; index += 1) {
     const flag = args[index];
     if (flag === "--record") {
@@ -70,6 +80,7 @@ function options(args: readonly string[]): Options {
       return Number(value);
     };
     if (flag === "--artefacts") parsed.artefacts = value;
+    else if (flag === "--image") parsed.image = value;
     else if (flag === "--regress-lib") parsed.regressLib = value;
     else if (flag === "--runs") parsed.runs = count();
     else if (flag === "--timeout") parsed.timeout = count();
@@ -106,9 +117,11 @@ await runCliAsync(async () => {
   }
 
   requirePodman();
-  const id = imageId(BUILDER_IMAGE);
-  if (id === undefined)
-    throw new UserError(`regress: the builder image ${BUILDER_IMAGE} is missing; run \`bun run builder:image\`.`);
+  const image = args.image;
+  const id = imageId(image);
+  if (id === undefined) {
+    throw new UserError(`regress: the builder image ${image} is missing; run \`bun run builder:image\`, or pull it.`);
+  }
   refuseOtherContainers();
 
   const artefactsDir = resolve(args.artefacts ?? layout.buildDist);
@@ -124,7 +137,7 @@ await runCliAsync(async () => {
     `regress: artefacts ${relative(layout.root, artefactsDir) || "."}, ${regressLib === undefined ? "no regress library" : `regress library ${regressLib}`}`,
   );
 
-  const tools = await ensureTools(layout, pin, BUILDER_IMAGE, id, info);
+  const tools = await ensureTools(layout, pin, image, id, resourceCaps(info), info);
   const epoch = Number(gitCache(layout, ["log", "-1", "--format=%ct", pin.commit]).stdout.trim());
 
   const results: RunResults[] = [];
@@ -134,7 +147,7 @@ await runCliAsync(async () => {
     const output = await runSuite({
       layout,
       tools,
-      image: BUILDER_IMAGE,
+      image,
       artefactsDir,
       regressLib,
       epoch,
