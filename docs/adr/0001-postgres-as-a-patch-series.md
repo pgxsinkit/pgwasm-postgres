@@ -55,7 +55,10 @@ Postgres's own regression suite has never run on the wasm build.
    - The overlay starts as ElectricSQL's additions: `pglite/` (host C, static files, scripts, and the
      builder Dockerfile at `pglite/builder/`, unused: see decision 9), `build-pglite.sh`,
      `build-with-docker.sh`, `contrib/dist.mk` and `README-PGLITE-DEV.md`. It only adds files: a path
-     that exists upstream is changed by a patch, and a patch never touches an overlay path.
+     that exists upstream is changed by a patch, and a patch never touches an overlay path. `18.3.0`
+     deleted the Dockerfile, `build-with-docker.sh` and the extension build files, changed
+     `build-pglite.sh`, `contrib/dist.mk` and `included.pglite.exports`, and added
+     `pglite/scripts/exported-functions.sh` (decisions 3 and 9).
    - `bun run patches:work <tag>` materialises a gitignored worktree with the series as commits;
      `bun run patches:export` writes them back; `bun run patches:check` proves the series (below). The
      export is deterministic: no commit ids, no git version, full blob ids, no rename detection, no
@@ -71,8 +74,8 @@ Postgres's own regression suite has never run on the wasm build.
    - Tree identity: pristine `REL_18_3` + `git am` of the series + the overlay, then `git write-tree`,
      equals `b133782`'s tree without `.gitmodules` and the nine extension gitlinks
      (`identity/b133782.json`: tree `a3b4114a08d20cc5d97313d23c4e93376cd5861b`, with the commands that
-     derive it). A temporary `extensions.json` records the gitlinks (path, URL, commit) in their place.
-     `patches:check` enforces it in `validate` and in CI until `18.3.0`; it needs no build.
+     derive it). A temporary `extensions.json` recorded the gitlinks (path, URL, commit) in their place.
+     `patches:check` enforced it in `validate` and in CI; it needed no build.
    - Byte identity: the materialised tree (the proven tree, with the nine extensions of
      `extensions.json` checked out at their commits and no `.git` anywhere), built by the reproduction
      recipe (source at `/home/runner/_work/pglite/pglite/postgres-pglite`, `PGLITE_VERSION=0.5.8`, root
@@ -83,20 +86,69 @@ Postgres's own regression suite has never run on the wasm build.
      `dist/` against `identity/0.5.8-artefacts.json` (the published sizes and sha256s, and the published
      `amcheck.tar.gz`'s members). Neither runs in `validate` or CI: the build takes about 15 minutes and
      the image is not published yet. The split is done.
+   - Both records retired with the `18.3.0` build (step 4a, 2026-09-27), whose changes they would refuse:
+     `identity/b133782.json` with the identity step of `patches:check`, and `identity/0.5.8-artefacts.json`
+     with the byte-identity `build:verify` (the name now checks a build against another's manifest,
+     decision 9). The history keeps them. `patches:check` still proves that the series applies and that
+     its export round-trips, in `validate` and in CI.
    - Five patches, cut by topic in dependency order: `build-emscripten`, `backend-single-process`,
      `startup-packet-export`, `encoding-shim`, `main-loop-unroll`. Each commit message says what the
      patch does and why, and names `b133782` as its source. ElectricSQL's 22 commits are not kept one
      by one.
    - Until byte identity holds, the patches and overlay stay exactly ElectricSQL's, oddities included
      (repeated blocks in `src/template/emscripten` and `src/makefiles/Makefile.emscripten`, the
-     `docker` build script). Cleanups come after.
+     `docker` build script). Cleanups come after; `18.3.0` made the first two.
 
 3. **After byte identity, the build compiles only what ships: amcheck.** `exported_functions.txt`
    becomes `included.pglite.exports` plus the shipped modules' imports. `extensions.json`, its clone
    step, and every builder-image library that only those extensions need are deleted. Adding a
    third-party extension or another contrib module later is a build line and a release. This is the
    first change whose artefacts differ from 0.5.8's; the `pglite.wasm` size change is measured and
-   recorded when it lands.
+   recorded when it lands. Done in `18.3.0` (2026-09-27):
+   - `build-pglite.sh` builds and packages the contrib modules of its `PGLITE_CONTRIB`, `amcheck`
+     alone. The nine third-party extensions, pgcrypto and every other contrib module are gone, with
+     `extensions.json`, its clone step, the overlay's `pglite/other_extensions/`, `build-postgis.sh` and
+     `build-pgcrypto.sh`, and the `build-emscripten` patch's `PGLITE_WITH_PGCRYPTO` switch. The modules
+     `pglite.data` carries are unchanged: its `lib/postgresql` holds the same 28 core modules, byte for
+     byte.
+   - The export list is `included.pglite.exports` plus the imports of every module the build ships: the
+     28 core modules (plpgsql, dict_snowball, the 24 encoding conversion modules, libpqwalreceiver,
+     pgoutput) and the extension archives' (`amcheck.so`). The overlay's
+     `pglite/scripts/exported-functions.sh` reads them from the linked modules with binaryen's
+     `wasm-dis`: a module's `env` functions and globals and its `GOT.mem` and `GOT.func` entries, less
+     what it defines itself (the dynamic linker binds a module's GOT entries to its own definitions) and
+     what the dynamic linker hands every module (memory, table, stack pointer, memory and table bases,
+     `invoke_*`). libpq's API is left out: the backend defines none of it, and the two encoding
+     functions libpqwalreceiver's static libpq takes from libpgcommon (`pg_char_to_encoding`,
+     `pg_encoding_to_char`) exist in the backend only as `*_private`. Emscripten refuses to link a list
+     naming a symbol the link does not define, so an import the backend cannot give fails the build,
+     not a query. The build writes the list into `dist/`; the `build-emscripten` patch lost the Makefile
+     target that computed the old one and the `.imports` lists `pgxs.mk` and plpgsql's Makefile wrote
+     for it.
+   - The old list (every built extension's undefined symbols from its object files, less the symbols of
+     the image's libraries) missed the core modules: an encoding conversion threw a `TypeError` out of
+     the wasm and ended the backend, and `libpqwalreceiver.so` and `pgoutput.so` did not `dlopen`.
+     `driver:smoke` now loads all 29 shipped modules and runs every default conversion. The list went
+     from 2,064 symbols to 1,121: 120 added, the core modules' imports (the conversion helpers
+     `LocalToUtf`, `UtfToLocal`, `report_invalid_encoding`, …, and what libpqwalreceiver and pgoutput
+     need, `WalReceiverFunctions` and the `logicalrep_write_*` family among it); 1,063 removed, what only
+     the dropped extensions imported, and OSSP uuid's six functions (`uuid_create`, …), which
+     `included.pglite.exports` listed for contrib/uuid-ossp and 0.5.8 never exported (they are gone from
+     that file too). `exported_functions.txt` at the repository root is the reference the engine gate
+     diffs against (decision 6).
+   - Sizes against 0.5.8's (2026-09-27):
+
+     | File          | 0.5.8 (bytes) | 18.3.0 (bytes) | Change            |
+     | ------------- | ------------: | -------------: | ----------------- |
+     | `pglite.wasm` |    10,088,161 |     10,061,242 | −26,919 (−0.27%)  |
+     | `pglite.data` |     6,295,316 |      6,293,220 | −2,096 (−0.03%)   |
+     | `pglite.js`   |       516,332 |        380,679 | −135,653 (−26.3%) |
+
+     `pglite.wasm` exports 1,144 symbols instead of 2,093: its export section is 19,287 bytes smaller and
+     its code 6,880 (what only the dropped exports kept alive). `pglite.js` loses a wrapper per dropped
+     export. Of `pglite.data`'s 699 files only pgxs's `Makefile.global`, `Makefile.port` and `pgxs.mk`
+     changed (configure's flags and paths, the patch's smaller port files). `initdb` and `pg_dump` are
+     byte-identical to 0.5.8's.
 
 4. **The `main-loop-unroll` patch is rewritten to a minimal-surface form, on 18, before any 19 work.**
    The loop body stays in place at its current indentation; function boundaries go into
@@ -113,12 +165,23 @@ Postgres's own regression suite has never run on the wasm build.
    build. The byte-identical proof build is never tagged: `18.3.0` is the first build whose bytes are
    ours, and until then pgxsinkit keeps pinning ElectricSQL's npm tarballs, which hold the same bytes.
    Releases are GitHub release assets with a checksum manifest, not npm packages, and only pgxsinkit
-   consumes them.
+   consumes them. The build derives its version from the repository (`scripts/lib/version.ts`), never from
+   a hand-edited file: `<pg major>.<pg minor>.0` of the pinned upstream tag while there is no release tag;
+   the latest release tag's revision + 1 when that tag is of the pinned major.minor; `<major>.<minor>.0`
+   otherwise. Only the tags of HEAD's strict ancestors count, so a tagged commit's candidate is its own
+   tag: the release job refuses a tag that is not the candidate, and the gated build and the tag's build
+   embed the same version and match byte for byte. Tags that are not `N.N.N` (`builder-sources-1`) are
+   ignored. `bun run build` passes the candidate as `PGWASM_POSTGRES_VERSION`, which the `configure`
+   patch puts into `(pgwasm-postgres $PGWASM_POSTGRES_VERSION)`: the first build reads
+   `PostgreSQL 18.3 (pgwasm-postgres 18.3.0) on wasm32-unknown-emscripten, …`.
 
 6. **The engine gate runs here, before a tag.** Clean apply; build; export-list diff (removing a core
-   symbol from `included.pglite.exports` fails, anything else is reported); pg_regress against a
-   baseline. The contract gate (pgxsinkit's suites on the pin-bump PR) lives in pgxsinkit. A release that
-   passes the engine gate and fails the contract gate is superseded by a new revision, never retracted.
+   symbol from `included.pglite.exports` fails, anything else is reported); pg_regress against a baseline.
+   The export-list diff is `bun run exports:check`: the build's list against `exported_functions.txt` at
+   the repository root, rewritten only by `--record` after a deliberate change; it also lists the symbols
+   the JavaScript glue provides rather than `pglite.wasm`. The contract gate (pgxsinkit's suites on the
+   pin-bump PR) lives in pgxsinkit. A release that passes the engine gate and fails the contract gate is
+   superseded by a new revision, never retracted.
    The pg_regress part is `bun run regress`:
    - `pg_regress` and `psql` are upstream's, built natively from the pristine pinned tag, never the patched
      tree (the client is upstream's; the server under test is ours), with the builder image's host gcc, and
@@ -157,6 +220,32 @@ Postgres's own regression suite has never run on the wasm build.
      are missing; once one `dlopen` has failed, every later one fails; deep recursion overflows the host's
      native stack before `max_stack_depth` trips; the wall clock has millisecond resolution; there is one
      process, and `\c` gets it back; PGlite's start parameters; no ICU language collations.
+   - The bridge runs on a raised native stack: `bun run regress` starts it through bash with `ulimit -s`
+     at 256 MiB and `BUN_JSC_maxPerThreadStackUsage` at 255 MiB, about 50 times the default's recursion
+     depth. `check_stack_depth()` measures only the wasm's shadow stack (the locals whose address is
+     taken), while every wasm frame takes native stack; on the defaults (8 MiB, and JavaScriptCore's own
+     limit) a deep recursion overflowed the native stack first, and how deep it got depended on how far
+     JavaScriptCore had compiled the wasm. `SELECT infinite_recurse()` (`max_stack_depth` 2MB) needs
+     between 32 and 48 MiB (measured 2026-09-27).
+   - The 18.3.0 baseline (2026-09-27, 4 runs on the `18.3.0` build, about 100 seconds each): of 230 tests,
+     178 pass, 49 fail the same way in every run and 3 are unstable (psql and psql_pipeline, the early
+     ReadyForQuery; stats, the clock); each run reports 52 failures and no backend fails. Against the
+     byte-identity build's baseline: euc_kr and copyencoding (the conversion modules' imports),
+     object_address, tsearch and tsdicts (libpqwalreceiver loads, so no failed `dlopen` poisons
+     dict_snowball's) and infinite_recurse (the raised stack) pass; json, jsonb, conversion and
+     alter_table fail the same way in every run instead of unstably (json and jsonb report the unterminated
+     input, since the JSON parser's recursion takes no shadow stack and `max_stack_depth` never trips;
+     conversion and alter_table no longer depend on a restart); opr_sanity, alter_generic and
+     subscription get further, and fail on what is left: the tests' C functions, `RESET SESSION
+     AUTHORIZATION`, and libpqwalreceiver's libpq.
+   - Known issues, left for later patches: `RESET SESSION AUTHORIZATION` does nothing in single-user
+     mode (`session_authorization` never gets a value); an error in an extended-query batch sends an
+     early ReadyForQuery (`pgl_longjmp` sets `send_ready_for_query` before the error handling sets
+     `ignore_till_sync`); once one `dlopen` has failed, every later one fails ("missing magic block")
+     until the backend restarts; libpqwalreceiver links libpq statically without libpgcommon's frontend
+     build, so a connection fails with "libpq is incorrectly linked to backend functions" (and
+     `pg_char_to_encoding`/`pg_encoding_to_char` stay unresolved in it); `check_stack_depth()` cannot see
+     recursion that takes no shadow stack.
    - The first runs also found a defect in the driver: every ERROR leaked about 1.2 kB of the wasm's
      shadow stack, because nothing restored the stack pointer the error's unwind left behind, until
      `max_stack_depth` refused every statement. The driver now restores it after each unwound call.
@@ -198,8 +287,8 @@ Postgres's own regression suite has never run on the wasm build.
 9. **Our own builder image, and every release reproducible.** The builder image is defined in
    `builder/` at the repository root (its `Containerfile`, the runner stage's package set, and the
    `make -j` resource cap), not in the overlay: replacing the overlay's `pglite/builder/Dockerfile` would
-   break tree identity, so ElectricSQL's copy stays there, unused, and is deleted at `18.3.0`.
-   `bun run builder:image` builds it locally (`localhost/pgwasm-postgres-builder:3.1.74-p1`);
+   have broken tree identity, so ElectricSQL's copy stayed there, unused, until `18.3.0` deleted it.
+   `bun run builder:image` builds it locally (`localhost/pgwasm-postgres-builder:3.1.74-p2`);
    `ghcr.io/pgxsinkit/pgwasm-builder` is built from `builder/` by a workflow that runs when it changes,
    and the build references it by digest; podman everywhere, locally and in CI. The Containerfile is the
    reproduction's pinned draft (amd64, emsdk by digest, apt snapshot, every source by checksum, clones
@@ -211,7 +300,36 @@ Postgres's own regression suite has never run on the wasm build.
    scratch and must reproduce every sha256 of the build the PR's gate tested, tarballs included, so what
    was gated is provably what ships. Emscripten stays at 3.1.74 until `18.3.0` (byte identity needs it;
    the reason goes next to the pin), then moves to the latest Emscripten (6.0.10 on 2026-09-27) as its
-   own release through both gates, because the glue under `pgwasm-c`'s host code changes.
+   own release through both gates, because the glue under `pgwasm-c`'s host code changes. As built for
+   `18.3.0` (2026-09-27):
+   - The image is `3.1.74-p2`: zlib (`--with-zlib`), libxml2 (`--with-libxml`) and ICU (`--with-icu`),
+     what the core links. Gone: libxslt 1.1.43 (contrib/xml2 only), OpenSSL 3.0.17 (pgcrypto only; the
+     core is built `--with-openssl=no`), OSSP uuid 1.6.2 (contrib/uuid-ossp only), json-c, libdeflate,
+     libtiff, SQLite, PROJ, GEOS and GDAL (PostGIS only), and the symbol lists the old export list
+     subtracted (`/install/exports`, `/install/imports`, `LIB_EXPORTS_DIR`, `LLVM_NM`). Two configure
+     flags went with their libraries, each checked in REL_18_3: `--with-libxslt` defines `USE_LIBXSLT`,
+     which only contrib/xml2's `xslt_proc.c` reads, and adds `-lxslt` to `LIBS`, from which the backend
+     takes nothing; `--with-uuid=ossp` sets `UUID_LIBS` and `HAVE_UUID_OSSP`/`HAVE_OSSP_UUID_H`, read by
+     contrib/uuid-ossp alone (`gen_random_uuid()` and `uuidv7()` are core code). The toolchain stage,
+     and with it the package set, is unchanged. A build from scratch takes about 10 minutes (the image
+     is 2.65 GB). Emscripten stays 3.1.74 in `18.3.0`, and the libraries at 0.5.8's versions, so that the
+     first release whose bytes are ours changes what is built and not the toolchain; the pin comments
+     say so, instead of byte identity.
+   - `bun run build` mounts the materialised source at `/build`, passes `SOURCE_DATE_EPOCH` (the commit
+     time of HEAD, or the environment's) and `LC_ALL=C`, and `build-pglite.sh` refuses to run without
+     the version or the epoch. `contrib/dist.mk` sorts an archive's members by name and sets their
+     mtimes to `SOURCE_DATE_EPOCH` and their owner to root:0 (the 0.5.8 reproduction's fix; tar pipes
+     into gzip, whose header then has no name and mtime 0). `bun run build --debug` passes the host's
+     path as `HOST_SOURCE_DIR` for `-ffile-prefix-map=/build=<host path>`; a release build never sees
+     it, and `pglite.wasm` holds no host path.
+   - The build writes `dist/manifest.json`: the version, the commit and the tree, the epoch, the builder
+     image, the compatibility tuple of a fresh initdb and the `dataFormat` that declares it, and every
+     release artefact's bytes and sha256 (`pglite.wasm`/`.data`/`.js`, `initdb.wasm`/`.js`,
+     `pg_dump.wasm`/`.js`, `exported_functions.txt`, `amcheck.tar.gz`). Nothing in it varies between two
+     builds of one commit. `bun run build:verify <manifest> [<dist>]` checks a build against another's.
+   - Proven 2026-09-27 on the candidate commit: two builds from clean in this checkout and one from a
+     clone at another host path gave byte-identical manifests, every sha256 equal, `amcheck.tar.gz`
+     included. A build takes about 8 minutes.
 
 10. **This repository runs its artefacts with its own minimal driver,** Bun TypeScript written against
     the Emscripten glue, importing nothing from pgxsinkit (`scripts/lib/driver/`: MEMFS, initdb via
@@ -238,7 +356,13 @@ Postgres's own regression suite has never run on the wasm build.
     are byte-identical, every catalog relation file and relcache init file among them; pg_control, the WAL
     segment and `postmaster.pid` differ only by the clock, the nonce, the CRCs over them, uninitialised
     padding in a few WAL records, and the data directory's inode number in `postmaster.pid`. It ships
-    without pgwasm's build marker; pgwasm adds the marker on restore.
+    without pgwasm's build marker; pgwasm adds the marker on restore. Regenerated for `18.3.0`
+    (2026-09-27) at the build commit's time: against the 0.5.8 build's asset, 993 of the 998 entries are
+    byte-identical, every relation file among them. The rest differ by the new epoch (pg_control's system
+    identifier, times, nonce and CRC, `postmaster.pid`'s start time, the WAL's timestamps and first page
+    header) and by the new binary's memory layout (raw pointers in both `pg_internal.init` files, which
+    moved; different leftovers in uninitialised padding of WAL records, with their CRCs); at the old
+    epoch, only by the latter.
 
 11. **Browser floor: Safari/iOS 18.4, Chrome 137, Firefox 131.** 18.4 is where Safari gets standard
     wasm exceptions (`exnref`), which give wasm-native setjmp/longjmp and `PG_TRY` without legacy
@@ -273,9 +397,15 @@ Postgres's own regression suite has never run on the wasm build.
        - 3b (done 2026-09-27): the TCP bridge, native pg_regress and psql from the pinned tag, the gate
          (`bun run regress`) and the 18.3 baseline: of 230 tests, 172 pass, 51 fail and 7 are unstable
          (decision 6).
-    4. `18.3.0`: amcheck only, the manifest and extension libraries deleted, the fixed-path
-       reproducible build, the `pgwasm-postgres` label, our prepopulated data directory. pgxsinkit
-       adopts it.
+    4. `18.3.0`, in three parts.
+       - 4a (done 2026-09-27): the build that becomes `18.3.0`. Tree and byte identity retired; amcheck
+         only, the extensions manifest and their libraries deleted (image `3.1.74-p2`); the export list
+         from the shipped modules' imports, with `exported_functions.txt` as the reference and
+         `exports:check`; the fixed-path reproducible build with its manifest and `build:verify`; the
+         `pgwasm-postgres` label from the derived version; our prepopulated data directory regenerated;
+         the pg_regress baseline re-recorded with the raised stack (decisions 2, 3, 5, 6 and 9).
+       - 4b: CI: the builder image on GHCR, by digest; the engine gate and release workflows; the tag.
+       - 4c: pgxsinkit adopts the release with `pgwasm:pin`.
     5. The bump script, run by hand first, then `18.6.0` through it.
     6. The Emscripten update and the browser floor as `18.6.1`, through both gates.
     7. The weekly poll and the readiness issue.
@@ -305,7 +435,8 @@ Postgres's own regression suite has never run on the wasm build.
   `.cache/`; later runs are offline and take seconds.
 - `patches/` is generated: it changes through `patches:work` and `patches:export`, and a hand edit
   fails `patches:check`.
-- Until `18.3.0`, cleaning up ElectricSQL's code breaks tree identity, so it waits.
+- With tree identity retired, the series and the overlay change like any other code: through
+  `patches:work`/`patches:export`, and proven by the build and the engine gate, not by a record.
 - The overlay includes two ICU data files, which bring the Unicode License into `NOTICE`.
 - The first pg_regress baseline is a list of the engine's and the build's defects (decision 6); each one
   fixed, in `18.3.0` or later, tightens the baseline through `bun run regress --record`.

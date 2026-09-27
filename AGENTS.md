@@ -21,15 +21,15 @@ consumes the releases. Read [README.md](README.md) and
 ## Tools
 
 - **Bun only.** Never use the `npm` CLI for anything. Run tools through `bun run <script>`, not directly.
-- **podman only**, never docker. (The overlay's `build-with-docker.sh` and `pglite/builder/Dockerfile` are
-  ElectricSQL's, carried verbatim and unused for tree identity; the build is `bun run build` in the image
-  `builder/` defines, see ADR-0001.) Every container this repository starts is named `pgwasm-postgres-*`
-  and started with `--rm`; never remove, retag or prune an image or container this repository did not
-  create, and never run `podman system prune` or `podman image prune`.
+- **podman only**, never docker. The build is `bun run build` in the image `builder/` defines (ADR-0001
+  decision 9). Every container this repository starts is named `pgwasm-postgres-*` and started with
+  `--rm`; never remove, retag or prune an image or container this repository did not create, and never run
+  `podman system prune` or `podman image prune`.
 - **mise** pins the toolchain (`mise.toml`).
 - **Latest versions, always.** Every dependency and tool goes in at its latest published version,
   verified with a real command (`bun info <pkg> version`, `mise latest <tool>`). A non-latest pin needs a
-  demonstrated reason in a comment next to it (Emscripten 3.1.74 until `18.3.0` is one).
+  demonstrated reason in a comment next to it (the builder image's pins are the documented exception:
+  Emscripten 3.1.74 until its own release, and the libraries at 0.5.8's versions).
 - **TypeScript (Bun) for scripts**, strict, covered by `bun run typecheck`; bash only where TypeScript
   cannot be made robust. oxlint and oxfmt; never eslint, prettier or biome.
 
@@ -41,13 +41,16 @@ consumes the releases. Read [README.md](README.md) and
   derived patches a provenance line naming the source commit. No AI or tool trailers in them.
 - **The overlay only adds files.** Edit overlay files in `overlay/`. An upstream file changes through a
   patch; a patch never touches an overlay path (`patches:check` and `patches:export` refuse it).
-- **Until `18.3.0`, tree identity must hold** (`identity/b133782.json`): the patches and overlay stay
-  exactly ElectricSQL's, oddities included. No cleanups before then, however obvious.
-- **Until `18.3.0`, byte identity must hold too** (`identity/0.5.8-artefacts.json`). `bun run build` (about
-  15 minutes) and `bun run build:verify` prove it; they are not in `validate` or CI, so run them after
-  any change that reaches the build (`builder/`, `extensions.json`, the build scripts). A mismatch is
-  diagnosed in the build; the record is never edited to make it pass. Run long builds in the background
-  and wait on the process, never with a long fixed `sleep`.
+- **The build is reproducible, and gated by hand until CI has it.** `bun run build` (about 8 minutes) is
+  not in `validate` or CI, so run it after any change that reaches the build (`builder/`, `patches/`,
+  `overlay/`, the build scripts), then `bun run exports:check` and the driver's checks below. Two builds of
+  one commit, from any checkout, must give identical manifests (`bun run build:verify <manifest>`); a
+  difference is diagnosed in the build. Build only what ships: a new contrib module is a `PGLITE_CONTRIB`
+  entry and a release. Run long builds in the background and wait on the process, never with a long fixed
+  `sleep`.
+- **The export list has a reference.** `exported_functions.txt` changes only through
+  `bun run exports:check --record`, after a deliberate change that is reviewed in its diff; a core symbol
+  (one of `overlay/pglite/static/included.pglite.exports`) must never go missing.
 - **The driver's scripts need a build too.** `bun run driver:smoke`, `bun run prepopulated --check` and
   `bun run data-format:check` are not in `validate` or CI; run them after any change that reaches the build
   or `scripts/lib/driver/`. `identity/prepopulated.json` changes only through `prepopulated --record`, after
@@ -59,7 +62,7 @@ consumes the releases. Read [README.md](README.md) and
   results and `regress/diffs/` change only through `bun run regress --record`, after a deliberate change;
   never edit a diff by hand. The failure groups are written by hand: every failing or unstable test needs a
   group with a reason, and `bun test` refuses `unclassified`. An unstable test is recorded with its reason,
-  never tolerated silently.
+  never tolerated silently. The gate's bridge runs on a raised native stack (256 MiB); keep it raised.
 - Never commit PostgreSQL source, build outputs or the contents of `.cache/` or `work/`.
 
 ## Directory hygiene

@@ -9,30 +9,33 @@ The mechanics and the plan are in [ADR-0001](docs/adr/0001-postgres-as-a-patch-s
 
 ## Status
 
-The series is the split of ElectricSQL's PGlite fork (`electric-sql/postgres-pglite` at `b133782`, the
-PostgreSQL 18.3 tree PGlite 0.5.8 was built from). `patches:check` proves that the pinned `REL_18_3` +
-the patches + the overlay gives exactly that tree, without its extension submodules. `build` and
-`build:verify` prove that the tree, with those extensions, builds PGlite 0.5.8's artefacts byte for byte
-(2026-09-27). The build's artefacts run under this repository's own minimal driver, which also makes the
-prepopulated data directory as a deterministic asset, and `data-format:check` guards the on-disk format
-(step 3a, 2026-09-27). Postgres's own regression suite runs on the build through a TCP bridge, against a
-checked-in 18.3 baseline: of the 230 tests of `parallel_schedule`, 172 pass, 51 fail the same way in every
-run and 7 are unstable (step 3b, 2026-09-27). There is no release yet.
+The series began as the split of ElectricSQL's PGlite fork (`electric-sql/postgres-pglite` at `b133782`,
+the PostgreSQL 18.3 tree PGlite 0.5.8 was built from), proven by tree identity and by rebuilding PGlite
+0.5.8's artefacts byte for byte (steps 1 and 2); both records are retired, and the history keeps them. The
+build that becomes `18.3.0`, the first release whose bytes are ours, is done (step 4a, 2026-09-27): it
+builds only what ships (amcheck, and the core modules `pglite.data` carries), exports what those modules
+import, names itself `PostgreSQL 18.3 (pgwasm-postgres 18.3.0)`, and gives the same sha256s from any
+checkout. Its artefacts run under this repository's own minimal driver, which also makes the prepopulated
+data directory as a deterministic asset; `data-format:check` guards the on-disk format, `exports:check`
+the export list, and Postgres's own regression suite runs on the build through a TCP bridge against a
+checked-in baseline: of the 230 tests of `parallel_schedule`, 178 pass, 49 fail the same way in every run
+and 3 are unstable. There is no release yet: CI for the image, the gate and the release (4b), then
+pgxsinkit's adoption (4c).
 
 ## Layout
 
-| Path               | What                                                                                              |
-| ------------------ | ------------------------------------------------------------------------------------------------- |
-| `upstream.json`    | The pin: upstream repository, tag, and the commit the tag must resolve to                         |
-| `patches/`         | The series: `git format-patch` output, applied in order with `git am --3way`                      |
-| `overlay/`         | Files copied into the tree verbatim, mirroring tree paths; never patched                          |
-| `extensions.json`  | Temporary: the nine third-party extensions `b133782` pins as submodules (path, URL, commit)       |
-| `data-format.json` | The declared `dataFormat` and its compatibility tuple, which `data-format:check` enforces         |
-| `identity/`        | Identity records: the tree's and artefacts' (temporary, until `18.3.0`), the prepopulated asset's |
-| `regress/`         | The pg_regress baseline: every test's result, the failing tests' diffs, why each group fails      |
-| `builder/`         | The builder image: its pinned `Containerfile`, the package set it must have, the `make -j` cap    |
-| `scripts/`         | The Bun scripts below                                                                             |
-| `docs/adr/`        | Decisions                                                                                         |
+| Path                     | What                                                                                           |
+| ------------------------ | ---------------------------------------------------------------------------------------------- |
+| `upstream.json`          | The pin: upstream repository, tag, and the commit the tag must resolve to                      |
+| `patches/`               | The series: `git format-patch` output, applied in order with `git am --3way`                   |
+| `overlay/`               | Files copied into the tree verbatim, mirroring tree paths; never patched                       |
+| `exported_functions.txt` | The reference export list of `pglite.wasm`, which `exports:check` diffs a build's against      |
+| `data-format.json`       | The declared `dataFormat` and its compatibility tuple, which `data-format:check` enforces      |
+| `identity/`              | The prepopulated asset's record, which `prepopulated --check` reproduces                       |
+| `regress/`               | The pg_regress baseline: every test's result, the failing tests' diffs, why each group fails   |
+| `builder/`               | The builder image: its pinned `Containerfile`, the package set it must have, the `make -j` cap |
+| `scripts/`               | The Bun scripts below                                                                          |
+| `docs/adr/`              | Decisions                                                                                      |
 
 The source tree is the pinned tag, with the patches applied as commits and the overlay copied on top.
 The overlay only adds files: an upstream file changes through a patch, and no patch touches an overlay
@@ -42,7 +45,7 @@ The patches, one per topic:
 
 | Patch                    | Files                                                                     | What                                                                                                            |
 | ------------------------ | ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `build-emscripten`       | `configure`, `.gitignore`, the three port files, ten makefiles            | The Emscripten port, the wasm link and install targets, the extension import lists, the version label           |
+| `build-emscripten`       | `configure`, `.gitignore`, the three port files, eight makefiles          | The Emscripten port, the wasm link and install targets, the version label                                       |
 | `backend-single-process` | xlog.c, posix_sema.c, checkpointer.c, fd.c, miscinit.c, postinit.c, guc.c | One backend embedded in the host, without a postmaster or checkpointer process                                  |
 | `startup-packet-export`  | backend_startup.c                                                         | `ProcessStartupPacket` callable by the host                                                                     |
 | `encoding-shim`          | pg_dump.c, pg_backup_archiver.c, fe-exec.c                                | libpgcommon's encoding functions in the statically linked tools                                                 |
@@ -54,7 +57,7 @@ Requirements: git, [mise](https://mise.jdx.dev) (`mise install` installs the pin
 `bun install` (which also installs the pre-commit hook).
 
 ```sh
-bun run patches:check            # prove the series: apply, round-trip export, tree identity
+bun run patches:check            # prove the series: apply, round-trip export
 bun run patches:work [<tag>]     # materialise work/<tag> with the series as commits
 bun run patches:export [<tag>]   # write work/<tag>'s commits back to patches/
 ```
@@ -63,9 +66,9 @@ bun run patches:export [<tag>]   # write work/<tag>'s commits back to patches/
   clone; the first run needs the network, about 35 MB, and later runs take a couple of seconds
   offline), checks that the tag resolves to the pinned commit, applies every patch in a throwaway
   worktree with `git am --3way`, and copies the overlay in. It then checks that re-exporting the applied
-  commits reproduces `patches/` byte for byte, writes the tree, and compares it with every
-  `identity/*.json`. A failure names the patch, the rejected hunks and the conflicting lines, or the
-  first differing line of a patch file, or the expected and actual trees. `bun run validate` runs it.
+  commits reproduces `patches/` byte for byte, and writes the tree the build is made from. A failure names
+  the patch, the rejected hunks and the conflicting lines, or the first differing line of a patch file.
+  `bun run validate` runs it.
 - **`patches:work [<tag>] [--force]`** creates `work/<tag>` (gitignored), a worktree of the cache on
   branch `work/<tag>`: the tag, with one commit per patch on top, and the overlay copied in but not
   committed (the cache's `info/exclude` keeps it out of `git status`, except `pglite/out/.gitignore`,
@@ -85,36 +88,57 @@ Overlay files are edited in `overlay/` directly.
 
 ## Building
 
-Requirements: podman (rootless is fine) on an amd64 host, the network on the first run, and about 6 GB
-of free disk (the image is 2.8 GB; podman's layer cache and the 0.6 GB build tree take the rest).
+Requirements: podman (rootless is fine) on an amd64 host, the network on the first run, and about 5 GB
+of free disk (the image is 2.65 GB; podman's layer cache and the 0.5 GB build tree take the rest).
 
 ```sh
-bun run builder:image   # build the builder image from builder/ (about 40 min from scratch, seconds when cached)
-bun run build           # build the source in it (about 15 min)
-bun run build:verify    # check the artefacts against identity/0.5.8-artefacts.json
+bun run builder:image                     # build the builder image from builder/ (about 10 min from scratch, seconds when cached)
+bun run build [--debug]                   # build the source in it (about 8 min)
+bun run build:verify <manifest> [<dist>]  # check that a build reproduces another's manifest
+bun run exports:check [--record]          # diff the build's export list against exported_functions.txt
 ```
 
 - **`builder:image`** builds `builder/Containerfile` with podman as
-  `localhost/pgwasm-postgres-builder:3.1.74-p1`, capped at 4 CPUs and 16 GiB, with `builder/bin/make`
+  `localhost/pgwasm-postgres-builder:3.1.74-p2`, capped at 4 CPUs and 16 GiB, with `builder/bin/make`
   turning every bare `make -j` into `make -j4`, then checks the image's packages against
-  `builder/dpkg-expected.txt`. The log goes to `.cache/builder-image.log`.
-- **`build`** runs `patches:check`, then checks the proven tree out into `.cache/build/postgres-pglite`
-  (replacing the previous build) with the extensions of `extensions.json` at their commits (fetched once
-  into `.cache/extensions.git`) and no `.git` anywhere, and runs the tree's `build-pglite.sh` in the builder
-  image as ElectricSQL's CI ran it for 0.5.8: the source mounted at
-  `/home/runner/_work/pglite/pglite/postgres-pglite` (the artefacts embed that path), `PGLITE_VERSION=0.5.8`
-  and `DEBUG=false`, as root with umask 022 and no `TZ` or locale variables, under the same resource caps.
-  The artefacts land in `.cache/build/postgres-pglite/dist/`, the log in `.cache/build/build.log`. It
-  refuses to start without podman or the image, or while another `pgwasm-postgres-*` container exists.
-- **`build:verify [<dist dir>]`** checks a `dist/` against `identity/0.5.8-artefacts.json`: the seven
-  reproducible files (`pglite.wasm`, `pglite.data`, `pglite.js`, `initdb.wasm`, `initdb.js`,
-  `pg_dump.wasm`, `pg_dump.js`) by size and sha256, and `amcheck.tar.gz` by its members (path, mode,
-  owner, bytes), because its archive bytes carry the member mtimes and the directory order of the build,
-  which nobody can reproduce. It prints a table and exits 1 on any mismatch.
+  `builder/dpkg-expected.txt`. The log goes to `.cache/builder-image.log`. The image builds what the core
+  links: zlib, libxml2 and ICU, at 0.5.8's versions, on Emscripten 3.1.74 (its pins are the documented
+  exception to the latest-versions rule; the reasons are next to them).
+- **`build`** runs `patches:check`, checks the proven tree out into `.cache/build/postgres-pglite`
+  (replacing the previous build) with no `.git`, and runs the tree's `build-pglite.sh` in the builder image,
+  reproducibly from any checkout: the source mounted at `/build`, the candidate version of HEAD (derived
+  from the tags, see [Versions and releases](#versions-and-releases)) as `PGWASM_POSTGRES_VERSION`,
+  `SOURCE_DATE_EPOCH` = the commit time of HEAD (or the environment's), `LC_ALL=C`, as root with umask
+  022, under the same resource caps. It builds the core and the contrib modules of `build-pglite.sh`'s
+  `PGLITE_CONTRIB` (amcheck), each packaged as a deterministic archive (members sorted, mtimes at
+  `SOURCE_DATE_EPOCH`, owner root:0), and links `pglite.wasm` exporting `pglite/static/included.pglite.exports`
+  plus every symbol a shipped module imports (the overlay's `pglite/scripts/exported-functions.sh`). The
+  artefacts land in `.cache/build/postgres-pglite/dist/` with `manifest.json` next to them: the version,
+  commit, tree, epoch, builder image, the compatibility tuple of a fresh initdb and its `dataFormat`, and
+  every release artefact's bytes and sha256. The log goes to `.cache/build/build.log`. `--debug` makes a
+  debug build whose debug info points at the materialised source on the host (`-ffile-prefix-map`); a
+  release build never sees the host path. It refuses to start without podman or the image, or while
+  another `pgwasm-postgres-*` container exists.
+- **`build:verify <manifest> [<dist dir>]`** checks a `dist/` (default: the build's) against another
+  build's manifest: every release artefact by bytes and sha256, the extension archives included, and the
+  version, epoch and tuple of the dist's own manifest. It prints a table and exits 1 on any difference.
+  Two builds of one commit, from any checkout, reproduce each other.
+- **`exports:check [--artefacts <dir>] [--record]`** diffs the build's `exported_functions.txt` against the
+  reference at the repository root: a core symbol (one of `included.pglite.exports`) missing fails, any
+  other symbol added or removed is reported. `--record` rewrites the reference after a deliberate change.
 
 None of them runs in `validate` or CI: they take too long, and the image is not published yet. Run
-`build` and `build:verify` after changing anything that reaches the build: `builder/`, `extensions.json`,
-the build scripts. A mismatch is diagnosed and fixed in the build, never by editing the record.
+`build`, then `exports:check` and the driver's checks below, after changing anything that reaches the
+build: `builder/`, `patches/`, `overlay/`, the build scripts.
+
+| File          | 0.5.8 (bytes) | 18.3.0 (bytes) | Change            |
+| ------------- | ------------: | -------------: | ----------------- |
+| `pglite.wasm` |    10,088,161 |     10,061,242 | −26,919 (−0.27%)  |
+| `pglite.data` |     6,295,316 |      6,293,220 | −2,096 (−0.03%)   |
+| `pglite.js`   |       516,332 |        380,679 | −135,653 (−26.3%) |
+
+`pglite.wasm` exports 1,144 symbols instead of 0.5.8's 2,093 (the export list: 1,121 instead of 2,064), and
+`pglite.js` loses a wrapper for each dropped one; `initdb` and `pg_dump` are byte-identical to 0.5.8's.
 
 ## Driving the artefacts
 
@@ -137,8 +161,11 @@ otherwise, until `max_stack_depth` refuses everything); an exit (a FATAL) ends t
 artefact directory as a build's `dist/` (`bin/`, `extensions/`) or a flat directory of the same files.
 
 - **`driver:smoke [--artefacts <dir>] [--from <archive>]`** runs initdb (or unpacks a data directory
-  archive), boots, and over the wire checks `SELECT version()`, a DDL/DML round trip that survives a unique
-  violation, and `CREATE EXTENSION amcheck` with `bt_index_check` on catalog indexes.
+  archive), boots, and over the wire checks that `SELECT version()` names the build's release (its
+  manifest's version), a DDL/DML round trip that survives a unique violation, `CREATE EXTENSION amcheck`
+  with `bt_index_check` on catalog indexes, a `LOAD` of every shared module the build ships (the 28 core
+  modules in `pglite.data`'s `lib/postgresql` and the extension archives'), every default encoding
+  conversion once, non-ASCII round trips through 17 encodings, and dict_snowball's stemming.
 - **`prepopulated [--artefacts <dir>] [--out <file>] [--check | --record] [--compare <archive>]`** makes the
   prepopulated data directory the way ElectricSQL made `@electric-sql/pglite-prepopulatedfs` 0.5.8 (the
   build's own initdb with PGlite's arguments, a start with PGlite's start parameters, then the archive of the
@@ -206,25 +233,34 @@ bun run regress:bridge [--artefacts <dir>] [--port <n>] [--database <name>] [--s
   that fails (a throw out of the wasm, an exit) is restarted from its data directory, which runs crash recovery,
   and the log says `BACKEND FAILED` and for which test. `regress:bridge` runs it on its own, for psql or any
   other client: it prints the port it listens on, and its options are in its usage line.
+- **The gate's bridge runs on a raised native stack**: `regress` starts it through bash with `ulimit -s` at
+  256 MiB and `BUN_JSC_maxPerThreadStackUsage` at 255 MiB, about 50 times the default's recursion depth.
+  Postgres' `check_stack_depth()` measures only the wasm's shadow stack, while every wasm frame takes native
+  stack, so on the defaults a deep recursion (`infinite_recurse`, which needs 32 to 48 MiB) threw out of the
+  wasm first, depending on how far JavaScriptCore had compiled it. `regress:bridge` on its own runs on the
+  stack it is started with.
 
-The 18.3 baseline (4 runs on the byte-identity build) has 230 tests: 172 pass, 51 fail the same way in every
-run and 7 are unstable; each run reports 58 failures. The failures, by group (`regress/baseline.json` has the
-full reasons):
+The baseline (4 runs on the `18.3.0` build) has 230 tests: 178 pass, 49 fail the same way in every run and 3
+are unstable; each run reports 52 failures, and no backend fails. The failures, by group
+(`regress/baseline.json` has the full reasons):
 
-| Group                     | Tests | Why                                                                                            |
-| ------------------------- | ----- | ---------------------------------------------------------------------------------------------- |
-| `session-authorization`   | 20    | `RESET SESSION AUTHORIZATION` does nothing in single-user mode; the test runs on as the role   |
-| `regress-library`         | 15    | The tests' C functions: the build's `regress.so` imports symbols `pglite.wasm` does not export |
-| `dynamic-loading`         | 4     | `libpqwalreceiver.so` does not load, and after one failed `dlopen` every later one fails       |
-| `conversion-modules`      | 3     | Encoding conversion modules call unexported functions, which ends the backend                  |
-| `wasm-stack`              | 3     | Deep recursion overflows the host's native stack before `max_stack_depth` (2 unstable)         |
-| `single-process`          | 3     | No checkpointer, no background or parallel workers                                             |
-| `session-persistence`     | 3     | `\c` gets the same backend back: login triggers, `temp_buffers`, loaded libraries              |
-| `extended-protocol-ready` | 2     | An extended-query error sends an early ReadyForQuery, which desynchronises psql (unstable)     |
-| `restart-dependent`       | 2     | Whether a `dlopen` still fails depends on an earlier restart (unstable)                        |
-| `clock-resolution`        | 1     | The wasm's wall clock has millisecond resolution (unstable)                                    |
-| `start-parameters`        | 1     | PGlite's start parameters: `search_path=public` (and `-O`)                                     |
-| `icu-locales`             | 1     | The only ICU collations are `und-x-icu` and `unicode`                                          |
+| Group                     | Tests | Why                                                                                           |
+| ------------------------- | ----- | --------------------------------------------------------------------------------------------- |
+| `session-authorization`   | 21    | `RESET SESSION AUTHORIZATION` does nothing in single-user mode; the test runs on as the role  |
+| `regress-library`         | 17    | The tests' C functions: the tree's `regress.so` imports symbols `pglite.wasm` does not export |
+| `single-process`          | 3     | No checkpointer, no background or parallel workers                                            |
+| `session-persistence`     | 3     | `\c` gets the same backend back: login triggers, `temp_buffers`, loaded libraries             |
+| `extended-protocol-ready` | 2     | An extended-query error sends an early ReadyForQuery, which desynchronises psql (unstable)    |
+| `wasm-stack`              | 2     | The JSON parser's recursion takes no shadow stack, so `max_stack_depth` never trips           |
+| `walreceiver-libpq`       | 1     | libpqwalreceiver's static libpq calls the backend's libpgcommon, so connections fail          |
+| `clock-resolution`        | 1     | The wasm's wall clock has millisecond resolution (unstable)                                   |
+| `start-parameters`        | 1     | PGlite's start parameters: `search_path=public` (and `-O`)                                    |
+| `icu-locales`             | 1     | The only ICU collations are `und-x-icu` and `unicode`                                         |
+
+Against the byte-identity build's baseline (172 pass, 51 fail, 7 unstable), euc_kr, copyencoding (the
+conversion modules' imports), object_address, tsearch, tsdicts (libpqwalreceiver loads, so no failed
+`dlopen` poisons the later ones) and infinite_recurse (the raised stack) pass, and json, jsonb, conversion
+and alter_table fail the same way in every run instead of unstably.
 
 Neither script runs in `validate` or CI: they need a build and podman. Run `regress` after any change that
 reaches the build or the driver, and `--record` only after a deliberate change, with each new failure given a
@@ -242,8 +278,9 @@ group and a reason.
 | `validate`                | format + check + `patches:check`: the pre-commit hook                                   |
 | `validate:full`           | The same, for now: what CI runs on pushes to main and on pull requests                  |
 | `builder:image`           | Build the builder image from `builder/` and check its package set                       |
-| `build`                   | Build the materialised source in the builder image (not in CI)                          |
-| `build:verify`            | Check a build's `dist/` against the byte-identity record (not in CI)                    |
+| `build`                   | Build the materialised source in the builder image, with its manifest (not in CI)       |
+| `build:verify`            | Check that a build reproduces another build's manifest (not in CI)                      |
+| `exports:check`           | Diff a build's export list against `exported_functions.txt`; `--record` it (not in CI)  |
 | `driver:smoke`            | Drive a build's artefacts: initdb, boot, a wire-protocol smoke test (not in CI)         |
 | `prepopulated`            | Make the prepopulated data directory asset; `--check` it against its record (not in CI) |
 | `data-format:check`       | Check a build's compatibility tuple against `data-format.json` (not in CI)              |
@@ -253,8 +290,13 @@ group and a reason.
 ## Versions and releases
 
 Releases are tagged `<pg major>.<pg minor>.<revision>` (`18.3.0`, `18.3.1`, `18.6.0`, …); the tag is the
-only version input, and `package.json`'s `0.0.0` is a placeholder. Releases are GitHub release assets
-with a checksum manifest, not npm packages. History is linear: changes are rebased, never merged.
+only version input, and `package.json`'s `0.0.0` is a placeholder. The build derives the version it embeds
+(`scripts/lib/version.ts`): `<major>.<minor>.0` of the pinned upstream tag while there is no release tag,
+the latest release tag's revision + 1 when that tag is of the pinned major.minor, and `<major>.<minor>.0`
+otherwise. Only the tags of HEAD's strict ancestors count, so a tagged commit builds as its own tag, and tags
+that are not `N.N.N` (`builder-sources-1`) are ignored; today the candidate is `18.3.0`. Releases are GitHub
+release assets with a checksum manifest, not npm packages. History is linear: changes are rebased, never
+merged.
 
 ## License
 
