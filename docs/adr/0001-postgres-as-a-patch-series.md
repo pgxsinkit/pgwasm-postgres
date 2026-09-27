@@ -245,6 +245,14 @@ Postgres's own regression suite has never run on the wasm build.
      recorded as unstable, in its group walreceiver-libpq: of 230 tests, 178 pass, 48 fail the same way in
      every run and 4 are unstable. A test's instability can hide from a record of a few runs, and the gate
      then fails on it at random; each one found is recorded the same way.
+   - Re-recorded for `18.6.0` in step 5 (2026-09-27, 8 runs on the build of the `REL_18_6` bump, with
+     `REL_18_6`'s tests and expected output): of 231 tests, 178 pass, 49 fail the same way in every run and 4 are
+     unstable (the same four); each run reports 53 failures and no backend fails. Nothing passes or fails that did
+     not on `REL_18_3`: the new compression_pglz needs the regress library (regress-library); seven failing tests
+     fail at other lines only (their expected output grew upstream); encoding, foreign_data and stats_ext fail on
+     their new checks for their groups' reasons; rowsecurity and copy2 lose the syntax errors of their failed
+     COPYs' in-line data, which upstream's psql now skips. Before a record, `regress` compares a baseline of
+     another tag all the same, as after a bump, and fails until it is recorded for the pinned tag.
    - Known issues, left for later patches: `RESET SESSION AUTHORIZATION` does nothing in single-user
      mode (`session_authorization` never gets a value); an error in an extended-query batch sends an
      early ReadyForQuery (`pgl_longjmp` sets `send_ready_for_query` before the error handling sets
@@ -296,6 +304,42 @@ Postgres's own regression suite has never run on the wasm build.
    the default branch. The workflows are thin: every step that does work is a `bun run` script that gives
    the same result locally, and `release:publish --dry-run` stops before `gh release create`. The bump
    script, the poll and the readiness issue are steps 5 and 7.
+
+   The bump, as built in step 5 (2026-09-27), is `bun run bump <upstream tag>`, run by hand until the poll runs
+   it, unchanged (`--lock`, `--report <file>` for the PR body, `--trailer` for the commit):
+   - It refuses a tag of another major (a release, a beta or a release candidate: a new major goes through a
+     `port-<major>` branch, decision 8), anything but a newer release of the pinned major, a tag
+     `git ls-remote` does not list or that does not resolve to a commit, and a working tree with changes.
+   - It fetches the tag into the upstream cache with its history since the pinned tag (`--shallow-exclude`, so
+     the commits between them can be listed and diffed; the shallow boundary is diffed against its real parent)
+     and applies the series patch by patch with `git am --3way`, as `patches:work` does. A conflict changes
+     nothing in the repository: the report names the patch, each conflicting file with the patch's hunks, where
+     the plain apply stopped and the merge's conflict regions, and the upstream commits between the tags that
+     changed the file, marked when they changed the lines a hunk stands on (each hunk's range is followed back
+     through the earlier patches and forward through the upstream commits).
+   - A clean apply is committed at once, the pin and `patches/` re-exported onto the new tag in one commit, after
+     `patches:check`, because the gate gates a commit. Then `gate --keep-going` (every step runs, but after a
+     failed build; `.cache/gate/<commit>.steps.json` says how each ended) and the report: the apply log, `git
+     range-diff` of the series on the old tag against the series on the new one, the upstream commits that change
+     the patched files, the export list against the reference, the data format, pg_regress against the baseline
+     (the tests upstream changed told apart), the prepopulated data directory against its record, and the sizes
+     against the previous release's `manifest.json` (`gh release download`, read-only).
+   - It never re-records. The regress baseline, `exported_functions.txt` and `identity/prepopulated.json` are
+     re-recorded by the operator after reading the report, each in its own commit with every change explained.
+     A changed compatibility tuple stops a minor bump (a minor keeps its `dataFormat`, never a new one), as do a
+     core symbol gone from the export list, a failed build, `driver:smoke` or prepopulated asset; a removed symbol
+     and a newly failing test are explained before a release.
+   - The first bump, `REL_18_3` → `REL_18_6` (`18.6.0`), 2026-09-27: 397 upstream commits, 22 of them in the 25
+     patched files; all five patches applied without the 3-way fallback, and re-exported with only blob ids and
+     hunk offsets changed, so `git range-diff` shows each unchanged. dataFormat 1's tuple, unchanged. The export
+     list gained three symbols, each a shipped module's new import from an upstream fix: amcheck's
+     `RestrictSearchPath` (0a61fcd), libpqwalreceiver's `WalRcvIdentifySystemLsn` (3310163) and its static
+     libpq's `timingsafe_bcmp` (d93ef41). The baseline is decision 6's. Against `18.3.0`: `pglite.wasm`
+     10,089,345 bytes (+28,103), `pglite.data` 6,290,545 (−2,675), `pglite.js` 380,859 (+180). The prepopulated
+     asset, at `18.3.0`'s epoch, has 875 of its 998 entries byte-identical to `18.3.0`'s: the version in
+     `information_schema.sql_implementation_info`, the new `postgresql.conf.sample`, and initdb's WAL, 8,248 bytes
+     longer, which moves the checkpoint and the LSN and data checksum of every page written after it.
+     `version()` reads `PostgreSQL 18.6 (pgwasm-postgres 18.6.0) on wasm32-unknown-emscripten, …`.
 
 8. **Majors are adopted deliberately, and on-disk compatibility is guarded mechanically.** Main tracks
    one major. The trigger to move is a feature we need, or the current major coming within 12 months of
@@ -477,15 +521,17 @@ Postgres's own regression suite has never run on the wasm build.
          `exports:check`; the fixed-path reproducible build with its manifest and `build:verify`; the
          `pgwasm-postgres` label from the derived version; our prepopulated data directory regenerated;
          the pg_regress baseline re-recorded with the raised stack (decisions 2, 3, 5, 6 and 9).
-       - 4b (done 2026-09-27, but for publishing): `bun run gate`, the builder image's publication and lock,
-         and the release scripts, each runnable locally; `builder-image.yml`, `gate.yml` and `release.yml`
-         (decisions 6, 7 and 9). Publishing is the maintainer's, in order: push develop, where
-         `builder-image.yml` publishes the image (the GHCR package made public if it is private, so that
-         anyone can pull it); record its digest with the `bun run builder:lock` command the job summary
-         prints, and commit the lock; confirm that `gate.yml` passed on that commit, in the published image;
-         fast-forward main to it; tag it `18.3.0`.
+       - 4b (done 2026-09-27): `bun run gate`, the builder image's publication and lock, and the release
+         scripts, each runnable locally; `builder-image.yml`, `gate.yml` and `release.yml` (decisions 6, 7 and
+         9). Published by the maintainer, in order: develop pushed, where `builder-image.yml` published the image;
+         its digest recorded with `bun run builder:lock` (`b206c07`); `gate.yml` passed on that commit, main
+         fast-forwarded to it, and `18.3.0` tagged and released by `release.yml`.
        - 4c: pgxsinkit adopts the release with `pgwasm:pin`.
-    5. The bump script, run by hand first, then `18.6.0` through it.
+    5. The bump script, run by hand first, then `18.6.0` through it (done 2026-09-27): `bun run bump`,
+       `gate --keep-going`, and `regress` comparing a baseline of another tag (decision 7); the bump to
+       `REL_18_6` and its three records, re-recorded after reading its report: the export list, the prepopulated
+       asset and the pg_regress baseline (decisions 6, 7 and 10). Two gates from clean at the last commit gave
+       identical manifests. Releasing `18.6.0` is the maintainer's, as for `18.3.0`.
     6. The Emscripten update and the browser floor as `18.6.1`, through both gates.
     7. The weekly poll and the readiness issue.
     8. The `main-loop-unroll` rewrite with its token-identity proof, before any `port-19` work.

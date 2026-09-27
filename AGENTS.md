@@ -78,6 +78,31 @@ consumes the releases. Read [README.md](README.md) and
   subscription's, 4 had not). The gate's bridge runs on a raised native stack (256 MiB); keep it raised.
 - Never commit PostgreSQL source, build outputs or the contents of `.cache/` or `work/`.
 
+## The bump
+
+- **A new upstream minor goes in only through `bun run bump <tag>`** (ADR-0001 decision 7): never move
+  `upstream.json` or re-export `patches/` onto another tag by hand. `bump` refuses a tag of another major (a
+  release, beta or release candidate: majors are adopted deliberately, through a `port-<major>` branch rebased
+  onto main, decision 8), anything but a newer release of the pinned major, a tag upstream lacks or that does not
+  resolve to a commit, and a working tree with changes.
+- **A conflict changes nothing.** `bump` writes the report (the patch, the conflicting files and hunks, the
+  upstream commits between the tags that changed those lines) and stops; the conflict is resolved by hand in
+  `bun run patches:work <tag>`, then `patches:export`, `patches:check` and a commit.
+- **`bump` never re-records a record, and neither does anyone before reading its report.** On a clean apply it
+  commits the pin with the re-exported series, runs `gate --keep-going` and writes the report; the regress
+  baseline, `exported_functions.txt` and `identity/prepopulated.json` are re-recorded afterwards, each in its own
+  commit, each change explained in the commit message: `bun run exports:check --record` (which module imports each
+  new symbol, and the upstream commit that made it), `bun run prepopulated --record` (how the asset differs from
+  the previous release's, at that release's epoch), `bun run regress --record --runs 8` (a group and a reason for
+  every newly failing test, a test new in the schedule included; every changed diff explained). Commits in that
+  order: the bump, the records, then the docs.
+- **What stops a bump is fixed, never recorded away.** A core symbol missing from the export list, a failed build or
+  `driver:smoke`, or a changed compatibility tuple (a minor release keeps its `dataFormat`: find out why; never
+  declare a new `dataFormat` for a minor) stops it. A removed export symbol or a test that newly fails is
+  investigated and explained before a release.
+- A bump ends like any build change: two gates from clean at its last commit with identical manifests, then the
+  release as usual (`gate.yml` on the commit, main fast-forwarded, the candidate version tagged by the maintainer).
+
 ## Directory hygiene
 
 - Scratch files, logs and one-off scripts go under `tmp/agents/` (gitignored), never anywhere else:

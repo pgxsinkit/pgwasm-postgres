@@ -12,17 +12,19 @@ The mechanics and the plan are in [ADR-0001](docs/adr/0001-postgres-as-a-patch-s
 The series began as the split of ElectricSQL's PGlite fork (`electric-sql/postgres-pglite` at `b133782`,
 the PostgreSQL 18.3 tree PGlite 0.5.8 was built from), proven by tree identity and by rebuilding PGlite
 0.5.8's artefacts byte for byte (steps 1 and 2); both records are retired, and the history keeps them. The
-build that becomes `18.3.0`, the first release whose bytes are ours, is done (step 4a, 2026-09-27): it
-builds only what ships (amcheck, and the core modules `pglite.data` carries), exports what those modules
-import, names itself `PostgreSQL 18.3 (pgwasm-postgres 18.3.0)`, and gives the same sha256s from any
-checkout. Its artefacts run under this repository's own minimal driver, which also makes the prepopulated
-data directory as a deterministic asset; `data-format:check` guards the on-disk format, `exports:check`
-the export list, and Postgres's own regression suite runs on the build through a TCP bridge against a
-checked-in baseline: of the 230 tests of `parallel_schedule`, 178 pass, 48 fail the same way in every run
-and 4 are unstable. CI runs that whole engine gate on every pull request and every push to develop and main,
-from scratch, and a tag releases exactly the build the gate passed (step 4b, 2026-09-27). There is no
-release yet: the builder image is published and its digest recorded, then `18.3.0` is tagged; pgxsinkit's
-adoption follows (4c).
+build that became `18.3.0`, the first release whose bytes are ours (step 4a, 2026-09-27), builds only what
+ships (amcheck, and the core modules `pglite.data` carries), exports what those modules import, names itself
+`PostgreSQL 18.3 (pgwasm-postgres 18.3.0)`, and gives the same sha256s from any checkout. Its artefacts run
+under this repository's own minimal driver, which also makes the prepopulated data directory as a
+deterministic asset; `data-format:check` guards the on-disk format, `exports:check` the export list, and
+Postgres's own regression suite runs on the build through a TCP bridge against a checked-in baseline. CI runs
+that whole engine gate on every pull request and every push to develop and main, from scratch, and a tag
+releases exactly the build the gate passed (step 4b); the builder image is published and locked, and `18.3.0`
+is released. pgxsinkit's adoption follows (4c).
+
+The pin now moves to a new upstream minor through `bun run bump` (step 5, 2026-09-27): the first bump took it
+from `REL_18_3` to `REL_18_6`, the build that becomes `18.6.0` (`PostgreSQL 18.6 (pgwasm-postgres 18.6.0)`).
+Of the 231 tests of its `parallel_schedule`, 178 pass, 49 fail the same way in every run and 4 are unstable.
 
 ## Layout
 
@@ -84,8 +86,8 @@ bun run patches:export [<tag>]   # write work/<tag>'s commits back to patches/
   refused. Output is deterministic: no commit ids, no git version, full blob ids, no rename detection,
   no `n/N` numbering, and none of your git config.
 
-To change a patch: `bun run patches:work`, then edit and commit in `work/REL_18_3` (`git commit --fixup`
-and `git rebase -i --autosquash REL_18_3` work as usual; a new topic is a new commit), then
+To change a patch: `bun run patches:work`, then edit and commit in `work/REL_18_6` (`git commit --fixup`
+and `git rebase -i --autosquash REL_18_6` work as usual; a new topic is a new commit), then
 `bun run patches:export` and `bun run patches:check`, and commit `patches/` here. A patch's subject is
 `<topic>: <summary>`; its body says what the patch does and why. Never edit a patch file by hand.
 Overlay files are edited in `overlay/` directly.
@@ -256,14 +258,14 @@ bun run regress:bridge [--artefacts <dir>] [--port <n>] [--database <name>] [--s
   wasm first, depending on how far JavaScriptCore had compiled it. `regress:bridge` on its own runs on the
   stack it is started with.
 
-The baseline (8 runs on the `18.3.0` build) has 230 tests: 178 pass, 48 fail the same way in every run and 4
-are unstable; each run reports 52 failures, and no backend fails. The failures, by group
+The baseline (8 runs on the `18.6.0` build, `REL_18_6`'s tests) has 231 tests: 178 pass, 49 fail the same way in
+every run and 4 are unstable; each run reports 53 failures, and no backend fails. The failures, by group
 (`regress/baseline.json` has the full reasons):
 
 | Group                     | Tests | Why                                                                                                        |
 | ------------------------- | ----- | ---------------------------------------------------------------------------------------------------------- |
 | `session-authorization`   | 21    | `RESET SESSION AUTHORIZATION` does nothing in single-user mode; the test runs on as the role               |
-| `regress-library`         | 17    | The tests' C functions: the tree's `regress.so` imports symbols `pglite.wasm` does not export              |
+| `regress-library`         | 18    | The tests' C functions: the tree's `regress.so` imports symbols `pglite.wasm` does not export              |
 | `single-process`          | 3     | No checkpointer, no background or parallel workers                                                         |
 | `session-persistence`     | 3     | `\c` gets the same backend back: login triggers, `temp_buffers`, loaded libraries                          |
 | `extended-protocol-ready` | 2     | An extended-query error sends an early ReadyForQuery, which desynchronises psql (unstable)                 |
@@ -276,7 +278,13 @@ are unstable; each run reports 52 failures, and no backend fails. The failures, 
 Against the byte-identity build's baseline (172 pass, 51 fail, 7 unstable), euc_kr, copyencoding (the
 conversion modules' imports), object_address, tsearch, tsdicts (libpqwalreceiver loads, so no failed
 `dlopen` poisons the later ones) and infinite_recurse (the raised stack) pass, and json, jsonb, conversion
-and alter_table fail the same way in every run instead of unstably.
+and alter_table fail the same way in every run instead of unstably. Against `18.3.0`'s (`REL_18_3`, 230 tests:
+178, 48, 4), nothing passes or fails that did not before: `REL_18_6` adds compression_pglz, which needs the
+regress library, and twelve failing tests fail at other lines or on their new checks (the commit that recorded it
+says which and why).
+
+`regress` compares with a baseline recorded on another upstream tag all the same, as after a bump, and then fails
+until the baseline is recorded for the pinned tag.
 
 Neither script runs in `validate`: they need a build and podman; the engine gate runs `regress`. Run it after
 any change that reaches the build or the driver, and `--record` only after a deliberate change, with each new failure given a
@@ -287,7 +295,7 @@ group and a reason.
 Requirements: as for [building](#building); the release scripts also need the GitHub CLI (`gh`).
 
 ```sh
-bun run gate [--image <ref> | --lock [--published]] [--summary <file>]   # the engine gate of HEAD, from clean
+bun run gate [--image <ref> | --lock [--published]] [--keep-going] [--summary <file>]   # the engine gate of HEAD
 bun run release:check <tag>                                 # the tag is HEAD's candidate version
 bun run release:gated <commit> [--out <dir>]                # download the gated build of a commit
 bun run release:publish <tag> --gated <dir> [--dry-run]     # identical manifests, then the GitHub release
@@ -296,8 +304,10 @@ bun run release:publish <tag> --gated <dir> [--dry-run]     # identical manifest
 - **`gate`** is the whole engine gate (ADR-0001 decision 6) of the current commit, in about 12 minutes. It
   refuses a working tree with changes, sets `SOURCE_DATE_EPOCH` to the commit's time, and runs `build`,
   `driver:smoke`, `exports:check`, `data-format:check`, `prepopulated` (at that epoch),
-  `prepopulated --check` and `regress`, stopping at the first that fails, whose own message says why. Then it
-  writes `.cache/gate/<commit>/`, which exists only for a commit whose gate passed: the release. The builder
+  `prepopulated --check` and `regress`, stopping at the first that fails, whose own message says why;
+  `--keep-going` runs every step all the same (but after a failed build) and then fails on all that did, which is
+  what `bump` runs. Then it writes `.cache/gate/<commit>/`, which exists only for a commit whose gate passed: the
+  release. How each step ended goes to `.cache/gate/<commit>.steps.json`, passed or not. The builder
   image is the local one by default, or `--image`; `--lock` lets `builder/image.lock.json` decide, as CI does:
   the published image, pulled by digest, when the lock records `builder/`'s content published, and otherwise
   the image built from `builder/` in the job; `--published` (the release) accepts only the published image.
@@ -371,6 +381,75 @@ differs from the gated one fails the job before anything is published; the tag c
 again. A gate artifact lives as long as the repository's artifact retention (90 days by default); for an older
 commit, re-run `gate.yml` on it before tagging.
 
+## Bumping to a new upstream release
+
+Requirements: as for [the engine gate](#the-engine-gate-ci-and-releases), the network, and `gh` for the size
+comparison (without it the report says so and goes on).
+
+```sh
+bun run bump <upstream tag> [--image <ref> | --lock] [--report <file>] [--trailer <trailer>]...
+```
+
+A new minor release of the pinned major (`REL_18_6` on a `REL_18_3` pin) goes in through **`bump`** (ADR-0001
+decision 7), run by hand for now; the weekly poll will run it unchanged.
+
+- **It refuses** a tag of another major, a release, a beta or a release candidate alike (`REL_19_BETA4`: a new
+  major is adopted deliberately, through a `port-<major>` branch rebased onto main, decision 8), anything but a
+  newer release of the pinned major (`REL_18_BETA1`, the pinned tag, an older one), a tag upstream does not have
+  (`git ls-remote`) or that does not resolve to a commit, and a working tree with changes.
+- **It applies** the series onto the tag: the tag is fetched into the upstream cache with its history since the
+  pinned one (`--shallow-exclude`, so that the commits between them can be listed and diffed), and the patches
+  are applied one by one with `git am --3way`, as `patches:work` does. On a conflict it stops and changes nothing
+  in the repository: the report names the patch, each conflicting file with the patch's hunks, where the plain
+  apply stopped, the 3-way merge's conflict regions and their text, and the upstream commits between the tags
+  that changed the file, marking those that changed the lines the hunks stand on. The conflict is then resolved
+  by hand in `patches:work <tag>`.
+- **On a clean apply it commits the bump**: `patches/` re-exported onto the tag (context lines and blob ids
+  move) and `upstream.json`'s tag and commit, proven by `patches:check`, in one commit, validated by the hook,
+  whose subject is `upstream: bump the pin to <tag>` (`--trailer` adds trailers to its message). A failure
+  before the commit puts both back.
+- **Then it runs `gate --keep-going`** on that commit and writes the report (default
+  `.cache/bump/<tag>.md`, or `--report`), Markdown, the bump's pull request body: the verdict, what to
+  investigate and what to re-record; the apply log; `git range-diff` of the series on the old tag against the
+  series on the new one; the upstream commits that change the patched files; each step of the gate; the export
+  list against `exported_functions.txt`; the data format; pg_regress against the baseline (a baseline of the old
+  tag is compared all the same, with the new tag's tests; tests upstream changed are told apart, and the new and
+  changed diffs are in the report); the prepopulated data directory against its record; and the sizes against the
+  previous release's `manifest.json` (downloaded with `gh`, read-only).
+- It exits 1 when something blocks the bump: a conflict, a failed build or `driver:smoke`, a changed
+  compatibility tuple (a minor release keeps its `dataFormat`: find out why, never declare a new one), a core
+  symbol missing from the export list, the prepopulated asset, pg_regress not completing; records that differ do
+  not block. HEAD moves only when the bump is committed, never on a refusal or a conflict.
+
+**`bump` never re-records a record.** After reading the report, re-record each one that differs, in its own
+commit after the bump's, with each change explained in the commit message:
+
+1. `bun run exports:check --record`: why each symbol came or went (which shipped module imports it now, and the
+   upstream commit that made it). A core symbol never goes missing, and a removed symbol is explained before a
+   release.
+2. `bun run prepopulated --record`: the record names the artefacts, so it moves with every build change; say how
+   the asset differs from the previous release's (`--compare`, with `SOURCE_DATE_EPOCH` at that release's epoch so
+   that the clock does not count).
+3. `bun run regress --record --runs 8`: the baseline becomes the new tag's. Every test that newly fails, a test new
+   in the schedule included, gets a group and a reason, and every failing test that fails differently is
+   explained (a test upstream changed, or a change of the build).
+
+Then the docs, and two gates from clean at the last commit, with identical manifests. The release is then as
+for any commit: `gate.yml` passes on it, main is fast-forwarded to it, and it is tagged with its candidate
+version (`18.6.0` for the first bump on `18.3.0`).
+
+The first bump, `REL_18_3` → `REL_18_6` (`18.6.0`, 2026-09-27): all five patches applied cleanly (hunk offsets
+and blob ids moved; `git range-diff` shows every patch unchanged); 397 upstream commits, 22 of them change the
+patched files. The tuple is dataFormat 1's. Three symbols joined the export list (amcheck's `RestrictSearchPath`,
+libpqwalreceiver's `WalRcvIdentifySystemLsn` and `timingsafe_bcmp`); the baseline's changes are under
+[Regression tests](#regression-tests). The sizes against `18.3.0`:
+
+| File          | 18.3.0 (bytes) | 18.6.0 (bytes) | Change           |
+| ------------- | -------------: | -------------: | ---------------- |
+| `pglite.wasm` |     10,061,242 |     10,089,345 | +28,103 (+0.28%) |
+| `pglite.data` |      6,293,220 |      6,290,545 | −2,675 (−0.04%)  |
+| `pglite.js`   |        380,679 |        380,859 | +180 (+0.05%)    |
+
 ## Scripts
 
 | Script                    | Does                                                                                      |
@@ -393,6 +472,7 @@ commit, re-run `gate.yml` on it before tagging.
 | `regress:bridge`          | Serve a build's backend over TCP to native clients (not in CI)                            |
 | `regress`                 | Run pg_regress on a build and compare it with the baseline; `--record` it (in the gate)   |
 | `gate`                    | The engine gate of HEAD, from clean, and the release it would publish (`gate.yml`)        |
+| `bump`                    | Move the pin to a newer minor release: apply, re-export, commit, gate, report             |
 | `release:check`           | Refuse a tag that is not HEAD's candidate version (`release.yml`)                         |
 | `release:gated`           | Download and check the gated build of a commit from `gate.yml` (`release.yml`)            |
 | `release:publish`         | Require identical manifests, then create the GitHub release; `--dry-run` (`release.yml`)  |
@@ -404,7 +484,7 @@ only version input, and `package.json`'s `0.0.0` is a placeholder. The build der
 (`scripts/lib/version.ts`): `<major>.<minor>.0` of the pinned upstream tag while there is no release tag,
 the latest release tag's revision + 1 when that tag is of the pinned major.minor, and `<major>.<minor>.0`
 otherwise. Only the tags of HEAD's strict ancestors count, so a tagged commit builds as its own tag, and tags
-that are not `N.N.N` (`builder-sources-1`) are ignored; today the candidate is `18.3.0`. Releases are GitHub
+that are not `N.N.N` (`builder-sources-1`) are ignored; today the candidate is `18.6.0`. Releases are GitHub
 release assets with a checksum manifest, not npm packages, made only by `release.yml` from the gated build (see
 [The engine gate, CI and releases](#the-engine-gate-ci-and-releases)). History is linear: changes are rebased,
 never merged, and main is fast-forwarded from the command line.
