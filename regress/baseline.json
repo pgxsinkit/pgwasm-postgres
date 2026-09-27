@@ -5,7 +5,7 @@
     "commit": "62d6c7d3df6287f1bd83199c1a746e50d31571a0"
   },
   "schedule": "parallel_schedule",
-  "runs": 4,
+  "runs": 8,
   "recordedWith": {
     "pglite.js": "cabac9d6a431cac2e3d70f112fec2dfd7ce518acced85181c417502ba366da5b",
     "pglite.wasm": "acbf58c590c85ce5837de71d40c5aac818e2c811cc9b8e7c0becbbea4b1b093a",
@@ -16,8 +16,8 @@
   "summary": {
     "tests": 230,
     "passed": 178,
-    "failed": 49,
-    "unstable": 3
+    "failed": 48,
+    "unstable": 4
   },
   "groups": {
     "clock-resolution": {
@@ -93,7 +93,7 @@
       "tests": ["create_schema"]
     },
     "walreceiver-libpq": {
-      "reason": "libpqwalreceiver.so loads, and CREATE SUBSCRIPTION … WITH (connect = false) works, but a connection attempt fails with 'libpq is incorrectly linked to backend functions' where 'port=-1' expects libpq's own 'invalid port number': the module links libpq statically without libpgcommon's frontend build, so libpq's pg_link_canary_is_frontend() is the backend's, which says no (and libpq's pg_char_to_encoding and pg_encoding_to_char stay unresolved, since the backend has them only as *_private). Its diff also shows session-authorization (the role tests at its end) and clock-resolution (two pg_stat_reset_subscription_stats calls in the same millisecond, so the second stats_reset is not later).",
+      "reason": "libpqwalreceiver.so loads, and CREATE SUBSCRIPTION … WITH (connect = false) works, but a connection attempt fails with 'libpq is incorrectly linked to backend functions' where 'port=-1' expects libpq's own 'invalid port number': the module links libpq statically without libpgcommon's frontend build, so libpq's pg_link_canary_is_frontend() is the backend's, which says no (and libpq's pg_char_to_encoding and pg_encoding_to_char stay unresolved, since the backend has them only as *_private). Its diff also shows session-authorization (the role tests at its end), and it is unstable through clock-resolution: in some runs (3 of 8 when recorded) two pg_stat_reset_subscription_stats calls fall in the same millisecond, so the second stats_reset is not later.",
       "tests": ["subscription"]
     },
     "wasm-stack": {
@@ -268,7 +268,7 @@
     "vacuum_parallel": "ok",
     "maintain_every": "ok",
     "publication": "failed",
-    "subscription": "failed",
+    "subscription": "unstable",
     "select_views": "failed",
     "portals_p2": "ok",
     "foreign_key": "ok",
