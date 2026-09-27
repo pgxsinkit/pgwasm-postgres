@@ -1,11 +1,14 @@
 /**
- * A reader for the tar archives the build writes (`tar -czf`, GNU tar 1.34 in the builder image): enough of
- * ustar, GNU (`L`/`K` long names) and pax (`x` headers) to list every member with its path, type, mode,
- * owner and bytes. `build:verify` compares archives by these members, never by their archive bytes, which
- * carry the moment of `make install` (member mtimes) and the filesystem's directory order.
+ * Tar archives. The reader handles those the build writes (`tar -czf`, GNU tar 1.34 in the builder image):
+ * enough of ustar, GNU (`L`/`K` long names) and pax (`x` headers) to list every member with its path, type,
+ * mode, owner and bytes. `build:verify` compares archives by these members, never by their archive bytes,
+ * which carry the moment of `make install` (member mtimes) and the filesystem's directory order.
+ *
+ * The writer makes deterministic archives (ADR-0001 decisions 9 and 10): plain ustar, members in the order
+ * given, and every header field fixed by the caller's entries, so equal entries give equal bytes.
  */
 import { createHash } from "node:crypto";
-import { gunzipSync } from "node:zlib";
+import { gunzipSync, gzipSync } from "node:zlib";
 
 export type TarMemberType = "file" | "hardlink" | "symlink" | "directory" | "other";
 
@@ -24,6 +27,10 @@ export interface TarMember {
   readonly linkname: string;
   /** sha256 of the member's data (of the empty string for anything but a regular file). */
   readonly sha256: string;
+  /** Modification time, in seconds since the Unix epoch. */
+  readonly mtime: number;
+  /** The member's data: a view into the archive (empty for anything but a regular file). */
+  readonly data: Uint8Array;
 }
 
 const BLOCK = 512;
@@ -144,6 +151,8 @@ export function readTar(input: Uint8Array): TarMember[] {
       sha256: createHash("sha256")
         .update(type === "file" ? data : new Uint8Array())
         .digest("hex"),
+      mtime: pax.has("mtime") ? Math.floor(Number(pax.get("mtime"))) : numeric(header, 136, 12, "mtime"),
+      data: type === "file" ? data : new Uint8Array(0),
     });
     longName = undefined;
     longLink = undefined;
@@ -155,4 +164,108 @@ export function readTar(input: Uint8Array): TarMember[] {
 /** `0o755` as `"0755"`: how modes are written in records and reports. */
 export function formatMode(mode: number): string {
   return mode.toString(8).padStart(4, "0");
+}
+
+/** A member for {@link writeTar}. */
+export interface TarEntry {
+  /** The member's name, written as given (a leading `/` is kept; a directory has no trailing `/`). */
+  readonly path: string;
+  readonly type: "file" | "directory";
+  /** Permission bits. */
+  readonly mode: number;
+  /** Seconds since the Unix epoch. */
+  readonly mtime: number;
+  readonly data: Uint8Array;
+}
+
+const encoder = new TextEncoder();
+
+function putText(header: Uint8Array, start: number, length: number, value: string, name: string): void {
+  const bytes = encoder.encode(value);
+  if (bytes.length > length) throw new Error(`tar: ${name} ${JSON.stringify(value)} does not fit in ${length} bytes`);
+  header.set(bytes, start);
+}
+
+/** A NUL-terminated octal field of `length` bytes. */
+function putOctal(header: Uint8Array, start: number, length: number, value: number, name: string): void {
+  if (!Number.isSafeInteger(value) || value < 0) throw new Error(`tar: ${name} ${value} is not a non-negative integer`);
+  const digits = value.toString(8).padStart(length - 1, "0");
+  if (digits.length > length - 1) throw new Error(`tar: ${name} ${value} does not fit in ${length} bytes`);
+  putText(header, start, length, `${digits}\0`, name);
+}
+
+/** Splits a path into ustar's prefix (up to 155 bytes) and name (up to 100), at a `/`. */
+function ustarName(path: string): { prefix: string; name: string } {
+  if (encoder.encode(path).length <= 100) return { prefix: "", name: path };
+  for (let slash = path.lastIndexOf("/"); slash > 0; slash = path.lastIndexOf("/", slash - 1)) {
+    const prefix = path.slice(0, slash);
+    const name = path.slice(slash + 1);
+    if (encoder.encode(prefix).length <= 155 && encoder.encode(name).length <= 100 && name !== "")
+      return { prefix, name };
+  }
+  throw new Error(`tar: ${path} is too long for a ustar header`);
+}
+
+function ustarHeader(entry: TarEntry): Uint8Array {
+  const block = new Uint8Array(BLOCK);
+  const { prefix, name } = ustarName(entry.path);
+  const size = entry.type === "file" ? entry.data.length : 0;
+  if (entry.type === "directory" && entry.data.length !== 0) throw new Error(`tar: directory ${entry.path} has data`);
+  putText(block, 0, 100, name, "name");
+  putOctal(block, 100, 8, entry.mode & 0o7777, "mode");
+  putOctal(block, 108, 8, 0, "uid");
+  putOctal(block, 116, 8, 0, "gid");
+  putOctal(block, 124, 12, size, "size");
+  putOctal(block, 136, 12, entry.mtime, "mtime");
+  block[156] = entry.type === "file" ? 0x30 : 0x35; // '0' or '5'
+  putText(block, 257, 6, "ustar\0", "magic");
+  putText(block, 263, 2, "00", "version");
+  putOctal(block, 329, 8, 0, "devmajor");
+  putOctal(block, 337, 8, 0, "devminor");
+  putText(block, 345, 155, prefix, "prefix");
+  block.fill(0x20, 148, 156);
+  let sum = 0;
+  for (const byte of block) sum += byte;
+  putText(block, 148, 8, `${sum.toString(8).padStart(6, "0")}\0 `, "chksum");
+  return block;
+}
+
+/**
+ * A ustar archive of `entries`, in the order given: owner 0/0 with no user or group names, no device
+ * numbers, and two zero blocks at the end (no padding to a record size).
+ */
+export function writeTar(entries: readonly TarEntry[]): Uint8Array {
+  const total = entries.reduce(
+    (bytes, entry) => bytes + BLOCK + Math.ceil((entry.type === "file" ? entry.data.length : 0) / BLOCK) * BLOCK,
+    2 * BLOCK,
+  );
+  const archive = new Uint8Array(total);
+  let offset = 0;
+  for (const entry of entries) {
+    archive.set(ustarHeader(entry), offset);
+    offset += BLOCK;
+    if (entry.type === "file") {
+      archive.set(entry.data, offset);
+      offset += Math.ceil(entry.data.length / BLOCK) * BLOCK;
+    }
+  }
+  return archive;
+}
+
+/** gzip's operating-system byte for Unix, which `gzip -n` writes on Linux. */
+const GZIP_OS_UNIX = 3;
+
+/**
+ * gzip at level 9 with a header that names no file and records mtime 0 and the Unix OS byte whatever the
+ * host, as `gzip -n9` does. The deflate stream is zlib's, so its bytes hold for one zlib: the pinned Bun's.
+ */
+export function gzipDeterministic(data: Uint8Array): Uint8Array {
+  const out = new Uint8Array(gzipSync(data, { level: 9 }));
+  const flags = out[3] ?? 0;
+  if (out[0] !== 0x1f || out[1] !== 0x8b || out[2] !== 8 || flags !== 0) {
+    throw new Error("gzip: zlib wrote an unexpected header (magic, method or flags)");
+  }
+  out.fill(0, 4, 8); // MTIME
+  out[9] = GZIP_OS_UNIX;
+  return out;
 }
