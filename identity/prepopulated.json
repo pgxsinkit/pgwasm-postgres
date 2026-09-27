@@ -1,0 +1,21 @@
+{
+  "$comment": "The prepopulated data directory (ADR-0001 decision 10): `bun run prepopulated` on the artefacts with these sha256s, at this SOURCE_DATE_EPOCH, must give exactly this archive (`tar`) and asset (`asset`, the archive gzipped by the pinned Bun's zlib). Checked by `bun run prepopulated --check`, never by validate or CI (it needs a build); rewritten by `bun run prepopulated --record` when the build changes.",
+  "kind": "prepopulated",
+  "sourceDateEpoch": 1790493955,
+  "artefacts": {
+    "pglite.js": "d7db324430326d0a2189a4aa10a11214fd0c92fdbf0df5781bb57f947b491707",
+    "pglite.wasm": "356b89f6fcb2ab3a397bec4128327b67b7137ec2a900b13251dade81bcbc0ef0",
+    "pglite.data": "c574cc331d96e33311470ec57bf58c579d972c111dbd9c0ab54bb42d79ec4c0d",
+    "initdb.js": "6852f5292d9528c7aa2093a853236f0ba2ee6777b9d43a10f17b04ef22886194",
+    "initdb.wasm": "4c8988dca3b2f0bbfd23a0714023e4822a2909ead01804f37acffd9ff3ca9f8a"
+  },
+  "entries": 998,
+  "tar": {
+    "bytes": 40373248,
+    "sha256": "8ffa1f034d8f6b611bafb164657a9ce6cc72a6a6d6898df69a30164d5e95d559"
+  },
+  "asset": {
+    "bytes": 4400234,
+    "sha256": "3538bf969ae84b46ed0d0d6b1eea722622723f0ea28b7e35e57cfe828297ffc5"
+  }
+}
