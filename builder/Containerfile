@@ -1,48 +1,54 @@
 # pgwasm-postgres builder image (ADR-0001 decision 9).
 #
-# A pinned rewrite of electricsql/pglite-builder:3.1.74-7. Electric built that image with BuildKit on 2026-06-01
-# from postgres-pglite 895b2954 (its pglite/builder/Dockerfile is identical to the one at b133782, the commit
-# @electric-sql/pglite@0.5.8 pins). This file keeps Electric's steps, flags, install prefix (/install/libs) and
-# source directory names, because they reach the artefacts: pglite.wasm embeds /install/libs paths, and the
-# libraries built here are linked into it. The changes: every input is pinned and verified, the dead URLs are
-# replaced, and the build parallelism is a parameter. Electric's own Dockerfile stays, unused, at
-# overlay/pglite/builder/Dockerfile until 18.3.0: removing it would break tree identity.
+# A pinned rewrite of electricsql/pglite-builder:3.1.74-7, cut down to what the build ships. Electric built that
+# image with BuildKit on 2026-06-01 from postgres-pglite 895b2954 (its pglite/builder/Dockerfile is identical to
+# the one at b133782, the commit @electric-sql/pglite@0.5.8 pins). This file keeps Electric's steps, flags,
+# install prefix (/install/libs) and source directory names for what it still builds, because they reach the
+# artefacts: the libraries built here are linked into pglite.wasm. Its first revision (-p1) was that image with
+# every input pinned and verified, the dead URLs replaced and the build parallelism a parameter; built from it,
+# the byte-identity build reproduced PGlite 0.5.8's artefacts byte for byte (ADR-0001 decision 2, 2026-09-27).
 #
-# Proven 2026-09-27 by the reproduction this file comes from (pgxsinkit's C-build reproduction, phase C):
-# built from this file, build-pglite.sh at b133782 reproduces pglite.wasm/.data/.js, initdb.wasm/.js and
-# pg_dump.wasm/.js byte for byte; amcheck.tar.gz differs only in member mtimes and order. /install matches
-# Electric's image except libcrypto.a's build date. Here, `bun run build` builds REL_18_3 + patches/ + overlay/
-# + extensions.json with this image, and `bun run build:verify` checks the result against
-# identity/0.5.8-artefacts.json (ADR-0001 decision 2).
+# -p2 (18.3.0) builds only what the core needs: zlib (--with-zlib), libxml2 (--with-libxml) and ICU (--with-icu).
+# It dropped, with the third-party extensions and every contrib module but amcheck (ADR-0001 decision 3):
+#   libxslt 1.1.43       contrib/xml2 only (--with-libxslt, dropped from configure too)
+#   OpenSSL 3.0.17       pgcrypto only (configure has --with-openssl=no)
+#   OSSP uuid 1.6.2      contrib/uuid-ossp only (--with-uuid=ossp, dropped from configure too)
+#   json-c, libdeflate, libtiff, SQLite, PROJ, GEOS, GDAL   PostGIS only
+# and the symbol lists (/install/exports, /install/imports, LIB_EXPORTS_DIR, LLVM_NM) that pglite.wasm's old
+# export list subtracted: the list is now read from the shipped modules themselves (pglite/scripts/
+# exported-functions.sh in the overlay). The toolchain stage, and so the package set, is unchanged.
 #
-# PINNING POLICY. Every pin in this file is the documented exception to the always-latest rule. The image's
-# first job is to rebuild the published 0.5.8 artefacts byte for byte, and that needs Electric's exact
-# toolchain (Emscripten 3.1.74) and library sources. Bumping any pin is a deliberate C-build change: made only
-# after the byte-for-byte rebuild is proven, and followed by re-recording the artefact checksums.
+# PINNING POLICY. Every pin in this file is the documented exception to the always-latest rule. The build's
+# releases must be reproducible, so every input is pinned by digest, snapshot or checksum. Emscripten stays at
+# 3.1.74 in 18.3.0, the first release whose bytes are ours, so that release changes what is built and not the
+# toolchain: the latest Emscripten changes the JavaScript glue that pgxsinkit's pgwasm-c host code drives, and
+# moves in a release of its own through both gates (ADR-0001 decision 9, order of work 6). The library versions
+# stay those 0.5.8 linked for the same reason; bumping any pin is a deliberate C-build change, released and gated
+# like any other.
 #
-# MIRRORED SOURCES. Five sources are fetched from this repository's release `builder-sources-1`, because their
-# upstream URLs are not stable byte streams: three are GitLab `/-/archive/` tarballs generated on request
-# (libxml2, libxslt, libtiff), and zlib.net and ftp.ossp.org have already dropped Electric's URLs. The upstream
-# URL each one mirrors is in the comment above it. The checksums are the ones the byte-for-byte rebuild used, so
-# a mirror cannot change the bytes (ADR-0001, order of work 2b).
+# MIRRORED SOURCES. Two sources are fetched from this repository's release `builder-sources-1`, because their
+# upstream URLs are not stable byte streams: libxml2's is a GitLab `/-/archive/` tarball generated on request,
+# and zlib.net has already dropped Electric's URL. The upstream URL each one mirrors is in the comment above it.
+# The checksums are the ones the byte-for-byte rebuild used, so a mirror cannot change the bytes (ADR-0001,
+# order of work 2b). The release also holds the mirrors of the dropped libxslt, libtiff and OSSP uuid.
 #
 # Build (amd64 only; JOBS changes speed, not output): `bun run builder:image`, which runs
-#   podman build --format docker -t localhost/pgwasm-postgres-builder:3.1.74-p1 builder
+#   podman build --format docker -t localhost/pgwasm-postgres-builder:3.1.74-p2 builder
 # capped at 4 CPUs and 16 GiB, with builder/bin/make turning every bare `make -j` into `make -j4`.
 # builder/dpkg-expected.txt is the runner stage's package set (identical to Electric's image); the script checks it.
 
-# PIN (exact-toolchain exception): Emscripten 3.1.74 by digest. This is the linux/amd64 image BuildKit
-# recorded as a material of electricsql/pglite-builder:3.1.74-7 in its provenance attestation, and the
-# base layers of that image. Electric's file uses the mutable tag, plus emsdk:3.1.74-arm64 on arm64 hosts
-# (a different clang binary); this file builds on amd64 only.
+# PIN (toolchain exception): Emscripten 3.1.74 by digest, until its own release (see PINNING POLICY). This is
+# the linux/amd64 image BuildKit recorded as a material of electricsql/pglite-builder:3.1.74-7 in its provenance
+# attestation, and the base layers of that image. Electric's file uses the mutable tag, plus
+# emsdk:3.1.74-arm64 on arm64 hosts (a different clang binary); this file builds on amd64 only.
 ARG EMSDK_IMAGE=docker.io/emscripten/emsdk:3.1.74@sha256:af45409f3199d88db4b1b03af0098532c8fb33a375ac257463eeb0a622870d06
 
 FROM ${EMSDK_IMAGE} AS toolchain
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-# PIN (exact-toolchain exception): the Ubuntu archive as it was when Electric's runner-stage layer was
+# PIN (reproducibility exception): the Ubuntu archive as it was when Electric's runner-stage layer was
 # created (2026-03-11T18:49:56Z, from the image history). Electric runs an unpinned `apt update && apt
-# upgrade -y`, so bison, flex, autotools, perl, python3 and gcc/g++ (native ICU and sqlite tools) are
-# whatever the archive serves on the day of the build.
+# upgrade -y`, so bison, flex, autotools, perl, python3 and gcc/g++ (native ICU tools) are whatever the archive
+# serves on the day of the build; bison and flex generate the parsers' C.
 ARG UBUNTU_SNAPSHOT=20260311T184956Z
 RUN sed -i -E "s#http://(archive|security)\.ubuntu\.com/ubuntu/?#https://snapshot.ubuntu.com/ubuntu/${UBUNTU_SNAPSHOT}/#" /etc/apt/sources.list \
  && apt-get update \
@@ -52,18 +58,17 @@ RUN sed -i -E "s#http://(archive|security)\.ubuntu\.com/ubuntu/?#https://snapsho
 
 FROM toolchain AS builder
 ARG JOBS=4
-ENV LLVM_NM=/emsdk/upstream/bin/llvm-nm
-RUN mkdir -p /install/libs /install/exports /install/imports
+RUN mkdir -p /install/libs
 ENV EMCC_COMMON_FLAGS="-O2 -fPIC -sWASM_BIGINT"
 
 # Every source is fetched to a file, checked, then unpacked where Electric unpacked it.
-# PIN (exact-source exception) on every checksum below: they are the bytes the byte-for-byte rebuild used.
-# The sources with unstable upstream URLs come from this repository's `builder-sources-1` release (see the
-# header). Mirroring a further source means adding it to a new `builder-sources-<n>` release with the same
-# checksum, never replacing an asset in place.
+# PIN (source exception, see PINNING POLICY) on every checksum below: they are the bytes the byte-for-byte
+# rebuild used. The sources with unstable upstream URLs come from this repository's `builder-sources-1` release
+# (see the header). Mirroring a further source means adding it to a new `builder-sources-<n>` release with the
+# same checksum, never replacing an asset in place.
 
 WORKDIR /src
-# PIN (exact-source exception): zlib 1.3.2, NOT the 1.3.1 Electric's Dockerfile names: electricsql/pglite-builder:3.1.74-7 contains zlib 1.3.2
+# PIN (source exception): zlib 1.3.2, NOT the 1.3.1 Electric's Dockerfile names: electricsql/pglite-builder:3.1.74-7 contains zlib 1.3.2
 # (its zlib.h says 1.3.2, and 1.3.2 built with these commands in that image gives a byte-identical libz.a),
 # and the published pglite.wasm / pg_dump.wasm embed "1.3.2". Built from 1.3.1, both wasm files differ.
 # Electric's URL (www.zlib.net/zlib-1.3.1.tar.gz) returns 404 today; /fossils keeps every release.
@@ -74,10 +79,9 @@ RUN curl -fsSL -o /tmp/src.tgz https://github.com/pgxsinkit/pgwasm-postgres/rele
 WORKDIR /src/zlib-1.3.2
 RUN CFLAGS="${EMCC_COMMON_FLAGS}" CXXFLAGS="${EMCC_COMMON_FLAGS}" emconfigure ./configure --static --prefix=/install/libs
 RUN emmake make -j"${JOBS}" && emmake make install
-RUN ${LLVM_NM} /install/libs/lib/libz.a | awk '$2 ~ /^[TDB]$/ {print $3}' | sed '/^$/d' | sort -u > /install/exports/libz.exports
 
 WORKDIR /src
-# PIN (exact-source exception): libxml2 v2.14.5 (GitLab-generated archive of the tag)
+# PIN (source exception): libxml2 v2.14.5 (GitLab-generated archive of the tag)
 # Mirror of https://gitlab.gnome.org/GNOME/libxml2/-/archive/v2.14.5/libxml2-v2.14.5.tar.gz
 RUN curl -fsSL -o /tmp/src.tgz https://github.com/pgxsinkit/pgwasm-postgres/releases/download/builder-sources-1/libxml2-v2.14.5.tar.gz \
  && echo "54968c8ab8723c2d75a38fc45810e8cf60d44991e0887661bf9905a4042ad108  /tmp/src.tgz" | sha256sum -c - \
@@ -86,57 +90,8 @@ WORKDIR /src/libxml2-v2.14.5
 RUN ./autogen.sh --with-python=no --with-threads=no
 RUN CFLAGS="${EMCC_COMMON_FLAGS}" CXXFLAGS="${EMCC_COMMON_FLAGS}" emconfigure ./configure --enable-shared=no --enable-static=yes --with-python=no --prefix=/install/libs
 RUN emmake make -j"${JOBS}" && emmake make install
-RUN ${LLVM_NM} /install/libs/lib/libxml2.a | awk '$2 ~ /^[TDB]$/ {print $3}' | sed '/^$/d' | sort -u > /install/exports/libxml2.exports
 
-WORKDIR /src
-# PIN (exact-source exception): libxslt v1.1.43 (GitLab-generated archive of the tag)
-# Mirror of https://gitlab.gnome.org/GNOME/libxslt/-/archive/v1.1.43/libxslt-v1.1.43.tar.gz
-RUN curl -fsSL -o /tmp/src.tgz https://github.com/pgxsinkit/pgwasm-postgres/releases/download/builder-sources-1/libxslt-v1.1.43.tar.gz \
- && echo "47747c86ce5acd2b5cdc276e37a755c8fe93bcfcd0302f76303d93b7cca66867  /tmp/src.tgz" | sha256sum -c - \
- && tar -xzf /tmp/src.tgz && rm /tmp/src.tgz
-WORKDIR /src/libxslt-v1.1.43
-RUN ./autogen.sh --with-python=no
-RUN CFLAGS="${EMCC_COMMON_FLAGS}" CXXFLAGS="${EMCC_COMMON_FLAGS}" emconfigure ./configure --enable-shared=no --enable-static=yes --with-python=no --prefix=/install/libs --with-libxml-src=/src/libxml2-v2.14.5/ --with-pic=yes
-RUN emmake make -j"${JOBS}" && emmake make install
-RUN ${LLVM_NM} /install/libs/lib/libxslt.a | awk '$2 ~ /^[TDB]$/ {print $3}' | sed '/^$/d' | sort -u > /install/exports/libxslt.exports
-
-WORKDIR /src
-# PIN (exact-source exception): OpenSSL 3.0.17 (release asset; used by pgcrypto only). Checksum = the release's published .sha256.
-RUN curl -fsSL -o /tmp/src.tgz https://github.com/openssl/openssl/releases/download/openssl-3.0.17/openssl-3.0.17.tar.gz \
- && echo "dfdd77e4ea1b57ff3a6dbde6b0bdc3f31db5ac99e7fdd4eaf9e1fbb6ec2db8ce  /tmp/src.tgz" | sha256sum -c - \
- && tar -xzf /tmp/src.tgz && rm /tmp/src.tgz
-WORKDIR /src/openssl-3.0.17
-RUN CFLAGS="${EMCC_COMMON_FLAGS}" CXXFLAGS="${EMCC_COMMON_FLAGS}" emconfigure ./config no-sse2 no-hw no-asm no-tests no-threads no-shared linux-generic32 --prefix=/install/libs
-RUN sed -i 's|^CROSS_COMPILE.*$|CROSS_COMPILE=|g' Makefile # see https://github.com/emscripten-core/emscripten/issues/19597#issue-1754476454
-RUN emmake make -j"${JOBS}" && emmake make install_sw install_ssldirs
-RUN ${LLVM_NM} /install/libs/lib/libssl.a | awk '$2 ~ /^[TDB]$/ {print $3}' | sed '/^$/d' | sort -u > /install/exports/libssl.exports
-RUN ${LLVM_NM} /install/libs/lib/libcrypto.a | awk '$2 ~ /^[TDB]$/ {print $3}' | sed '/^$/d' | sort -u > /install/exports/libcrypto.exports
-
-WORKDIR /src
-# PIN (exact-source exception): OSSP uuid 1.6.2: ftp.ossp.org no longer answers. Debian's orig tarball is the upstream uuid-1.6.2.tar.gz
-# (same bytes; it unpacks to uuid-1.6.2/).
-# Mirror of https://deb.debian.org/debian/pool/main/o/ossp-uuid/ossp-uuid_1.6.2.orig.tar.gz
-RUN curl -fsSL -o /tmp/src.tgz https://github.com/pgxsinkit/pgwasm-postgres/releases/download/builder-sources-1/ossp-uuid_1.6.2.orig.tar.gz \
- && echo "11a615225baa5f8bb686824423f50e4427acd3f70d394765bdff32801f0fd5b0  /tmp/src.tgz" | sha256sum -c - \
- && tar -xzf /tmp/src.tgz && rm /tmp/src.tgz
-WORKDIR /src/uuid-1.6.2
-RUN CFLAGS="${EMCC_COMMON_FLAGS}" CXXFLAGS="${EMCC_COMMON_FLAGS}" \
-emconfigure ./configure \
-  ac_cv_header_ifaddrs_h=no \
-  ac_cv_header_net_if_h=no \
-  ac_cv_header_net_if_dl_h=no \
-  ac_cv_header_net_if_arp_h=no \
-  ac_cv_header_sys_ioctl_h=no \
-  ac_cv_func_getifaddrs=no \
-  --build=wasm32-unknown-linux-gnu --enable-shared=no --enable-static=yes --with-perl=no --with-perl-compat=no --prefix=/install/libs --with-php=no --with-pic=yes
-# `make install` fails at the end trying to strip the wasm objects, after installing everything needed
-# (Electric: `|| true`). Checked explicitly instead, so a real failure still stops the build.
-RUN emmake make -j"${JOBS}" && { emmake make install || true; } && test -f /install/libs/lib/libuuid.a && test -f /install/libs/include/uuid.h
-WORKDIR /install/libs/lib
-RUN ln -s libuuid.a libossp-uuid.a # contrib extensions use -lossp-uuid
-RUN ${LLVM_NM} /install/libs/lib/libossp-uuid.a | awk '$2 ~ /^[TDB]$/ {print $3}' | sed '/^$/d' | sort -u > /install/exports/libossp-uuid.exports
-
-# PIN (exact-source exception): ICU 76.1 (release asset). Checksum = the release's published SHASUM512.txt entry.
+# PIN (source exception): ICU 76.1 (release asset). Checksum = the release's published SHASUM512.txt entry.
 WORKDIR /src
 RUN curl -fsSL -o /tmp/src.tgz https://github.com/unicode-org/icu/releases/download/release-76-1/icu4c-76_1-src.tgz \
  && echo "b702ab62fb37a1574d5f4a768326d0f8fa30d9db5b015605b5f8215b5d8547f83d84880c586d3dcc7b6c76f8d47ef34e04b0f51baa55908f737024dd79a42a6c  /tmp/src.tgz" | sha512sum -c - \
@@ -170,140 +125,13 @@ RUN CFLAGS="${EMCC_COMMON_FLAGS}" CXXFLAGS="${EMCC_COMMON_FLAGS} -std=c++17" \
 RUN emmake make -j"${JOBS}" PKGDATA_OPTS="--without-assembly -O $(pwd)/data/icupkg.inc"
 RUN emmake make install
 
-# for postgis
-WORKDIR /src
-# PIN (exact-source exception): json-c: a tag name is mutable, so the clone is checked against the commit it resolved to (2026-09-27).
-RUN git clone --depth 1 --single-branch --branch=json-c-0.18-20240915 https://github.com/json-c/json-c.git \
- && test "$(git -C json-c rev-parse HEAD)" = 41a55cfcedb54d9c1874f2f0eb07b504091d7e37
-WORKDIR /src/json-c/build
-RUN emcmake cmake \
--DCMAKE_BUILD_TYPE=Release \
--DCMAKE_POSITION_INDEPENDENT_CODE=ON \
--DCMAKE_INSTALL_PREFIX=/install/libs \
--DENABLE_THREADING=OFF -DBUILD_SHARED_LIBS=OFF -DDISABLE_EXTRA_LIBS=ON -DBUILD_APPS=OFF -DBUILD_TESTING=OFF ..
-RUN cmake --build . -j "${JOBS}" && cmake --build . --target install
-RUN ${LLVM_NM} /install/libs/lib/libjson-c.a | awk '$2 ~ /^[TDB]$/ {print $3}' | sed '/^$/d' | sort -u > /install/exports/libjson-c.exports
-
-WORKDIR /src
-# PIN (exact-source exception): libdeflate v1.24, checked against its commit like json-c.
-RUN git clone --depth 1 --single-branch --branch=v1.24 https://github.com/ebiggers/libdeflate.git \
- && test "$(git -C libdeflate rev-parse HEAD)" = 96836d7d9d10e3e0d53e6edb54eb908514e336c4
-WORKDIR /src/libdeflate/build
-RUN emcmake cmake \
--DCMAKE_BUILD_TYPE=Release \
--DCMAKE_POSITION_INDEPENDENT_CODE=ON \
--DCMAKE_INSTALL_PREFIX=/install/libs \
--DLIBDEFLATE_BUILD_SHARED_LIB=OFF -DLIBDEFLATE_BUILD_TESTS=OFF ..
-RUN cmake --build . -j "${JOBS}" && cmake --build . --target install
-RUN ${LLVM_NM} /install/libs/lib/libdeflate.a | awk '$2 ~ /^[TDB]$/ {print $3}' | sed '/^$/d' | sort -u > /install/exports/libdeflate.exports
-
-WORKDIR /src
-# PIN (exact-source exception): libtiff v4.7.1 (GitLab-generated archive of the tag)
-# Mirror of https://gitlab.com/libtiff/libtiff/-/archive/v4.7.1/libtiff-v4.7.1.tar.gz
-RUN curl -fsSL -o /tmp/src.tgz https://github.com/pgxsinkit/pgwasm-postgres/releases/download/builder-sources-1/libtiff-v4.7.1.tar.gz \
- && echo "6ab956415ddb6cae497faad18398ff0fd056d17d8bf7b5921cc194c55b0191fc  /tmp/src.tgz" | sha256sum -c - \
- && tar -xzf /tmp/src.tgz && rm /tmp/src.tgz
-WORKDIR /src/libtiff-v4.7.1
-RUN ./autogen.sh
-# we're disabling jpeg here but gdal uses jpeg (internal build if not specified - so it would make sense to enable it here as well)
-RUN emconfigure ./configure \
---with-pic --disable-webp --disable-zstd --disable-lzma --disable-jbig --disable-old-jpeg \
---disable-jpeg --disable-pixarlog --disable-mdi --disable-opengl --disable-win32-io \
---with-zlib-include-dir=/install/libs/include --with-zlib-lib-dir=/install/libs/lib \
---with-libdeflate-include-dir=/install/libs/include --with-libdeflate-lib-dir=/install/libs/lib/ \
---prefix=/install/libs --enable-shared=no
-RUN emmake make -j"${JOBS}" && emmake make install
-RUN ${LLVM_NM} /install/libs/lib/libtiff.a | awk '$2 ~ /^[TDB]$/ {print $3}' | sed '/^$/d' | sort -u > /install/exports/libtiff.exports
-
-WORKDIR /src
-# PIN (exact-source exception): SQLite 3.50.4 (kept on disk as the zip, as Electric's wget did)
-RUN curl -fsSL -o sqlite-src-3500400.zip https://www.sqlite.org/2025/sqlite-src-3500400.zip \
- && echo "b7b4dc060f36053902fb65b344bbbed592e64b2291a26ac06fe77eec097850e9  sqlite-src-3500400.zip" | sha256sum -c - \
- && unzip -q sqlite-src-3500400.zip
-WORKDIR /src/sqlite-src-3500400
-RUN emconfigure ./configure --disable-shared --disable-threadsafe --prefix=/install/libs --with-emsdk
-RUN emmake make -j"${JOBS}" && emmake make install
-# we need a sqlite3 executable for the system on which we're building (needed by https://proj.org/en/stable/install.html#build-requirements)
-RUN emmake make clean && ./configure --disable-shared && make -j"${JOBS}" && cp sqlite3 /tmp/sqlite3
-RUN ${LLVM_NM} /install/libs/lib/libsqlite3.a | awk '$2 ~ /^[TDB]$/ {print $3}' | sed '/^$/d' | sort -u > /install/exports/libsqlite3.exports
-
-WORKDIR /src
-# PIN (exact-source exception): PROJ 9.7.0
-RUN curl -fsSL -o proj-9.7.0.tar.gz https://download.osgeo.org/proj/proj-9.7.0.tar.gz \
- && echo "65705ecd987b50bf63e15820ce6bd17c042feaabda981249831bd230f6689709  proj-9.7.0.tar.gz" | sha256sum -c - \
- && tar -xf proj-9.7.0.tar.gz
-WORKDIR /src/proj-9.7.0
-RUN emcmake cmake \
--DCMAKE_BUILD_TYPE=Release \
--DCMAKE_POSITION_INDEPENDENT_CODE=ON \
--DCMAKE_INSTALL_PREFIX:PATH=/install/libs \
--DEMBED_RESOURCE_FILES=OFF \
--DBUILD_SHARED_LIBS=OFF \
--DSQLite3_INCLUDE_DIR=/install/libs/include/ -DSQLite3_LIBRARY=/install/libs/lib/libsqlite3.a -DEXE_SQLITE3=/tmp/sqlite3 \
--DTIFF_LIBRARY=/install/libs/lib/libtiff.a -DTIFF_INCLUDE_DIR=/install/libs/include/ \
--DENABLE_CURL=OFF -DBUILD_APPS=OFF -DBUILD_TESTING=OFF
-RUN cmake --build . -j "${JOBS}" && cmake --build . --target install
-RUN ${LLVM_NM} /install/libs/lib/libproj.a | awk '$2 ~ /^[TDB]$/ {print $3}' | sed '/^$/d' | sort -u > /install/exports/libproj.exports
-
-WORKDIR /src
-# PIN (exact-source exception): GEOS 3.14.0
-RUN curl -fsSL -o geos-3.14.0.tar.bz2 https://download.osgeo.org/geos/geos-3.14.0.tar.bz2 \
- && echo "fe85286b1977121894794b36a7464d05049361bedabf972e70d8f9bf1e3ce928  geos-3.14.0.tar.bz2" | sha256sum -c - \
- && tar -xf geos-3.14.0.tar.bz2
-WORKDIR /src/geos-3.14.0/build
-RUN emcmake cmake \
--DCMAKE_BUILD_TYPE=Release \
--DCMAKE_POSITION_INDEPENDENT_CODE=ON \
--DCMAKE_INSTALL_PREFIX=/install/libs \
--DBUILD_TESTING=OFF -DBUILD_SHARED_LIBS=OFF -DBUILD_GEOSOP=OFF ..
-RUN emmake make -j"${JOBS}" && emmake make install
-RUN ${LLVM_NM} /install/libs/lib/libgeos.a | awk '$2 ~ /^[TDB]$/ {print $3}' | sed '/^$/d' | sort -u > /install/exports/libgeos.exports
-
-WORKDIR /src
-# PIN (exact-source exception): GDAL 3.11.4 (release asset)
-RUN curl -fsSL -o gdal-3.11.4.tar.gz https://github.com/OSGeo/gdal/releases/download/v3.11.4/gdal-3.11.4.tar.gz \
- && echo "0fa36ee34d4451db586d2bf78ea0dbfa3b0dfae0516587f8130d21add0ac9dad  gdal-3.11.4.tar.gz" | sha256sum -c - \
- && tar -xf gdal-3.11.4.tar.gz
-WORKDIR /src/gdal-3.11.4/build
-# Docs: https://gdal.org/en/stable/development/building_from_source.html
-RUN emcmake cmake \
--DCMAKE_C_FLAGS="-fPIC" \
--DCMAKE_CXX_FLAGS="-fPIC" \
--DCMAKE_BUILD_TYPE=Release \
--DCMAKE_POSITION_INDEPENDENT_CODE=ON \
--DCMAKE_INSTALL_PREFIX=/install/libs \
--DLIBXML2_INCLUDE_DIR=/install/libs/include/libxml2 -DLIBXML2_LIBRARY=/install/libs/lib/libxml2.a \
--DGEOS_INCLUDE_DIR=/install/libs/include/geos -DGEOS_LIBRARY=/install/libs/lib/libgeos.a \
--DTIFF_INCLUDE_DIR=/install/libs/include/ -DTIFF_LIBRARY=/install/libs/lib/libtiff.a \
--DSQLite3_INCLUDE_DIR=/install/libs/include/ -DSQLite3_LIBRARY=/install/libs/lib/libsqlite3.a -DEXE_SQLITE3=/tmp/sqlite3 \
--DZLIB_LIBRARY=/install/libs/lib/libz.a -DZLIB_INCLUDE_DIR=/install/libs/include \
--DOPENSSL_ROOT_DIR=/install/libs \
--DPROJ_LIBRARY=/install/libs/lib/libproj.a -DPROJ_INCLUDE_DIR=/install/libs/include/ \
--DJSONC_LIBRARY=/install/libs/lib/libjson-c.a -DJSONC_INCLUDE_DIR=/install/libs/include/json-c -DGDAL_USE_JSONC=ON -DGDAL_USE_JSONC_INTERNAL=OFF \
--DBUILD_SHARED_LIBS=OFF -DBUILD_APPS=OFF -DGDAL_BUILD_OPTIONAL_DRIVERS=OFF -DOGR_BUILD_OPTIONAL_DRIVERS=OFF \
--DGDAL_USE_HDFS=OFF \
--DACCEPT_MISSING_SQLITE3_MUTEX_ALLOC:BOOL=ON \
-..
-RUN cmake --build . -j "${JOBS}" && cmake --build . --target install
-RUN ${LLVM_NM} /install/libs/lib/libgdal.a | awk '$2 ~ /^[TDB]$/ {print $3}' | sed '/^$/d' | sort -u > /install/exports/libgdal.exports
-RUN find . -type f \( -name "*.o" -o -name "*.so" \) -exec ${LLVM_NM} --defined-only {} \; | awk '$2 ~ /^[TDB]$/ {print $3}' | sed '/^$/d' | sort -u > /tmp/libgdal.defs.txt
-RUN find . -name "*.o" -exec ${LLVM_NM} --undefined-only {} \; | awk '{print $2}' | sed '/^$/d' | sort -u > /tmp/libgdal.undef.txt
-RUN comm -23 /tmp/libgdal.undef.txt /tmp/libgdal.defs.txt > /install/imports/libgdal.imports
-
 FROM toolchain AS runner
 
 # this is where the libraries will be installed and subsequently where the LIBS and INCLUDES can be found
 ARG INSTALL_PREFIX=/install/libs
 ENV INSTALL_PREFIX=${INSTALL_PREFIX}
 
-ARG LIB_EXPORTS_DIR=/install/exports
-ENV LIB_EXPORTS_DIR=${LIB_EXPORTS_DIR}
-
 COPY --from=builder /install/libs ${INSTALL_PREFIX}
-COPY --from=builder /install/exports ${LIB_EXPORTS_DIR}
 
 # allow access to anyone
 RUN chmod -R 777 /install
-
-# needed in building pglite.wasm
-ENV LLVM_NM=/emsdk/upstream/bin/llvm-nm

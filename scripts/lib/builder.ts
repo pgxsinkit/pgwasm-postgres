@@ -5,10 +5,10 @@
 import { join } from "node:path";
 
 /**
- * `3.1.74` is the Emscripten version (pinned until 18.3.0, see the Containerfile); `-p1` counts revisions of
- * our pinned image on that Emscripten.
+ * `3.1.74` is the Emscripten version (pinned until its own release, see the Containerfile); `-p2` counts
+ * revisions of our pinned image on that Emscripten (`-p1` was the byte-identity image, `-p2` the amcheck-only one).
  */
-export const BUILDER_IMAGE = "localhost/pgwasm-postgres-builder:3.1.74-p1";
+export const BUILDER_IMAGE = "localhost/pgwasm-postgres-builder:3.1.74-p2";
 
 export interface BuilderPaths {
   readonly containerfile: string;

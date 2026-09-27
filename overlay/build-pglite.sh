@@ -103,10 +103,8 @@ ac_cv_exeext=.js \
 --with-icu \
 --with-includes=$INSTALL_PREFIX/include:$INSTALL_PREFIX/include/libxml2 \
 --with-libraries=$INSTALL_PREFIX/lib \
---with-uuid=ossp \
 --with-zlib \
 --with-libxml \
---with-libxslt \
 --with-template=emscripten \
 --prefix=$INSTALL_FOLDER"
 

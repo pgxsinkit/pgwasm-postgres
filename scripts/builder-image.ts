@@ -1,7 +1,7 @@
 /**
  * bun run builder:image
  *
- * Builds the builder image from builder/Containerfile with podman, as localhost/pgwasm-postgres-builder:3.1.74-p1
+ * Builds the builder image from builder/Containerfile with podman, as localhost/pgwasm-postgres-builder:3.1.74-p2
  * (amd64 only), capped at 4 CPUs, 16 GiB and `make -j4`. From scratch it takes about 40 minutes; podman's layer
  * cache makes an unchanged rebuild take seconds. Then checks the image's package set against
  * builder/dpkg-expected.txt. The full log goes to .cache/builder-image.log.
