@@ -189,10 +189,12 @@ Postgres's own regression suite has never run on the wasm build.
     2. Byte identity through the reproduction recipe, in two parts.
        - 2a (done 2026-09-27): the pinned draft image as `builder/`, `bun run build` and
          `bun run build:verify`, and byte identity proven with them.
-       - 2b: once this repository is pushed, the unstable sources (the GitLab on-demand archives of
-         libxml2, libxslt and libtiff, and zlib; OSSP uuid, whose own site is gone, with them) are
-         mirrored as release assets here and the Containerfile's URLs swapped to them. The checksums
-         stay, so the bytes cannot change.
+       - 2b (done 2026-09-27): the unstable sources (the GitLab on-demand archives of libxml2, libxslt
+         and libtiff, zlib, and OSSP uuid, whose own site is gone) are mirrored as the assets of the
+         release `builder-sources-1` here, and the Containerfile fetches them from it. The checksums
+         stay, so the bytes cannot change. Mirror releases are named `builder-sources-<n>`, never a
+         semver tag, so they cannot be read as a build version, and an asset is never replaced in
+         place.
     3. The driver, the compatibility tuple, the pg_regress bridge and its 18.3 baseline, the
        prepopulated asset.
     4. `18.3.0`: amcheck only, the manifest and extension libraries deleted, the fixed-path

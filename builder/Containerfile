@@ -20,10 +20,11 @@
 # toolchain (Emscripten 3.1.74) and library sources. Bumping any pin is a deliberate C-build change: made only
 # after the byte-for-byte rebuild is proven, and followed by re-recording the artefact checksums.
 #
-# UNSTABLE SOURCES. The URLs below are still the upstream ones. Three are GitLab `/-/archive/` tarballs generated
-# on request (libxml2, libxslt, libtiff), and zlib.net and ftp.ossp.org have already dropped Electric's URLs. A
-# later step (ADR-0001, order of work 2b) mirrors these sources as release assets of this repository and swaps
-# the URLs; the checksums stay as they are, so the bytes cannot change.
+# MIRRORED SOURCES. Five sources are fetched from this repository's release `builder-sources-1`, because their
+# upstream URLs are not stable byte streams: three are GitLab `/-/archive/` tarballs generated on request
+# (libxml2, libxslt, libtiff), and zlib.net and ftp.ossp.org have already dropped Electric's URLs. The upstream
+# URL each one mirrors is in the comment above it. The checksums are the ones the byte-for-byte rebuild used, so
+# a mirror cannot change the bytes (ADR-0001, order of work 2b).
 #
 # Build (amd64 only; JOBS changes speed, not output): `bun run builder:image`, which runs
 #   podman build --format docker -t localhost/pgwasm-postgres-builder:3.1.74-p1 builder
@@ -57,17 +58,17 @@ ENV EMCC_COMMON_FLAGS="-O2 -fPIC -sWASM_BIGINT"
 
 # Every source is fetched to a file, checked, then unpacked where Electric unpacked it.
 # PIN (exact-source exception) on every checksum below: they are the bytes the byte-for-byte rebuild used.
-# The three gitlab.gnome.org / gitlab.com `/-/archive/` tarballs are generated on request and are not
-# guaranteed stable byte for byte; if one of those checksums ever fails, compare the unpacked tree against
-# the tag, then mirror the tarball as a release asset of pgwasm-postgres. Mirroring every source there is the
-# durable fix (zlib.net and ftp.ossp.org have already dropped Electric's URLs).
+# The sources with unstable upstream URLs come from this repository's `builder-sources-1` release (see the
+# header). Mirroring a further source means adding it to a new `builder-sources-<n>` release with the same
+# checksum, never replacing an asset in place.
 
 WORKDIR /src
 # PIN (exact-source exception): zlib 1.3.2, NOT the 1.3.1 Electric's Dockerfile names: electricsql/pglite-builder:3.1.74-7 contains zlib 1.3.2
 # (its zlib.h says 1.3.2, and 1.3.2 built with these commands in that image gives a byte-identical libz.a),
 # and the published pglite.wasm / pg_dump.wasm embed "1.3.2". Built from 1.3.1, both wasm files differ.
 # Electric's URL (www.zlib.net/zlib-1.3.1.tar.gz) returns 404 today; /fossils keeps every release.
-RUN curl -fsSL -o /tmp/src.tgz https://www.zlib.net/fossils/zlib-1.3.2.tar.gz \
+# Mirror of https://www.zlib.net/fossils/zlib-1.3.2.tar.gz
+RUN curl -fsSL -o /tmp/src.tgz https://github.com/pgxsinkit/pgwasm-postgres/releases/download/builder-sources-1/zlib-1.3.2.tar.gz \
  && echo "bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16  /tmp/src.tgz" | sha256sum -c - \
  && tar -xzf /tmp/src.tgz && rm /tmp/src.tgz
 WORKDIR /src/zlib-1.3.2
@@ -77,7 +78,8 @@ RUN ${LLVM_NM} /install/libs/lib/libz.a | awk '$2 ~ /^[TDB]$/ {print $3}' | sed 
 
 WORKDIR /src
 # PIN (exact-source exception): libxml2 v2.14.5 (GitLab-generated archive of the tag)
-RUN curl -fsSL -o /tmp/src.tgz https://gitlab.gnome.org/GNOME/libxml2/-/archive/v2.14.5/libxml2-v2.14.5.tar.gz \
+# Mirror of https://gitlab.gnome.org/GNOME/libxml2/-/archive/v2.14.5/libxml2-v2.14.5.tar.gz
+RUN curl -fsSL -o /tmp/src.tgz https://github.com/pgxsinkit/pgwasm-postgres/releases/download/builder-sources-1/libxml2-v2.14.5.tar.gz \
  && echo "54968c8ab8723c2d75a38fc45810e8cf60d44991e0887661bf9905a4042ad108  /tmp/src.tgz" | sha256sum -c - \
  && tar -xzf /tmp/src.tgz && rm /tmp/src.tgz
 WORKDIR /src/libxml2-v2.14.5
@@ -88,7 +90,8 @@ RUN ${LLVM_NM} /install/libs/lib/libxml2.a | awk '$2 ~ /^[TDB]$/ {print $3}' | s
 
 WORKDIR /src
 # PIN (exact-source exception): libxslt v1.1.43 (GitLab-generated archive of the tag)
-RUN curl -fsSL -o /tmp/src.tgz https://gitlab.gnome.org/GNOME/libxslt/-/archive/v1.1.43/libxslt-v1.1.43.tar.gz \
+# Mirror of https://gitlab.gnome.org/GNOME/libxslt/-/archive/v1.1.43/libxslt-v1.1.43.tar.gz
+RUN curl -fsSL -o /tmp/src.tgz https://github.com/pgxsinkit/pgwasm-postgres/releases/download/builder-sources-1/libxslt-v1.1.43.tar.gz \
  && echo "47747c86ce5acd2b5cdc276e37a755c8fe93bcfcd0302f76303d93b7cca66867  /tmp/src.tgz" | sha256sum -c - \
  && tar -xzf /tmp/src.tgz && rm /tmp/src.tgz
 WORKDIR /src/libxslt-v1.1.43
@@ -112,7 +115,8 @@ RUN ${LLVM_NM} /install/libs/lib/libcrypto.a | awk '$2 ~ /^[TDB]$/ {print $3}' |
 WORKDIR /src
 # PIN (exact-source exception): OSSP uuid 1.6.2: ftp.ossp.org no longer answers. Debian's orig tarball is the upstream uuid-1.6.2.tar.gz
 # (same bytes; it unpacks to uuid-1.6.2/).
-RUN curl -fsSL -o /tmp/src.tgz https://deb.debian.org/debian/pool/main/o/ossp-uuid/ossp-uuid_1.6.2.orig.tar.gz \
+# Mirror of https://deb.debian.org/debian/pool/main/o/ossp-uuid/ossp-uuid_1.6.2.orig.tar.gz
+RUN curl -fsSL -o /tmp/src.tgz https://github.com/pgxsinkit/pgwasm-postgres/releases/download/builder-sources-1/ossp-uuid_1.6.2.orig.tar.gz \
  && echo "11a615225baa5f8bb686824423f50e4427acd3f70d394765bdff32801f0fd5b0  /tmp/src.tgz" | sha256sum -c - \
  && tar -xzf /tmp/src.tgz && rm /tmp/src.tgz
 WORKDIR /src/uuid-1.6.2
@@ -195,7 +199,8 @@ RUN ${LLVM_NM} /install/libs/lib/libdeflate.a | awk '$2 ~ /^[TDB]$/ {print $3}' 
 
 WORKDIR /src
 # PIN (exact-source exception): libtiff v4.7.1 (GitLab-generated archive of the tag)
-RUN curl -fsSL -o /tmp/src.tgz https://gitlab.com/libtiff/libtiff/-/archive/v4.7.1/libtiff-v4.7.1.tar.gz \
+# Mirror of https://gitlab.com/libtiff/libtiff/-/archive/v4.7.1/libtiff-v4.7.1.tar.gz
+RUN curl -fsSL -o /tmp/src.tgz https://github.com/pgxsinkit/pgwasm-postgres/releases/download/builder-sources-1/libtiff-v4.7.1.tar.gz \
  && echo "6ab956415ddb6cae497faad18398ff0fd056d17d8bf7b5921cc194c55b0191fc  /tmp/src.tgz" | sha256sum -c - \
  && tar -xzf /tmp/src.tgz && rm /tmp/src.tgz
 WORKDIR /src/libtiff-v4.7.1
