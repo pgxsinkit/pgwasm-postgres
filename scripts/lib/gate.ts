@@ -32,9 +32,57 @@ export function gateDir(layout: Layout, commit: string): string {
   return join(layout.cacheDir, "gate", commit);
 }
 
+/** Where the gate collects the release while it runs; renamed to {@link gateDir} only when every check passed. */
+export function gateStaging(layout: Layout, commit: string): string {
+  return `${gateDir(layout, commit)}.partial`;
+}
+
 /** The name of the artifact `gate.yml` uploads a commit's gate directory as. */
 export function gateArtifact(commit: string): string {
   return `gate-${commit}`;
+}
+
+/** One step of a gate run: its exit code, or null when it did not run (an earlier step failed). */
+export interface GateStep {
+  readonly name: string;
+  readonly exitCode: number | null;
+  readonly seconds: number;
+}
+
+/** How each step of a gate run ended, passed or not: `.cache/gate/<commit>.steps.json` (a bump reads it). */
+export interface GateSteps {
+  readonly commit: string;
+  /** `--keep-going`: the steps after a failed one ran too (all but the build's). */
+  readonly keepGoing: boolean;
+  readonly steps: readonly GateStep[];
+}
+
+export function gateStepsFile(layout: Layout, commit: string): string {
+  return `${gateDir(layout, commit)}.steps.json`;
+}
+
+export function formatGateSteps(steps: GateSteps): string {
+  return `${JSON.stringify(steps, null, 2)}\n`;
+}
+
+export function readGateSteps(layout: Layout, commit: string): GateSteps | undefined {
+  const file = gateStepsFile(layout, commit);
+  if (!existsSync(file)) return undefined;
+  const json = readJson(file, layout.root);
+  const steps = json["steps"];
+  if (json["commit"] !== commit || !Array.isArray(steps)) throw new UserError(`${file} is not the steps of ${commit}.`);
+  return {
+    commit,
+    keepGoing: json["keepGoing"] === true,
+    steps: steps.map((entry: unknown, index) => {
+      const step = typeof entry === "object" && entry !== null ? (entry as Record<string, unknown>) : {};
+      const exitCode = step["exitCode"];
+      if (typeof step["name"] !== "string" || !(exitCode === null || typeof exitCode === "number")) {
+        throw new UserError(`${file}: steps[${index}] is not a step.`);
+      }
+      return { name: step["name"], exitCode, seconds: Number(step["seconds"] ?? 0) };
+    }),
+  };
 }
 
 export interface GateFile {

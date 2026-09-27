@@ -1,5 +1,5 @@
 /**
- * bun run gate [--image <reference> | --lock [--published]] [--summary <file>]
+ * bun run gate [--image <reference> | --lock [--published]] [--keep-going] [--summary <file>]
  *
  * The engine gate (ADR-0001 decision 6) of the current commit, from clean, and the release it would publish
  * (decision 9). It refuses a working tree with changes (the gate is a commit's), then runs, with
@@ -14,7 +14,8 @@
  *   regress                pg_regress against regress/baseline.json
  *
  * Then it writes .cache/gate/<commit>/: the release's files, `manifest.json` and `SHA256SUMS` (see
- * scripts/lib/gate.ts). The directory exists only for a commit whose gate passed; a new run replaces it.
+ * scripts/lib/gate.ts). The directory exists only for a commit whose gate passed; a new run replaces it. How each
+ * step ended goes to .cache/gate/<commit>.steps.json, passed or not.
  *
  * The builder image:
  *   (default)     localhost/pgwasm-postgres-builder:3.1.74-p2, which must be in podman's local storage;
@@ -22,6 +23,8 @@
  *   --lock        builder/image.lock.json decides, as in CI: the published image, pulled by digest, when the lock
  *                 records builder/'s content published; otherwise the image built from builder/ here;
  *   --published   with --lock: the published image or nothing (the release job: a release is built with it).
+ * --keep-going   run every step even when one fails (but for a failed build, which leaves nothing to check), then
+ *                fail on all that did: what `bun run bump` runs, to report every record a new upstream tag moves.
  * --summary      append a Markdown summary to <file> (the job summary in CI).
  *
  * It takes about 12 minutes (the build 8, pg_regress 2), more when the image is built. Not part of validate.
@@ -39,13 +42,17 @@ import { coreSymbols, diffExports, readExportList } from "./lib/exports.ts";
 import {
   digestFiles,
   formatGateManifest,
+  formatGateSteps,
   formatSums,
   GATE_MANIFEST,
   gateDir,
+  gateStaging,
+  gateStepsFile,
   gateSummary,
   SUMS_FILE,
   verifyGateDir,
   type GateManifest,
+  type GateStep,
 } from "./lib/gate.ts";
 import { git, UserError } from "./lib/git.ts";
 import { layoutFor, repoRoot } from "./lib/layout.ts";
@@ -53,22 +60,24 @@ import { artefactPaths, MANIFEST_FILE, readManifest } from "./lib/manifest.ts";
 import { imageId, pullImage, refuseOtherContainers, repoDigests, requirePodman, resourceCaps } from "./lib/podman.ts";
 import { baselineDigest, readOutcome } from "./lib/regress/outcome.ts";
 
-const USAGE = "Usage: bun run gate [--image <reference> | --lock [--published]] [--summary <file>]";
+const USAGE = "Usage: bun run gate [--image <reference> | --lock [--published]] [--keep-going] [--summary <file>]";
 
 interface Options {
   image: string | undefined;
   lock: boolean;
   published: boolean;
+  keepGoing: boolean;
   summary: string | undefined;
 }
 
 function options(args: readonly string[]): Options {
-  const parsed: Options = { image: undefined, lock: false, published: false, summary: undefined };
+  const parsed: Options = { image: undefined, lock: false, published: false, keepGoing: false, summary: undefined };
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
     const value = args[index + 1];
     if (arg === "--lock") parsed.lock = true;
     else if (arg === "--published") parsed.published = true;
+    else if (arg === "--keep-going") parsed.keepGoing = true;
     else if (arg === "--image" && value !== undefined) {
       parsed.image = value;
       index += 1;
@@ -151,9 +160,11 @@ await runCliAsync(async () => {
   );
 
   const final = gateDir(layout, commit);
-  const staging = `${final}.partial`;
+  const staging = gateStaging(layout, commit);
+  const stepsFile = gateStepsFile(layout, commit);
   rmSync(final, { recursive: true, force: true });
   rmSync(staging, { recursive: true, force: true });
+  rmSync(stepsFile, { force: true });
   mkdirSync(staging, { recursive: true });
 
   const steps: readonly (readonly [name: string, script: string, args: readonly string[]])[] = [
@@ -166,6 +177,7 @@ await runCliAsync(async () => {
     ["regress", "regress.ts", ["--image", image]],
   ];
   const timings: [string, number][] = [];
+  const ran: GateStep[] = [];
   const env = { ...process.env, SOURCE_DATE_EPOCH: String(epoch) };
   for (const [name, script, stepArgs] of steps) {
     info(`\ngate: ── ${name} ──`);
@@ -178,12 +190,22 @@ await runCliAsync(async () => {
       stderr: "inherit",
     }).exited;
     timings.push([name, Date.now() - started]);
-    if (exitCode !== 0) {
-      summarise(
-        `### Engine gate FAILED at \`${name}\` (\`${commit.slice(0, 12)}\`)\n\nIts own message is in the job log.\n\n`,
-      );
-      throw new UserError(`\ngate: FAILED at ${name} (exit ${exitCode}); its message is above.`);
-    }
+    ran.push({ name, exitCode, seconds: Math.round((Date.now() - started) / 1000) });
+    // A failed build leaves nothing to check; with --keep-going, any other failed step lets the rest run.
+    if (exitCode !== 0 && (!args.keepGoing || name === "build")) break;
+  }
+  const skipped = steps.slice(ran.length).map(([name]) => ({ name, exitCode: null, seconds: 0 }));
+  writeFileSync(stepsFile, formatGateSteps({ commit, keepGoing: args.keepGoing, steps: [...ran, ...skipped] }));
+  const failed = ran.filter((step) => step.exitCode !== 0);
+  if (failed.length > 0) {
+    const names = failed.map((step) => step.name);
+    summarise(
+      `### Engine gate FAILED at ${names.map((name) => `\`${name}\``).join(", ")} (\`${commit.slice(0, 12)}\`)\n\nEach step's own message is in the job log.\n\n`,
+    );
+    if (skipped.length > 0) info(`\ngate: not run: ${skipped.map((step) => step.name).join(", ")}`);
+    throw new UserError(
+      `\ngate: FAILED at ${failed.map((step) => `${step.name} (exit ${step.exitCode})`).join(", ")}; ${failed.length === 1 ? "its message is" : "their messages are"} above.`,
+    );
   }
 
   // Collect the release.

@@ -6,18 +6,23 @@ import {
   compareGateManifests,
   digestFiles,
   formatGateManifest,
+  formatGateSteps,
   formatSums,
   GATE_MANIFEST,
   gateArtifact,
+  gateStaging,
+  gateStepsFile,
   gateSummary,
   parseGateManifest,
   readGateManifest,
+  readGateSteps,
   SUMS_FILE,
   symbolList,
   verifyGateDir,
   type GateManifest,
 } from "../scripts/lib/gate.ts";
 import { UserError } from "../scripts/lib/git.ts";
+import { layoutFor } from "../scripts/lib/layout.ts";
 import { sha256Of } from "../scripts/lib/manifest.ts";
 import { Fixtures, gateManifest, thrown, write } from "./helpers.ts";
 
@@ -132,5 +137,29 @@ describe("comparing gate manifests", () => {
     expect(summary).toContain("1,121 symbols; against `exported_functions.txt` at the commit: 1 added (`_a`)");
     expect(summary).toContain("the published image by digest");
     expect(symbolList(["_a", "_b", "_c"], 2)).toBe("`_a` `_b` and 1 more");
+  });
+});
+
+describe("the gate's steps", () => {
+  test("every run records how each step ended, and which did not run, next to the gate directory", () => {
+    const layout = layoutFor(fixtures.dir("gate-steps"));
+    const commit = "1".repeat(40);
+    expect(gateStaging(layout, commit)).toBe(`${layout.cacheDir}/gate/${commit}.partial`);
+    expect(readGateSteps(layout, commit)).toBeUndefined();
+    const steps = {
+      commit,
+      keepGoing: true,
+      steps: [
+        { name: "build", exitCode: 0, seconds: 480 },
+        { name: "exports:check", exitCode: 1, seconds: 1 },
+        { name: "regress", exitCode: null, seconds: 0 },
+      ],
+    };
+    write(gateStepsFile(layout, commit), formatGateSteps(steps));
+    expect(gateStepsFile(layout, commit)).toBe(`${layout.cacheDir}/gate/${commit}.steps.json`);
+    expect(readGateSteps(layout, commit)).toEqual(steps);
+    const other = "2".repeat(40);
+    write(gateStepsFile(layout, other), formatGateSteps(steps));
+    expect(thrown(() => readGateSteps(layout, other)).message).toContain(`is not the steps of ${other}`);
   });
 });
