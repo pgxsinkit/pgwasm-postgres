@@ -1,0 +1,28 @@
+diff -U3 expected/create_function_c.out results/create_function_c.out
+--- expected/create_function_c.out
++++ results/create_function_c.out
+@@ -14,6 +14,7 @@
+ -- is checked in many other test scripts.)
+ --
+ LOAD :'regresslib';
++ERROR:  could not access file "@abs_builddir@/lib/regress.so": No such file or directory
+ -- Things that shouldn't work:
+ CREATE FUNCTION test1 (int) RETURNS int LANGUAGE C
+     AS 'nosuchfile';
+@@ -23,12 +24,12 @@
+ \set VERBOSITY sqlstate
+ CREATE FUNCTION test1 (int) RETURNS int LANGUAGE C
+     AS :'regresslib', 'nosuchsymbol';
+-ERROR:  42883
++ERROR:  58P01
+ \set VERBOSITY default
+ SELECT regexp_replace(:'LAST_ERROR_MESSAGE', 'file ".*"', 'file "..."');
+-                    regexp_replace                    
+-------------------------------------------------------
+- could not find function "nosuchsymbol" in file "..."
++                     regexp_replace                     
++--------------------------------------------------------
++ could not access file "...": No such file or directory
+ (1 row)
+ 
+ CREATE FUNCTION test1 (int) RETURNS int LANGUAGE internal

@@ -1,0 +1,14 @@
+diff -U3 expected/infinite_recurse.out results/infinite_recurse.out
+--- expected/infinite_recurse.out
++++ results/infinite_recurse.out
+@@ -19,6 +19,7 @@
+ -- and primary error message.
+ \set VERBOSITY sqlstate
+ select infinite_recurse();
+-ERROR:  54001
+-\echo :LAST_ERROR_MESSAGE
+-stack depth limit exceeded
++server closed the connection unexpectedly
++	This probably means the server terminated abnormally
++	before or while processing the request.
++connection to server was lost

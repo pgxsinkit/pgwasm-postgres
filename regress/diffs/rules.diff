@@ -1,0 +1,43 @@
+diff -U3 expected/rules.out results/rules.out
+--- expected/rules.out
++++ results/rules.out
+@@ -3876,27 +3876,29 @@
+ CREATE TABLE ruletest_t3 (x int);
+ CREATE RULE rule2 AS ON UPDATE TO ruletest_t1
+     DO INSTEAD INSERT INTO ruletest_t2 VALUES (OLD.*);
++ERROR:  must be owner of table ruletest_t1
+ REVOKE ALL ON ruletest_t2 FROM regress_rule_user1;
++ERROR:  permission denied for table ruletest_t2
+ REVOKE ALL ON ruletest_t3 FROM regress_rule_user1;
+ ALTER TABLE ruletest_t1 OWNER TO regress_rule_user1;
++ERROR:  must be owner of table ruletest_t1
+ SET SESSION AUTHORIZATION regress_rule_user1;
+ UPDATE ruletest_t1 t1 SET x = 0 FROM ruletest_t3 t3 WHERE t1.x = t3.x;
+-ERROR:  permission denied for table ruletest_t3
++ERROR:  permission denied for table ruletest_t1
+ RESET SESSION AUTHORIZATION;
+ SELECT * FROM ruletest_t1;
+- x 
+----
+-(0 rows)
+-
++ERROR:  permission denied for table ruletest_t1
+ SELECT * FROM ruletest_t2;
+- x 
+----
+- 1
+-(1 row)
+-
++ERROR:  permission denied for table ruletest_t2
+ DROP VIEW ruletest_v1;
++ERROR:  must be owner of view ruletest_v1
+ DROP RULE rule2 ON ruletest_t1;
++ERROR:  rule "rule2" for relation "ruletest_t1" does not exist
+ DROP TABLE ruletest_t3;
+ DROP TABLE ruletest_t2;
++ERROR:  must be owner of table ruletest_t2
+ DROP TABLE ruletest_t1;
++ERROR:  must be owner of table ruletest_t1
+ DROP USER regress_rule_user1;
++ERROR:  permission denied to drop role
++DETAIL:  Only roles with the CREATEROLE attribute and the ADMIN option on the target roles may drop roles.

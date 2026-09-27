@@ -1,0 +1,394 @@
+diff -U3 expected/encoding.out results/encoding.out
+--- expected/encoding.out
++++ results/encoding.out
+@@ -8,77 +8,88 @@
+ \set regresslib :libdir '/regress' :dlsuffix
+ CREATE FUNCTION test_bytea_to_text(bytea) RETURNS text
+     AS :'regresslib' LANGUAGE C STRICT;
++ERROR:  could not access file "@abs_builddir@/lib/regress.so": No such file or directory
+ CREATE FUNCTION test_text_to_bytea(text) RETURNS bytea
+     AS :'regresslib' LANGUAGE C STRICT;
++ERROR:  could not access file "@abs_builddir@/lib/regress.so": No such file or directory
+ CREATE FUNCTION test_mblen_func(text, text, text, int) RETURNS int
+     AS :'regresslib' LANGUAGE C STRICT;
++ERROR:  could not access file "@abs_builddir@/lib/regress.so": No such file or directory
+ CREATE FUNCTION test_text_to_wchars(text, text) RETURNS int[]
+     AS :'regresslib' LANGUAGE C STRICT;
++ERROR:  could not access file "@abs_builddir@/lib/regress.so": No such file or directory
+ CREATE FUNCTION test_wchars_to_text(text, int[]) RETURNS text
+     AS :'regresslib' LANGUAGE C STRICT;
++ERROR:  could not access file "@abs_builddir@/lib/regress.so": No such file or directory
+ CREATE FUNCTION test_valid_server_encoding(text) RETURNS boolean
+     AS :'regresslib' LANGUAGE C STRICT;
++ERROR:  could not access file "@abs_builddir@/lib/regress.so": No such file or directory
+ CREATE TABLE regress_encoding(good text, truncated text, with_nul text, truncated_with_nul text);
+ INSERT INTO regress_encoding
+ VALUES ('café',
+         'caf' || test_bytea_to_text('\xc3'),
+         'café' || test_bytea_to_text('\x00') || 'dcba',
+         'caf' || test_bytea_to_text('\xc300') || 'dcba');
++ERROR:  function test_bytea_to_text(unknown) does not exist
++LINE 3:         'caf' || test_bytea_to_text('\xc3'),
++                         ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT good, truncated, with_nul FROM regress_encoding;
+  good | truncated | with_nul 
+ ------+-----------+----------
+- café | caf       | café
+-(1 row)
++(0 rows)
+ 
+ SELECT length(good) FROM regress_encoding;
+  length 
+ --------
+-      4
+-(1 row)
++(0 rows)
+ 
+ SELECT substring(good, 3, 1) FROM regress_encoding;
+  substring 
+ -----------
+- f
+-(1 row)
++(0 rows)
+ 
+ SELECT substring(good, 4, 1) FROM regress_encoding;
+  substring 
+ -----------
+- é
+-(1 row)
++(0 rows)
+ 
+ SELECT regexp_replace(good, '^caf(.)$', '\1') FROM regress_encoding;
+  regexp_replace 
+ ----------------
+- é
+-(1 row)
++(0 rows)
+ 
+ SELECT reverse(good) FROM regress_encoding;
+  reverse 
+ ---------
+- éfac
+-(1 row)
++(0 rows)
+ 
+ -- invalid short mb character = error
+ SELECT length(truncated) FROM regress_encoding;
+-ERROR:  invalid byte sequence for encoding "UTF8": 0xc3
++ length 
++--------
++(0 rows)
++
+ SELECT substring(truncated, 1, 3) FROM regress_encoding;
+  substring 
+ -----------
+- caf
+-(1 row)
++(0 rows)
+ 
+ SELECT substring(truncated, 1, 4) FROM regress_encoding;
+-ERROR:  invalid byte sequence for encoding "UTF8": 0xc3
++ substring 
++-----------
++(0 rows)
++
+ SELECT reverse(truncated) FROM regress_encoding;
+-ERROR:  invalid byte sequence for encoding "UTF8": 0xc3
++ reverse 
++---------
++(0 rows)
++
+ -- invalid short mb character = silently dropped
+ SELECT regexp_replace(truncated, '^caf(.)$', '\1') FROM regress_encoding;
+  regexp_replace 
+ ----------------
+- caf
+-(1 row)
++(0 rows)
+ 
+ -- PostgreSQL doesn't allow strings to contain NUL.  If a corrupted string
+ -- contains NUL at a character boundary position, some functions treat it as a
+@@ -87,45 +98,38 @@
+ SELECT length(with_nul) FROM regress_encoding;
+  length 
+ --------
+-      4
+-(1 row)
++(0 rows)
+ 
+ SELECT substring(with_nul, 3, 1) FROM regress_encoding;
+  substring 
+ -----------
+- f
+-(1 row)
++(0 rows)
+ 
+ SELECT substring(with_nul, 4, 1) FROM regress_encoding;
+  substring 
+ -----------
+- é
+-(1 row)
++(0 rows)
+ 
+ SELECT substring(with_nul, 5, 1) FROM regress_encoding;
+  substring 
+ -----------
+- 
+-(1 row)
++(0 rows)
+ 
+ SELECT convert_to(substring(with_nul, 5, 1), 'UTF8') FROM regress_encoding;
+  convert_to 
+ ------------
+- \x
+-(1 row)
++(0 rows)
+ 
+ SELECT regexp_replace(with_nul, '^caf(.)$', '\1') FROM regress_encoding;
+  regexp_replace 
+ ----------------
+- é
+-(1 row)
++(0 rows)
+ 
+ -- NUL = character
+ SELECT with_nul, reverse(with_nul), reverse(reverse(with_nul)) FROM regress_encoding;
+  with_nul | reverse | reverse 
+ ----------+---------+---------
+- café     | abcd    | café
+-(1 row)
++(0 rows)
+ 
+ -- If a corrupted string contains NUL in the tail bytes of a multibyte
+ -- character (invalid in all encodings), it is considered part of the
+@@ -134,76 +138,79 @@
+ SELECT length(truncated_with_nul) FROM regress_encoding;
+  length 
+ --------
+-      8
+-(1 row)
++(0 rows)
+ 
+ SELECT substring(truncated_with_nul, 3, 1) FROM regress_encoding;
+  substring 
+ -----------
+- f
+-(1 row)
++(0 rows)
+ 
+ SELECT substring(truncated_with_nul, 4, 1) FROM regress_encoding;
+  substring 
+ -----------
+- 
+-(1 row)
++(0 rows)
+ 
+ SELECT convert_to(substring(truncated_with_nul, 4, 1), 'UTF8') FROM regress_encoding;
+-ERROR:  invalid byte sequence for encoding "UTF8": 0xc3 0x00
++ convert_to 
++------------
++(0 rows)
++
+ SELECT substring(truncated_with_nul, 5, 1) FROM regress_encoding;
+  substring 
+ -----------
+- d
+-(1 row)
++(0 rows)
+ 
+ SELECT regexp_replace(truncated_with_nul, '^caf(.)dcba$', '\1') = test_bytea_to_text('\xc300') FROM regress_encoding;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  function test_bytea_to_text(unknown) does not exist
++LINE 1: ...place(truncated_with_nul, '^caf(.)dcba$', '\1') = test_bytea...
++                                                             ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT reverse(truncated_with_nul) FROM regress_encoding;
+  reverse 
+ ---------
+- abcd
+-(1 row)
++(0 rows)
+ 
+ -- unbounded: sequence would overrun the string!
+ SELECT test_mblen_func('pg_mblen_unbounded', 'UTF8', truncated, 3)
+ FROM regress_encoding;
+- test_mblen_func 
+------------------
+-               2
+-(1 row)
+-
++ERROR:  function test_mblen_func(unknown, unknown, text, integer) does not exist
++LINE 1: SELECT test_mblen_func('pg_mblen_unbounded', 'UTF8', truncat...
++               ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- condition detected when using the length/range variants
+ SELECT test_mblen_func('pg_mblen_with_len', 'UTF8', truncated, 3)
+ FROM regress_encoding;
+-ERROR:  invalid byte sequence for encoding "UTF8": 0xc3
++ERROR:  function test_mblen_func(unknown, unknown, text, integer) does not exist
++LINE 1: SELECT test_mblen_func('pg_mblen_with_len', 'UTF8', truncate...
++               ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT test_mblen_func('pg_mblen_range', 'UTF8', truncated, 3)
+ FROM regress_encoding;
+-ERROR:  invalid byte sequence for encoding "UTF8": 0xc3
++ERROR:  function test_mblen_func(unknown, unknown, text, integer) does not exist
++LINE 1: SELECT test_mblen_func('pg_mblen_range', 'UTF8', truncated, ...
++               ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- unbounded: sequence would overrun the string, if the terminator were really
+ -- the end of it
+ SELECT test_mblen_func('pg_mblen_unbounded', 'UTF8', truncated_with_nul, 3)
+ FROM regress_encoding;
+- test_mblen_func 
+------------------
+-               2
+-(1 row)
+-
++ERROR:  function test_mblen_func(unknown, unknown, text, integer) does not exist
++LINE 1: SELECT test_mblen_func('pg_mblen_unbounded', 'UTF8', truncat...
++               ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT test_mblen_func('pg_encoding_mblen', 'GB18030', truncated_with_nul, 3)
+ FROM regress_encoding;
+- test_mblen_func 
+------------------
+-               2
+-(1 row)
+-
++ERROR:  function test_mblen_func(unknown, unknown, text, integer) does not exist
++LINE 1: SELECT test_mblen_func('pg_encoding_mblen', 'GB18030', trunc...
++               ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- condition detected when using the cstr variants
+ SELECT test_mblen_func('pg_mblen_cstr', 'UTF8', truncated_with_nul, 3)
+ FROM regress_encoding;
+-ERROR:  invalid byte sequence for encoding "UTF8": 0xc3
++ERROR:  function test_mblen_func(unknown, unknown, text, integer) does not exist
++LINE 1: SELECT test_mblen_func('pg_mblen_cstr', 'UTF8', truncated_wi...
++               ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ DROP TABLE regress_encoding;
+ -- mb<->wchar conversions
+ CREATE FUNCTION test_encoding(encoding text, description text, input bytea)
+@@ -320,67 +327,12 @@
+ 	('MULE_INTERNAL', 'LC2',           '\x908283');
+ SELECT COUNT(test_encoding(encoding, description, input)) > 0
+ FROM encoding_tests;
+-NOTICE:  LATIN1 ASCII:                \x61 -> {97} -> \x61 = OK
+-NOTICE:  LATIN1 extended:             \xe9 -> {233} -> \xe9 = OK
+-NOTICE:  EUC_JP ASCII:                \x61 -> {97} -> \x61 = OK
+-NOTICE:  EUC_JP CS1, short:           \x80 -> {} -> \x = truncated
+-NOTICE:  EUC_JP CS1:                  \x8002 -> {32770} -> \x8002 = OK
+-NOTICE:  EUC_JP CS2, short:           \x8e -> {} -> \x = truncated
+-NOTICE:  EUC_JP CS2:                  \x8e02 -> {36354} -> \x8e02 = OK
+-NOTICE:  EUC_JP CS3, short:           \x8f -> {} -> \x = truncated
+-NOTICE:  EUC_JP CS3, short:           \x8f02 -> {} -> \x = truncated
+-NOTICE:  EUC_JP CS3:                  \x8f0203 -> {9372163} -> \x8f0203 = OK
+-NOTICE:  EUC_CN ASCII:                \x61 -> {97} -> \x61 = OK
+-NOTICE:  EUC_CN CS1, short:           \x80 -> {} -> \x = truncated
+-NOTICE:  EUC_CN CS1:                  \x8002 -> {32770} -> \x8002 = OK
+-NOTICE:  EUC_CN CS2, short:           \x8e -> {} -> \x = truncated
+-NOTICE:  EUC_CN CS2, short:           \x8e02 -> {} -> \x = truncated
+-NOTICE:  EUC_CN CS2:                  \x8e0203 -> {9306627} -> \x8e0203 = OK
+-NOTICE:  EUC_CN CS3, short:           \x8f -> {} -> \x = truncated
+-NOTICE:  EUC_CN CS3, short:           \x8f02 -> {} -> \x = truncated
+-NOTICE:  EUC_CN CS3:                  \x8f0203 -> {9372163} -> \x8f0203 = OK
+-NOTICE:  EUC_TW ASCII:                \x61 -> {97} -> \x61 = OK
+-NOTICE:  EUC_TW CS1, short:           \x80 -> {} -> \x = truncated
+-NOTICE:  EUC_TW CS1:                  \x8002 -> {32770} -> \x8002 = OK
+-NOTICE:  EUC_TW CS2, short:           \x8e -> {} -> \x = truncated
+-NOTICE:  EUC_TW CS2, short:           \x8e02 -> {} -> \x = truncated
+-NOTICE:  EUC_TW CS2, short:           \x8e0203 -> {} -> \x = truncated
+-NOTICE:  EUC_TW CS2:                  \x8e020304 -> {-1912470780} -> \x8e020304 = OK
+-NOTICE:  EUC_TW CS3, short:           \x8f -> {} -> \x = truncated
+-NOTICE:  EUC_TW CS3, short:           \x8f02 -> {} -> \x = truncated
+-NOTICE:  EUC_TW CS3:                  \x8f0203 -> {9372163} -> \x8f0203 = OK
+-NOTICE:  UTF8 ASCII:                  \x61 -> {97} -> \x61 = OK
+-NOTICE:  UTF8 2 byte, short:          \xdf -> {} -> \x = truncated
+-NOTICE:  UTF8 2 byte:                 \xdf82 -> {1986} -> \xdf82 = OK
+-NOTICE:  UTF8 3 byte, short:          \xef -> {} -> \x = truncated
+-NOTICE:  UTF8 3 byte, short:          \xef82 -> {} -> \x = truncated
+-NOTICE:  UTF8 3 byte:                 \xef8283 -> {61571} -> \xef8283 = OK
+-NOTICE:  UTF8 4 byte, short:          \xf7 -> {} -> \x = truncated
+-NOTICE:  UTF8 4 byte, short:          \xf782 -> {} -> \x = truncated
+-NOTICE:  UTF8 4 byte, short:          \xf78283 -> {} -> \x = truncated
+-NOTICE:  UTF8 4 byte:                 \xf7828384 -> {1843396} -> \xf7828384 = OK
+-NOTICE:  UTF8 5 byte, unsupported:    \xfb -> {251} -> \xc3bb = failed
+-NOTICE:  UTF8 5 byte, unsupported:    \xfb82 -> {251,130} -> \xc3bbc282 = failed
+-NOTICE:  UTF8 5 byte, unsupported:    \xfb8283 -> {251,130,131} -> \xc3bbc282c283 = failed
+-NOTICE:  UTF8 5 byte, unsupported:    \xfb828384 -> {251,130,131,132} -> \xc3bbc282c283c284 = failed
+-NOTICE:  UTF8 5 byte, unsupported:    \xfb82838485 -> {251,130,131,132,133} -> \xc3bbc282c283c284c285 = failed
+-NOTICE:  UTF8 6 byte, unsupported:    \xfd -> {253} -> \xc3bd = failed
+-NOTICE:  UTF8 6 byte, unsupported:    \xfd82 -> {253,130} -> \xc3bdc282 = failed
+-NOTICE:  UTF8 6 byte, unsupported:    \xfd8283 -> {253,130,131} -> \xc3bdc282c283 = failed
+-NOTICE:  UTF8 6 byte, unsupported:    \xfd828384 -> {253,130,131,132} -> \xc3bdc282c283c284 = failed
+-NOTICE:  UTF8 6 byte, unsupported:    \xfd82838485 -> {253,130,131,132,133} -> \xc3bdc282c283c284c285 = failed
+-NOTICE:  UTF8 6 byte, unsupported:    \xfd8283848586 -> {253,130,131,132,133,134} -> \xc3bdc282c283c284c285c286 = failed
+-NOTICE:  MULE_INTERNAL ASCII:         \x61 -> {97} -> \x61 = OK
+-NOTICE:  MULE_INTERNAL LC1, short:    \x81 -> {} -> \x = truncated
+-NOTICE:  MULE_INTERNAL LC1:           \x8182 -> {8454274} -> \x8182 = OK
+-NOTICE:  MULE_INTERNAL LC2, short:    \x90 -> {} -> \x = truncated
+-NOTICE:  MULE_INTERNAL LC2, short:    \x9082 -> {} -> \x = truncated
+-NOTICE:  MULE_INTERNAL LC2:           \x908283 -> {9470595} -> \x908283 = OK
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  function test_valid_server_encoding(text) does not exist
++LINE 1: test_valid_server_encoding(encoding)
++        ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++QUERY:  test_valid_server_encoding(encoding)
++CONTEXT:  PL/pgSQL function test_encoding(text,text,bytea) line 14 at IF
+ -- substring fetches a slice of a toasted value; unused tail of that slice is
+ -- an incomplete char (bug #19406)
+ CREATE TABLE toast_3b_utf8 (c text);
+@@ -399,6 +351,10 @@
+ 
+ -- diagnose incomplete char iff within the substring
+ UPDATE toast_3b_utf8 SET c = c || test_bytea_to_text('\xe280');
++ERROR:  function test_bytea_to_text(unknown) does not exist
++LINE 1: UPDATE toast_3b_utf8 SET c = c || test_bytea_to_text('\xe280...
++                                          ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT SUBSTRING(c FROM 4000 FOR 1) FROM toast_3b_utf8;
+  substring 
+ -----------
+@@ -406,7 +362,11 @@
+ (1 row)
+ 
+ SELECT SUBSTRING(c FROM 4001 FOR 1) FROM toast_3b_utf8;
+-ERROR:  invalid byte sequence for encoding "UTF8": 0xe2 0x80
++ substring 
++-----------
++ 
++(1 row)
++
+ -- substring needing last byte of its slice_size
+ ALTER TABLE toast_3b_utf8 RENAME TO toast_4b_utf8;
+ UPDATE toast_4b_utf8 SET c = repeat(U&'\+01F680', 3000);
+@@ -420,11 +380,17 @@
+ DROP TABLE toast_4b_utf8;
+ DROP FUNCTION test_encoding;
+ DROP FUNCTION test_wchars_to_text;
++ERROR:  could not find a function named "test_wchars_to_text"
+ DROP FUNCTION test_text_to_wchars;
++ERROR:  could not find a function named "test_text_to_wchars"
+ DROP FUNCTION test_valid_server_encoding;
++ERROR:  could not find a function named "test_valid_server_encoding"
+ DROP FUNCTION test_mblen_func;
++ERROR:  could not find a function named "test_mblen_func"
+ DROP FUNCTION test_bytea_to_text;
++ERROR:  could not find a function named "test_bytea_to_text"
+ DROP FUNCTION test_text_to_bytea;
++ERROR:  could not find a function named "test_text_to_bytea"
+ -- substring slow path: multi-byte escape char vs. multi-byte pattern char.
+ SELECT SUBSTRING('a' SIMILAR U&'\00AC' ESCAPE U&'\00A7');
+  substring

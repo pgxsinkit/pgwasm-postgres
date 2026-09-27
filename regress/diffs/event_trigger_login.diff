@@ -1,0 +1,25 @@
+diff -U3 expected/event_trigger_login.out results/event_trigger_login.out
+--- expected/event_trigger_login.out
++++ results/event_trigger_login.out
+@@ -10,19 +10,17 @@
+ CREATE EVENT TRIGGER on_login_trigger ON login EXECUTE PROCEDURE on_login_proc();
+ ALTER EVENT TRIGGER on_login_trigger ENABLE ALWAYS;
+ \c
+-NOTICE:  You are welcome!
+ SELECT COUNT(*) FROM user_logins;
+  count 
+ -------
+-     1
++     0
+ (1 row)
+ 
+ \c
+-NOTICE:  You are welcome!
+ SELECT COUNT(*) FROM user_logins;
+  count 
+ -------
+-     2
++     0
+ (1 row)
+ 
+ -- Check dathasloginevt in system catalog

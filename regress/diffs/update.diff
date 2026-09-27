@@ -1,0 +1,326 @@
+diff -U3 expected/update.out results/update.out
+--- expected/update.out
++++ results/update.out
+@@ -627,7 +627,9 @@
+ END $$ LANGUAGE plpgsql;
+ CREATE TRIGGER trig_d_1_15 BEFORE INSERT ON part_d_1_15
+    FOR EACH ROW EXECUTE PROCEDURE func_d_1_15();
++ERROR:  permission denied for table part_d_1_15
+ :init_range_parted;
++ERROR:  new row violates row-level security policy for table "range_parted"
+ SET SESSION AUTHORIZATION regress_range_parted_user;
+ -- Here, RLS checks should succeed while moving row from part_a_10_a_20 to
+ -- part_d_1_15. Even though the UPDATE is setting 'c' to an odd number, the
+@@ -635,53 +637,84 @@
+ UPDATE range_parted set a = 'b', c = 151 WHERE a = 'a' and c = 200;
+ RESET SESSION AUTHORIZATION;
+ :init_range_parted;
++ERROR:  new row violates row-level security policy for table "range_parted"
+ SET SESSION AUTHORIZATION regress_range_parted_user;
+ -- This should fail with RLS violation error. Even though the UPDATE is setting
+ -- 'c' to an even number, the trigger at the destination partition again makes
+ -- it an odd number.
+ UPDATE range_parted set a = 'b', c = 150 WHERE a = 'a' and c = 200;
+-ERROR:  new row violates row-level security policy for table "range_parted"
+ -- Cleanup
+ RESET SESSION AUTHORIZATION;
+ DROP TRIGGER trig_d_1_15 ON part_d_1_15;
++ERROR:  trigger "trig_d_1_15" for table "part_d_1_15" does not exist
+ DROP FUNCTION func_d_1_15();
+ -- Policy expression contains SubPlan
+ RESET SESSION AUTHORIZATION;
+ :init_range_parted;
++ERROR:  new row violates row-level security policy for table "range_parted"
+ CREATE POLICY policy_range_parted_subplan on range_parted
+     AS RESTRICTIVE for UPDATE USING (true)
+     WITH CHECK ((SELECT range_parted.c <= c1 FROM mintab));
++ERROR:  must be owner of table range_parted
+ SET SESSION AUTHORIZATION regress_range_parted_user;
+ -- fail, mintab has row with c1 = 120
+ UPDATE range_parted set a = 'b', c = 122 WHERE a = 'a' and c = 200;
+-ERROR:  new row violates row-level security policy "policy_range_parted_subplan" for table "range_parted"
+ -- ok
+ UPDATE range_parted set a = 'b', c = 120 WHERE a = 'a' and c = 200;
+ -- RLS policy expression contains whole row.
+ RESET SESSION AUTHORIZATION;
+ :init_range_parted;
++ERROR:  new row violates row-level security policy for table "range_parted"
+ CREATE POLICY policy_range_parted_wholerow on range_parted AS RESTRICTIVE for UPDATE USING (true)
+    WITH CHECK (range_parted = row('b', 10, 112, 1, NULL)::range_parted);
++ERROR:  must be owner of table range_parted
+ SET SESSION AUTHORIZATION regress_range_parted_user;
+ -- ok, should pass the RLS check
+ UPDATE range_parted set a = 'b', c = 112 WHERE a = 'a' and c = 200;
+ RESET SESSION AUTHORIZATION;
+ :init_range_parted;
++ERROR:  new row violates row-level security policy for table "range_parted"
+ SET SESSION AUTHORIZATION regress_range_parted_user;
+ -- fail, the whole row RLS check should fail
+ UPDATE range_parted set a = 'b', c = 116 WHERE a = 'a' and c = 200;
+-ERROR:  new row violates row-level security policy "policy_range_parted_wholerow" for table "range_parted"
+ -- Cleanup
+ RESET SESSION AUTHORIZATION;
+ DROP POLICY policy_range_parted ON range_parted;
++ERROR:  must be owner of relation range_parted
+ DROP POLICY policy_range_parted_subplan ON range_parted;
++ERROR:  policy "policy_range_parted_subplan" for table "range_parted" does not exist
+ DROP POLICY policy_range_parted_wholerow ON range_parted;
++ERROR:  policy "policy_range_parted_wholerow" for table "range_parted" does not exist
+ REVOKE ALL ON range_parted, mintab FROM regress_range_parted_user;
++WARNING:  no privileges could be revoked for "range_parted"
++WARNING:  no privileges could be revoked for column "tableoid" of relation "range_parted"
++WARNING:  no privileges could be revoked for column "cmax" of relation "range_parted"
++WARNING:  no privileges could be revoked for column "xmax" of relation "range_parted"
++WARNING:  no privileges could be revoked for column "cmin" of relation "range_parted"
++WARNING:  no privileges could be revoked for column "xmin" of relation "range_parted"
++WARNING:  no privileges could be revoked for column "ctid" of relation "range_parted"
++WARNING:  no privileges could be revoked for column "a" of relation "range_parted"
++WARNING:  no privileges could be revoked for column "b" of relation "range_parted"
++WARNING:  no privileges could be revoked for column "c" of relation "range_parted"
++WARNING:  no privileges could be revoked for column "d" of relation "range_parted"
++WARNING:  no privileges could be revoked for column "e" of relation "range_parted"
++WARNING:  no privileges could be revoked for "mintab"
++WARNING:  no privileges could be revoked for column "tableoid" of relation "mintab"
++WARNING:  no privileges could be revoked for column "cmax" of relation "mintab"
++WARNING:  no privileges could be revoked for column "xmax" of relation "mintab"
++WARNING:  no privileges could be revoked for column "cmin" of relation "mintab"
++WARNING:  no privileges could be revoked for column "xmin" of relation "mintab"
++WARNING:  no privileges could be revoked for column "ctid" of relation "mintab"
++WARNING:  no privileges could be revoked for column "c1" of relation "mintab"
+ DROP USER regress_range_parted_user;
++ERROR:  permission denied to drop role
++DETAIL:  Only roles with the CREATEROLE attribute and the ADMIN option on the target roles may drop roles.
+ DROP TABLE mintab;
++ERROR:  must be owner of table mintab
+ -- statement triggers with update row movement
+ ---------------------------------------------------
+ :init_range_parted;
++ERROR:  new row violates row-level security policy for table "range_parted"
+ CREATE FUNCTION trigfunc() returns trigger language plpgsql as
+ $$
+   begin
+@@ -700,123 +733,117 @@
+ -- Triggers on leaf partition part_c_1_100
+ CREATE TRIGGER c1_delete_trig
+   AFTER DELETE ON part_c_1_100 for each statement execute procedure trigfunc();
++ERROR:  permission denied for table part_c_1_100
+ CREATE TRIGGER c1_update_trig
+   AFTER UPDATE ON part_c_1_100 for each statement execute procedure trigfunc();
++ERROR:  permission denied for table part_c_1_100
+ CREATE TRIGGER c1_insert_trig
+   AFTER INSERT ON part_c_1_100 for each statement execute procedure trigfunc();
++ERROR:  permission denied for table part_c_1_100
+ -- Triggers on leaf partition part_d_1_15
+ CREATE TRIGGER d1_delete_trig
+   AFTER DELETE ON part_d_1_15 for each statement execute procedure trigfunc();
++ERROR:  permission denied for table part_d_1_15
+ CREATE TRIGGER d1_update_trig
+   AFTER UPDATE ON part_d_1_15 for each statement execute procedure trigfunc();
++ERROR:  permission denied for table part_d_1_15
+ CREATE TRIGGER d1_insert_trig
+   AFTER INSERT ON part_d_1_15 for each statement execute procedure trigfunc();
++ERROR:  permission denied for table part_d_1_15
+ -- Triggers on leaf partition part_d_15_20
+ CREATE TRIGGER d15_delete_trig
+   AFTER DELETE ON part_d_15_20 for each statement execute procedure trigfunc();
++ERROR:  permission denied for table part_d_15_20
+ CREATE TRIGGER d15_update_trig
+   AFTER UPDATE ON part_d_15_20 for each statement execute procedure trigfunc();
++ERROR:  permission denied for table part_d_15_20
+ CREATE TRIGGER d15_insert_trig
+   AFTER INSERT ON part_d_15_20 for each statement execute procedure trigfunc();
++ERROR:  permission denied for table part_d_15_20
+ -- Move all rows from part_c_100_200 to part_c_1_100. None of the delete or
+ -- insert statement triggers should be fired.
+ UPDATE range_parted set c = c - 50 WHERE c > 97;
+ NOTICE:  trigger = parent_update_trig fired on table range_parted during UPDATE
+ :show_data;
+-    partname    | a | b  |  c  | d  | e 
+-----------------+---+----+-----+----+---
+- part_a_10_a_20 | a | 10 | 150 |  1 | 
+- part_a_1_a_10  | a |  1 |   1 |  1 | 
+- part_c_1_100   | b | 12 |  96 |  1 | 
+- part_c_1_100   | b | 13 |  97 |  2 | 
+- part_c_1_100   | b | 15 |  55 | 16 | 
+- part_c_1_100   | b | 17 |  55 | 19 | 
+-(6 rows)
++ partname | a | b | c | d | e 
++----------+---+---+---+---+---
++(0 rows)
+ 
+ DROP TRIGGER parent_delete_trig ON range_parted;
++ERROR:  must be owner of relation range_parted
+ DROP TRIGGER parent_update_trig ON range_parted;
++ERROR:  must be owner of relation range_parted
+ DROP TRIGGER parent_insert_trig ON range_parted;
++ERROR:  must be owner of relation range_parted
+ DROP TRIGGER c1_delete_trig ON part_c_1_100;
++ERROR:  trigger "c1_delete_trig" for table "part_c_1_100" does not exist
+ DROP TRIGGER c1_update_trig ON part_c_1_100;
++ERROR:  trigger "c1_update_trig" for table "part_c_1_100" does not exist
+ DROP TRIGGER c1_insert_trig ON part_c_1_100;
++ERROR:  trigger "c1_insert_trig" for table "part_c_1_100" does not exist
+ DROP TRIGGER d1_delete_trig ON part_d_1_15;
++ERROR:  trigger "d1_delete_trig" for table "part_d_1_15" does not exist
+ DROP TRIGGER d1_update_trig ON part_d_1_15;
++ERROR:  trigger "d1_update_trig" for table "part_d_1_15" does not exist
+ DROP TRIGGER d1_insert_trig ON part_d_1_15;
++ERROR:  trigger "d1_insert_trig" for table "part_d_1_15" does not exist
+ DROP TRIGGER d15_delete_trig ON part_d_15_20;
++ERROR:  trigger "d15_delete_trig" for table "part_d_15_20" does not exist
+ DROP TRIGGER d15_update_trig ON part_d_15_20;
++ERROR:  trigger "d15_update_trig" for table "part_d_15_20" does not exist
+ DROP TRIGGER d15_insert_trig ON part_d_15_20;
++ERROR:  trigger "d15_insert_trig" for table "part_d_15_20" does not exist
+ -- Creating default partition for range
+ :init_range_parted;
++ERROR:  new row violates row-level security policy for table "range_parted"
+ create table part_def partition of range_parted default;
++ERROR:  must be owner of table range_parted
+ \d+ part_def
+-                                       Table "public.part_def"
+- Column |       Type        | Collation | Nullable | Default | Storage  | Stats target | Description 
+---------+-------------------+-----------+----------+---------+----------+--------------+-------------
+- a      | text              |           |          |         | extended |              | 
+- b      | bigint            |           |          |         | plain    |              | 
+- c      | numeric           |           |          |         | main     |              | 
+- d      | integer           |           |          |         | plain    |              | 
+- e      | character varying |           |          |         | extended |              | 
+-Partition of: range_parted DEFAULT
+-Partition constraint: (NOT ((a IS NOT NULL) AND (b IS NOT NULL) AND (((a = 'a'::text) AND (b >= '1'::bigint) AND (b < '10'::bigint)) OR ((a = 'a'::text) AND (b >= '10'::bigint) AND (b < '20'::bigint)) OR ((a = 'b'::text) AND (b >= '1'::bigint) AND (b < '10'::bigint)) OR ((a = 'b'::text) AND (b >= '10'::bigint) AND (b < '20'::bigint)) OR ((a = 'b'::text) AND (b >= '20'::bigint) AND (b < '30'::bigint)))))
+-
+ insert into range_parted values ('c', 9);
++ERROR:  no partition of relation "range_parted" found for row
+ -- ok
+ update part_def set a = 'd' where a = 'c';
++ERROR:  relation "part_def" does not exist
++LINE 1: update part_def set a = 'd' where a = 'c';
++               ^
+ -- fail
+ update part_def set a = 'a' where a = 'd';
+-ERROR:  new row for relation "part_def" violates partition constraint
+-DETAIL:  Failing row contains (a, 9, null, null, null).
++ERROR:  relation "part_def" does not exist
++LINE 1: update part_def set a = 'a' where a = 'd';
++               ^
+ :show_data;
+-    partname    | a | b  |  c  | d  | e 
+-----------------+---+----+-----+----+---
+- part_a_10_a_20 | a | 10 | 200 |  1 | 
+- part_a_1_a_10  | a |  1 |   1 |  1 | 
+- part_c_1_100   | b | 12 |  96 |  1 | 
+- part_c_1_100   | b | 13 |  97 |  2 | 
+- part_d_15_20   | b | 15 | 105 | 16 | 
+- part_d_15_20   | b | 17 | 105 | 19 | 
+- part_def       | d |  9 |     |    | 
+-(7 rows)
++ partname | a | b | c | d | e 
++----------+---+---+---+---+---
++(0 rows)
+ 
+ -- Update row movement from non-default to default partition.
+ -- fail, default partition is not under part_a_10_a_20;
+ UPDATE part_a_10_a_20 set a = 'ad' WHERE a = 'a';
+-ERROR:  new row for relation "part_a_10_a_20" violates partition constraint
+-DETAIL:  Failing row contains (ad, 10, 200, 1, null).
++ERROR:  permission denied for table part_a_10_a_20
+ -- ok
+ UPDATE range_parted set a = 'ad' WHERE a = 'a';
++NOTICE:  trigger = parent_update_trig fired on table range_parted during UPDATE
+ UPDATE range_parted set a = 'bd' WHERE a = 'b';
++NOTICE:  trigger = parent_update_trig fired on table range_parted during UPDATE
+ :show_data;
+- partname | a  | b  |  c  | d  | e 
+-----------+----+----+-----+----+---
+- part_def | ad |  1 |   1 |  1 | 
+- part_def | ad | 10 | 200 |  1 | 
+- part_def | bd | 12 |  96 |  1 | 
+- part_def | bd | 13 |  97 |  2 | 
+- part_def | bd | 15 | 105 | 16 | 
+- part_def | bd | 17 | 105 | 19 | 
+- part_def | d  |  9 |     |    | 
+-(7 rows)
++ partname | a | b | c | d | e 
++----------+---+---+---+---+---
++(0 rows)
+ 
+ -- Update row movement from default to non-default partitions.
+ -- ok
+ UPDATE range_parted set a = 'a' WHERE a = 'ad';
++NOTICE:  trigger = parent_update_trig fired on table range_parted during UPDATE
+ UPDATE range_parted set a = 'b' WHERE a = 'bd';
++NOTICE:  trigger = parent_update_trig fired on table range_parted during UPDATE
+ :show_data;
+-    partname    | a | b  |  c  | d  | e 
+-----------------+---+----+-----+----+---
+- part_a_10_a_20 | a | 10 | 200 |  1 | 
+- part_a_1_a_10  | a |  1 |   1 |  1 | 
+- part_c_1_100   | b | 12 |  96 |  1 | 
+- part_c_1_100   | b | 13 |  97 |  2 | 
+- part_d_15_20   | b | 15 | 105 | 16 | 
+- part_d_15_20   | b | 17 | 105 | 19 | 
+- part_def       | d |  9 |     |    | 
+-(7 rows)
++ partname | a | b | c | d | e 
++----------+---+---+---+---+---
++(0 rows)
+ 
+ -- Cleanup: range_parted no longer needed.
+ DROP TABLE range_parted;
++ERROR:  must be owner of table range_parted
+ CREATE TABLE list_parted (
+ 	a text,
+ 	b int
+@@ -1009,26 +1036,50 @@
+ $$ begin return (a + seed); end; $$ language 'plpgsql' immutable;
+ create operator class custom_opclass for type int4 using hash as
+ operator 1 = , function 2 dummy_hashint4(int4, int8);
++ERROR:  must be superuser to create an operator class
+ create table hash_parted (
+ 	a int,
+ 	b int
+ ) partition by hash (a custom_opclass, b custom_opclass);
++ERROR:  operator class "custom_opclass" does not exist for access method "hash"
+ create table hpart1 partition of hash_parted for values with (modulus 2, remainder 1);
++ERROR:  relation "hash_parted" does not exist
+ create table hpart2 partition of hash_parted for values with (modulus 4, remainder 2);
++ERROR:  relation "hash_parted" does not exist
+ create table hpart3 partition of hash_parted for values with (modulus 8, remainder 0);
++ERROR:  relation "hash_parted" does not exist
+ create table hpart4 partition of hash_parted for values with (modulus 8, remainder 4);
++ERROR:  relation "hash_parted" does not exist
+ insert into hpart1 values (1, 1);
++ERROR:  relation "hpart1" does not exist
++LINE 1: insert into hpart1 values (1, 1);
++                    ^
+ insert into hpart2 values (2, 5);
++ERROR:  relation "hpart2" does not exist
++LINE 1: insert into hpart2 values (2, 5);
++                    ^
+ insert into hpart4 values (3, 4);
++ERROR:  relation "hpart4" does not exist
++LINE 1: insert into hpart4 values (3, 4);
++                    ^
+ -- fail
+ update hpart1 set a = 3, b=4 where a = 1;
+-ERROR:  new row for relation "hpart1" violates partition constraint
+-DETAIL:  Failing row contains (3, 4).
++ERROR:  relation "hpart1" does not exist
++LINE 1: update hpart1 set a = 3, b=4 where a = 1;
++               ^
+ -- ok, row movement
+ update hash_parted set b = b - 1 where b = 1;
++ERROR:  relation "hash_parted" does not exist
++LINE 1: update hash_parted set b = b - 1 where b = 1;
++               ^
+ -- ok
+ update hash_parted set b = b + 8 where b = 1;
++ERROR:  relation "hash_parted" does not exist
++LINE 1: update hash_parted set b = b + 8 where b = 1;
++               ^
+ -- cleanup
+ drop table hash_parted;
++ERROR:  table "hash_parted" does not exist
+ drop operator class custom_opclass using hash;
++ERROR:  operator class "custom_opclass" does not exist for access method "hash"
+ drop function dummy_hashint4(a int4, seed int8);

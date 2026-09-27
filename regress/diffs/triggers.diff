@@ -1,0 +1,117 @@
+diff -U3 expected/triggers.out results/triggers.out
+--- expected/triggers.out
++++ results/triggers.out
+@@ -9,11 +9,13 @@
+         RETURNS trigger
+         AS :'regresslib'
+         LANGUAGE C;
++ERROR:  could not access file "@abs_builddir@/lib/regress.so": No such file or directory
+ -- Check behavior when trigger returns unmodified trigtuple
+ create table trigtest (f1 int, f2 text);
+ create trigger trigger_return_old
+ 	before insert or delete or update on trigtest
+ 	for each row execute procedure trigger_return_old();
++ERROR:  function trigger_return_old() does not exist
+ insert into trigtest values(1, 'foo');
+ select * from trigtest;
+  f1 | f2  
+@@ -23,9 +25,9 @@
+ 
+ update trigtest set f2 = f2 || 'bar';
+ select * from trigtest;
+- f1 | f2  
+-----+-----
+-  1 | foo
++ f1 |   f2   
++----+--------
++  1 | foobar
+ (1 row)
+ 
+ delete from trigtest;
+@@ -49,9 +51,9 @@
+ 
+ update trigtest set f2 = f2 || 'bar';
+ select * from trigtest;
+- f1 | f2  
+-----+-----
+- 10 | foo
++ f1  |   f2   
++-----+--------
++ 100 | foobar
+ (1 row)
+ 
+ delete from trigtest;
+@@ -72,9 +74,9 @@
+ 
+ update trigtest set f2 = f2 || 'bar';
+ select * from trigtest;
+-  f1  | f2  
+-------+-----
+- 1000 | foo
++  f1   |   f2   
++-------+--------
++ 10000 | foobar
+ (1 row)
+ 
+ delete from trigtest;
+@@ -93,9 +95,9 @@
+ 
+ update trigtest set f2 = f2 || 'bar';
+ select * from trigtest;
+- f1  | f2  
+------+-----
+- 100 | foo
++ f1  |   f2   
++-----+--------
++ 100 | foobar
+ (1 row)
+ 
+ delete from trigtest;
+@@ -113,6 +115,7 @@
+ create trigger trigger_return_old
+ 	before insert or delete or update on trigtest
+ 	for each row execute procedure trigger_return_old();
++ERROR:  function trigger_return_old() does not exist
+ insert into trigtest values(1);
+ select * from trigtest;
+  a | b |   c   
+@@ -130,32 +133,31 @@
+ update trigtest set a = 2 where a = 1 returning *;
+  a | b |   c   | d  
+ ---+---+-------+----
+- 1 | t | xyzzy | 42
++ 2 | t | xyzzy | 42
+ (1 row)
+ 
+ select * from trigtest;
+  a | b |   c   | d  
+ ---+---+-------+----
+- 1 | t | xyzzy | 42
++ 2 | t | xyzzy | 42
+ (1 row)
+ 
+ alter table trigtest drop column b;
+ select * from trigtest;
+  a |   c   | d  
+ ---+-------+----
+- 1 | xyzzy | 42
++ 2 | xyzzy | 42
+ (1 row)
+ 
+ update trigtest set a = 2 where a = 1 returning *;
+- a |   c   | d  
+----+-------+----
+- 1 | xyzzy | 42
+-(1 row)
++ a | c | d 
++---+---+---
++(0 rows)
+ 
+ select * from trigtest;
+  a |   c   | d  
+ ---+-------+----
+- 1 | xyzzy | 42
++ 2 | xyzzy | 42
+ (1 row)
+ 
+ drop table trigtest;

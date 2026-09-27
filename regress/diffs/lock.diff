@@ -1,0 +1,18 @@
+diff -U3 expected/lock.out results/lock.out
+--- expected/lock.out
++++ results/lock.out
+@@ -244,9 +244,9 @@
+     RETURNS bool
+     AS :'regresslib'
+     LANGUAGE C;
++ERROR:  could not access file "@abs_builddir@/lib/regress.so": No such file or directory
+ SELECT test_atomic_ops();
+- test_atomic_ops 
+------------------
+- t
+-(1 row)
+-
++ERROR:  function test_atomic_ops() does not exist
++LINE 1: SELECT test_atomic_ops();
++               ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.

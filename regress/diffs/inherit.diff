@@ -1,0 +1,71 @@
+diff -U3 expected/inherit.out results/inherit.out
+--- expected/inherit.out
++++ results/inherit.out
+@@ -2921,7 +2921,10 @@
+ reset session authorization;
+ drop table inh_parent, inh_child;
+ revoke all on schema public from regress_alice, regress_bob;
++WARNING:  no privileges could be revoked for "public"
+ drop role regress_alice, regress_bob;
++ERROR:  permission denied to drop role
++DETAIL:  Only roles with the CREATEROLE attribute and the ADMIN option on the target roles may drop roles.
+ --
+ -- Check use of temporary tables with inheritance trees
+ --
+@@ -3639,9 +3642,14 @@
+   select 1, 'a', left(fipshash(i::text), 5) from generate_series(0, 100) i;
+ analyze permtest_parent;
+ create role regress_no_child_access;
++ERROR:  permission denied to create role
++DETAIL:  Only roles with the CREATEROLE attribute may create roles.
+ revoke all on permtest_grandchild from regress_no_child_access;
++ERROR:  role "regress_no_child_access" does not exist
+ grant select on permtest_parent to regress_no_child_access;
++ERROR:  role "regress_no_child_access" does not exist
+ set session authorization regress_no_child_access;
++ERROR:  role "regress_no_child_access" does not exist
+ -- without stats access, these queries would produce hash join plans:
+ explain (costs off)
+   select * from permtest_parent p1 inner join permtest_parent p2
+@@ -3669,8 +3677,11 @@
+ 
+ reset session authorization;
+ revoke all on permtest_parent from regress_no_child_access;
++ERROR:  role "regress_no_child_access" does not exist
+ grant select(a,c) on permtest_parent to regress_no_child_access;
++ERROR:  role "regress_no_child_access" does not exist
+ set session authorization regress_no_child_access;
++ERROR:  role "regress_no_child_access" does not exist
+ explain (costs off)
+   select p2.a, p1.c from permtest_parent p1 inner join permtest_parent p2
+   on p1.a = p2.a and p1.c ~ 'a1$';
+@@ -3687,19 +3698,21 @@
+ explain (costs off)
+   select p2.a, p1.c from permtest_parent p1 inner join permtest_parent p2
+   on p1.a = p2.a and left(p1.c, 3) ~ 'a1$';
+-                     QUERY PLAN                     
+-----------------------------------------------------
+- Hash Join
+-   Hash Cond: (p2.a = p1.a)
++                  QUERY PLAN                  
++----------------------------------------------
++ Nested Loop
++   Join Filter: (p1.a = p2.a)
++   ->  Seq Scan on permtest_grandchild p1
++         Filter: ("left"(c, 3) ~ 'a1$'::text)
+    ->  Seq Scan on permtest_grandchild p2
+-   ->  Hash
+-         ->  Seq Scan on permtest_grandchild p1
+-               Filter: ("left"(c, 3) ~ 'a1$'::text)
+-(6 rows)
++(5 rows)
+ 
+ reset session authorization;
+ revoke all on permtest_parent from regress_no_child_access;
++ERROR:  role "regress_no_child_access" does not exist
+ drop role regress_no_child_access;
++ERROR:  permission denied to drop role
++DETAIL:  Only roles with the CREATEROLE attribute and the ADMIN option on the target roles may drop roles.
+ drop table permtest_parent;
+ -- Verify that constraint errors across partition root / child are
+ -- handled correctly (Bug #16293)

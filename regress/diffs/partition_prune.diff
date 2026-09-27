@@ -1,0 +1,77 @@
+diff -U3 expected/partition_prune.out results/partition_prune.out
+--- expected/partition_prune.out
++++ results/partition_prune.out
+@@ -4156,19 +4156,16 @@
+ -- Ensure that listp_12_2 is not scanned.  (The nested Append is not seen in
+ -- the plan as it's pulled in setref.c due to having just a single subnode).
+ select explain_parallel_append('select * from listp where a = (select 1);');
+-                       explain_parallel_append                        
+-----------------------------------------------------------------------
+- Gather (actual rows=N loops=N)
+-   Workers Planned: 2
+-   Workers Launched: N
++                   explain_parallel_append                    
++--------------------------------------------------------------
++ Append (actual rows=N loops=N)
+    InitPlan 1
+      ->  Result (actual rows=N loops=N)
+-   ->  Parallel Append (actual rows=N loops=N)
+-         ->  Seq Scan on listp_12_1 listp_1 (actual rows=N loops=N)
+-               Filter: (a = (InitPlan 1).col1)
+-         ->  Parallel Seq Scan on listp_12_2 listp_2 (never executed)
+-               Filter: (a = (InitPlan 1).col1)
+-(10 rows)
++   ->  Seq Scan on listp_12_1 listp_1 (actual rows=N loops=N)
++         Filter: (a = (InitPlan 1).col1)
++   ->  Seq Scan on listp_12_2 listp_2 (never executed)
++         Filter: (a = (InitPlan 1).col1)
++(7 rows)
+ 
+ -- Like the above but throw some more complexity at the planner by adding
+ -- a UNION ALL.  We expect both sides of the union not to scan the
+@@ -4177,27 +4174,24 @@
+ 'select * from listp where a = (select 1)
+   union all
+ select * from listp where a = (select 2);');
+-                              explain_parallel_append                              
+------------------------------------------------------------------------------------
+- Gather (actual rows=N loops=N)
+-   Workers Planned: 2
+-   Workers Launched: N
+-   ->  Parallel Append (actual rows=N loops=N)
+-         ->  Parallel Append (actual rows=N loops=N)
+-               InitPlan 2
+-                 ->  Result (actual rows=N loops=N)
+-               ->  Seq Scan on listp_12_1 listp_1 (never executed)
+-                     Filter: (a = (InitPlan 2).col1)
+-               ->  Parallel Seq Scan on listp_12_2 listp_2 (actual rows=N loops=N)
+-                     Filter: (a = (InitPlan 2).col1)
+-         ->  Parallel Append (actual rows=N loops=N)
+-               InitPlan 1
+-                 ->  Result (actual rows=N loops=N)
+-               ->  Seq Scan on listp_12_1 listp_4 (actual rows=N loops=N)
+-                     Filter: (a = (InitPlan 1).col1)
+-               ->  Parallel Seq Scan on listp_12_2 listp_5 (never executed)
+-                     Filter: (a = (InitPlan 1).col1)
+-(18 rows)
++                      explain_parallel_append                       
++--------------------------------------------------------------------
++ Append (actual rows=N loops=N)
++   ->  Append (actual rows=N loops=N)
++         InitPlan 1
++           ->  Result (actual rows=N loops=N)
++         ->  Seq Scan on listp_12_1 listp_1 (actual rows=N loops=N)
++               Filter: (a = (InitPlan 1).col1)
++         ->  Seq Scan on listp_12_2 listp_2 (never executed)
++               Filter: (a = (InitPlan 1).col1)
++   ->  Append (actual rows=N loops=N)
++         InitPlan 2
++           ->  Result (actual rows=N loops=N)
++         ->  Seq Scan on listp_12_1 listp_4 (never executed)
++               Filter: (a = (InitPlan 2).col1)
++         ->  Seq Scan on listp_12_2 listp_5 (actual rows=N loops=N)
++               Filter: (a = (InitPlan 2).col1)
++(15 rows)
+ 
+ drop table listp;
+ reset parallel_tuple_cost;

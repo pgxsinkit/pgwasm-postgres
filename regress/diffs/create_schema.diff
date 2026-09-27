@@ -1,0 +1,12 @@
+diff -U3 expected/create_schema.out results/create_schema.out
+--- expected/create_schema.out
++++ results/create_schema.out
+@@ -81,7 +81,7 @@
+  id     | integer |           |          | 
+ 
+ DROP SCHEMA regress_create_schema_role CASCADE;
+-NOTICE:  drop cascades to table tab
++NOTICE:  drop cascades to table regress_create_schema_role.tab
+ -- Again, with a schema name and a role specification.
+ CREATE SCHEMA regress_schema_1 AUTHORIZATION CURRENT_ROLE
+   CREATE TABLE regress_schema_1.tab (id int);

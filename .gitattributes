@@ -3,3 +3,5 @@
 /patches/** -text
 /overlay/** -text
 /tests/fixtures/** binary
+# The pg_regress baseline's diffs are compared byte for byte with a run's (bun run regress).
+/regress/diffs/** -text

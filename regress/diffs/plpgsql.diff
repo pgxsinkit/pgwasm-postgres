@@ -1,0 +1,24 @@
+diff -U3 expected/plpgsql.out results/plpgsql.out
+--- expected/plpgsql.out
++++ results/plpgsql.out
+@@ -4111,15 +4111,11 @@
+ $$ language plpgsql parallel safe;
+ set debug_parallel_query to on;
+ explain (verbose, costs off) select error_trap_test();
+-            QUERY PLAN             
+------------------------------------
+- Gather
+-   Output: (error_trap_test())
+-   Workers Planned: 1
+-   Single Copy: true
+-   ->  Result
+-         Output: error_trap_test()
+-(6 rows)
++         QUERY PLAN          
++-----------------------------
++ Result
++   Output: error_trap_test()
++(2 rows)
+ 
+ select error_trap_test();
+       error_trap_test

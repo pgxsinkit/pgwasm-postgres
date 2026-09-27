@@ -1,0 +1,59 @@
+diff -U3 expected/foreign_data.out results/foreign_data.out
+--- expected/foreign_data.out
++++ results/foreign_data.out
+@@ -9,6 +9,7 @@
+     RETURNS fdw_handler
+     AS :'regresslib', 'test_fdw_handler'
+     LANGUAGE C;
++ERROR:  could not access file "@abs_builddir@/lib/regress.so": No such file or directory
+ -- Clean up in case a prior regression run failed
+ -- Suppress NOTICE messages when roles don't exist
+ SET client_min_messages TO 'warning';
+@@ -102,11 +103,11 @@
+ CREATE FOREIGN DATA WRAPPER test_fdw HANDLER invalid_fdw_handler;  -- ERROR
+ ERROR:  function invalid_fdw_handler must return type fdw_handler
+ CREATE FOREIGN DATA WRAPPER test_fdw HANDLER test_fdw_handler HANDLER invalid_fdw_handler;  -- ERROR
+-ERROR:  conflicting or redundant options
+-LINE 1: ...GN DATA WRAPPER test_fdw HANDLER test_fdw_handler HANDLER in...
+-                                                             ^
++ERROR:  function test_fdw_handler() does not exist
+ CREATE FOREIGN DATA WRAPPER test_fdw HANDLER test_fdw_handler;
++ERROR:  function test_fdw_handler() does not exist
+ DROP FOREIGN DATA WRAPPER test_fdw;
++ERROR:  foreign-data wrapper "test_fdw" does not exist
+ -- ALTER FOREIGN DATA WRAPPER
+ ALTER FOREIGN DATA WRAPPER foo OPTIONS (nonexistent 'fdw');         -- ERROR
+ ERROR:  invalid option "nonexistent"
+@@ -213,11 +214,9 @@
+ ALTER FOREIGN DATA WRAPPER foo HANDLER invalid_fdw_handler;  -- ERROR
+ ERROR:  function invalid_fdw_handler must return type fdw_handler
+ ALTER FOREIGN DATA WRAPPER foo HANDLER test_fdw_handler HANDLER anything;  -- ERROR
+-ERROR:  conflicting or redundant options
+-LINE 1: ...FOREIGN DATA WRAPPER foo HANDLER test_fdw_handler HANDLER an...
+-                                                             ^
++ERROR:  function test_fdw_handler() does not exist
+ ALTER FOREIGN DATA WRAPPER foo HANDLER test_fdw_handler;
+-WARNING:  changing the foreign-data wrapper handler can change behavior of existing foreign tables
++ERROR:  function test_fdw_handler() does not exist
+ DROP FUNCTION invalid_fdw_handler();
+ -- DROP FOREIGN DATA WRAPPER
+ DROP FOREIGN DATA WRAPPER nonexistent;                      -- ERROR
+@@ -225,12 +224,12 @@
+ DROP FOREIGN DATA WRAPPER IF EXISTS nonexistent;
+ NOTICE:  foreign-data wrapper "nonexistent" does not exist, skipping
+ \dew+
+-                                                             List of foreign-data wrappers
+-    Name    |           Owner           |     Handler      |        Validator         | Access privileges |         FDW options          | Description 
+-------------+---------------------------+------------------+--------------------------+-------------------+------------------------------+-------------
+- dummy      | regress_foreign_data_user | -                | -                        |                   |                              | useless
+- foo        | regress_test_role_super   | test_fdw_handler | -                        |                   | (b '3', c '4', a '2', d '5') | 
+- postgresql | regress_foreign_data_user | -                | postgresql_fdw_validator |                   |                              | 
++                                                        List of foreign-data wrappers
++    Name    |           Owner           | Handler |        Validator         | Access privileges |         FDW options          | Description 
++------------+---------------------------+---------+--------------------------+-------------------+------------------------------+-------------
++ dummy      | regress_foreign_data_user | -       | -                        |                   |                              | useless
++ foo        | regress_test_role_super   | -       | -                        |                   | (b '3', c '4', a '2', d '5') | 
++ postgresql | regress_foreign_data_user | -       | postgresql_fdw_validator |                   |                              | 
+ (3 rows)
+ 
+ DROP ROLE regress_test_role_super;                          -- ERROR

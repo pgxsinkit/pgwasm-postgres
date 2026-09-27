@@ -1,0 +1,78 @@
+diff -U3 expected/guc.out results/guc.out
+--- expected/guc.out
++++ results/guc.out
+@@ -555,9 +555,9 @@
+ -- Check what happens when you try to set a "custom" GUC within the
+ -- namespace of an extension.
+ SET plpgsql.extra_foo_warnings = true;  -- allowed if plpgsql is not loaded yet
++ERROR:  invalid configuration parameter name "plpgsql.extra_foo_warnings"
++DETAIL:  "plpgsql" is a reserved prefix.
+ LOAD 'plpgsql';  -- this will throw a warning and delete the variable
+-WARNING:  invalid configuration parameter name "plpgsql.extra_foo_warnings", removing it
+-DETAIL:  "plpgsql" is now a reserved prefix.
+ SET plpgsql.extra_foo_warnings = true;  -- now, it's an error
+ ERROR:  invalid configuration parameter name "plpgsql.extra_foo_warnings"
+ DETAIL:  "plpgsql" is a reserved prefix.
+@@ -659,10 +659,12 @@
+ SELECT current_user = 'regress_guc_user';
+  ?column? 
+ ----------
+- f
++ t
+ (1 row)
+ 
+ DROP ROLE regress_guc_user;
++ERROR:  permission denied to drop role
++DETAIL:  Only roles with the CREATEROLE attribute and the ADMIN option on the target roles may drop roles.
+ --
+ -- search_path should react to changes in pg_namespace
+ --
+@@ -674,13 +676,15 @@
+ (1 row)
+ 
+ create schema not_there_initially;
++ERROR:  permission denied for database regression
+ select current_schemas(false);
+-       current_schemas        
+-------------------------------
+- {public,not_there_initially}
++ current_schemas 
++-----------------
++ {public}
+ (1 row)
+ 
+ drop schema not_there_initially;
++ERROR:  schema "not_there_initially" does not exist
+ select current_schemas(false);
+  current_schemas 
+ -----------------
+@@ -831,15 +835,18 @@
+ -- Test that disabling track_activities disables query ID reporting in
+ -- pg_stat_activity.
+ SET compute_query_id = on;
++ERROR:  permission denied to set parameter "compute_query_id"
+ SET track_activities = on;
++ERROR:  permission denied to set parameter "track_activities"
+ SELECT query_id IS NOT NULL AS qid_set FROM pg_stat_activity
+   WHERE pid = pg_backend_pid();
+  qid_set 
+ ---------
+- t
++ f
+ (1 row)
+ 
+ SET track_activities = off;
++ERROR:  permission denied to set parameter "track_activities"
+ SELECT query_id IS NOT NULL AS qid_set FROM pg_stat_activity
+   WHERE pid = pg_backend_pid();
+  qid_set 
+@@ -848,7 +855,9 @@
+ (1 row)
+ 
+ RESET track_activities;
++ERROR:  permission denied to set parameter "track_activities"
+ RESET compute_query_id;
++ERROR:  permission denied to set parameter "compute_query_id"
+ -- Test GUC categories and flag patterns
+ SELECT pg_settings_get_flags(NULL);
+  pg_settings_get_flags

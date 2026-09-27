@@ -1,0 +1,147 @@
+diff -U3 expected/tsdicts.out results/tsdicts.out
+--- expected/tsdicts.out
++++ results/tsdicts.out
+@@ -513,12 +513,12 @@
+ 						DictFile=thesaurus_sample,
+ 						Dictionary=english_stem
+ );
++ERROR:  incompatible library "/pglite/lib/postgresql/dict_snowball.so": missing magic block
++HINT:  Extension libraries are required to use the PG_MODULE_MAGIC macro.
+ SELECT ts_lexize('thesaurus', 'one');
+- ts_lexize 
+------------
+- {1}
+-(1 row)
+-
++ERROR:  text search dictionary "thesaurus" does not exist
++LINE 1: SELECT ts_lexize('thesaurus', 'one');
++                         ^
+ -- Test ispell dictionary in configuration
+ CREATE TEXT SEARCH CONFIGURATION ispell_tst (
+ 						COPY=english
+@@ -527,11 +527,8 @@
+ 	word, numword, asciiword, hword, numhword, asciihword, hword_part, hword_numpart, hword_asciipart
+ 	WITH ispell, english_stem;
+ SELECT to_tsvector('ispell_tst', 'Booking the skies after rebookings for footballklubber from a foot');
+-                                            to_tsvector                                             
+-----------------------------------------------------------------------------------------------------
+- 'ball':7 'book':1,5 'booking':1,5 'foot':7,10 'football':7 'footballklubber':7 'klubber':7 'sky':3
+-(1 row)
+-
++ERROR:  incompatible library "/pglite/lib/postgresql/dict_snowball.so": missing magic block
++HINT:  Extension libraries are required to use the PG_MODULE_MAGIC macro.
+ SELECT to_tsquery('ispell_tst', 'footballklubber');
+                                 to_tsquery                                
+ --------------------------------------------------------------------------
+@@ -551,11 +548,8 @@
+ ALTER TEXT SEARCH CONFIGURATION hunspell_tst ALTER MAPPING
+ 	REPLACE ispell WITH hunspell;
+ SELECT to_tsvector('hunspell_tst', 'Booking the skies after rebookings for footballklubber from a foot');
+-                                            to_tsvector                                             
+-----------------------------------------------------------------------------------------------------
+- 'ball':7 'book':1,5 'booking':1,5 'foot':7,10 'football':7 'footballklubber':7 'klubber':7 'sky':3
+-(1 row)
+-
++ERROR:  incompatible library "/pglite/lib/postgresql/dict_snowball.so": missing magic block
++HINT:  Extension libraries are required to use the PG_MODULE_MAGIC macro.
+ SELECT to_tsquery('hunspell_tst', 'footballklubber');
+                                 to_tsquery                                
+ --------------------------------------------------------------------------
+@@ -584,11 +578,8 @@
+ ALTER TEXT SEARCH CONFIGURATION hunspell_tst ALTER MAPPING
+ 	REPLACE hunspell WITH hunspell_long;
+ SELECT to_tsvector('hunspell_tst', 'Booking the skies after rebookings for footballklubber from a foot');
+-                                            to_tsvector                                             
+-----------------------------------------------------------------------------------------------------
+- 'ball':7 'book':1,5 'booking':1,5 'foot':7,10 'football':7 'footballklubber':7 'klubber':7 'sky':3
+-(1 row)
+-
++ERROR:  incompatible library "/pglite/lib/postgresql/dict_snowball.so": missing magic block
++HINT:  Extension libraries are required to use the PG_MODULE_MAGIC macro.
+ SELECT to_tsquery('hunspell_tst', 'footballklubber');
+                                 to_tsquery                                
+ --------------------------------------------------------------------------
+@@ -605,11 +596,8 @@
+ ALTER TEXT SEARCH CONFIGURATION hunspell_tst ALTER MAPPING
+ 	REPLACE hunspell_long WITH hunspell_num;
+ SELECT to_tsvector('hunspell_tst', 'Booking the skies after rebookings for footballklubber from a foot');
+-                                            to_tsvector                                             
+-----------------------------------------------------------------------------------------------------
+- 'ball':7 'book':1,5 'booking':1,5 'foot':7,10 'football':7 'footballklubber':7 'klubber':7 'sky':3
+-(1 row)
+-
++ERROR:  incompatible library "/pglite/lib/postgresql/dict_snowball.so": missing magic block
++HINT:  Extension libraries are required to use the PG_MODULE_MAGIC macro.
+ SELECT to_tsquery('hunspell_tst', 'footballklubber');
+                                 to_tsquery                                
+ --------------------------------------------------------------------------
+@@ -630,29 +618,17 @@
+ 	asciiword, hword_asciipart, asciihword
+ 	WITH synonym, english_stem;
+ SELECT to_tsvector('synonym_tst', 'Postgresql is often called as postgres or pgsql and pronounced as postgre');
+-                    to_tsvector                    
+----------------------------------------------------
+- 'call':4 'often':3 'pgsql':1,6,8,12 'pronounc':10
+-(1 row)
+-
++ERROR:  incompatible library "/pglite/lib/postgresql/dict_snowball.so": missing magic block
++HINT:  Extension libraries are required to use the PG_MODULE_MAGIC macro.
+ SELECT to_tsvector('synonym_tst', 'Most common mistake is to write Gogle instead of Google');
+-                       to_tsvector                        
+-----------------------------------------------------------
+- 'common':2 'googl':7,10 'instead':8 'mistak':3 'write':6
+-(1 row)
+-
++ERROR:  incompatible library "/pglite/lib/postgresql/dict_snowball.so": missing magic block
++HINT:  Extension libraries are required to use the PG_MODULE_MAGIC macro.
+ SELECT to_tsvector('synonym_tst', 'Indexes or indices - Which is right plural form of index?');
+-                 to_tsvector                  
+-----------------------------------------------
+- 'form':8 'index':1,3,10 'plural':7 'right':6
+-(1 row)
+-
++ERROR:  incompatible library "/pglite/lib/postgresql/dict_snowball.so": missing magic block
++HINT:  Extension libraries are required to use the PG_MODULE_MAGIC macro.
+ SELECT to_tsquery('synonym_tst', 'Index & indices');
+-     to_tsquery      
+----------------------
+- 'index' & 'index':*
+-(1 row)
+-
++ERROR:  incompatible library "/pglite/lib/postgresql/dict_snowball.so": missing magic block
++HINT:  Extension libraries are required to use the PG_MODULE_MAGIC macro.
+ -- test thesaurus in configuration
+ -- see thesaurus_sample.ths to understand 'odd' resulting tsvector
+ CREATE TEXT SEARCH CONFIGURATION thesaurus_tst (
+@@ -661,24 +637,16 @@
+ ALTER TEXT SEARCH CONFIGURATION thesaurus_tst ALTER MAPPING FOR
+ 	asciiword, hword_asciipart, asciihword
+ 	WITH synonym, thesaurus, english_stem;
++ERROR:  text search dictionary "thesaurus" does not exist
+ SELECT to_tsvector('thesaurus_tst', 'one postgres one two one two three one');
+-           to_tsvector            
+-----------------------------------
+- '1':1,5 '12':3 '123':4 'pgsql':2
+-(1 row)
+-
++ERROR:  incompatible library "/pglite/lib/postgresql/dict_snowball.so": missing magic block
++HINT:  Extension libraries are required to use the PG_MODULE_MAGIC macro.
+ SELECT to_tsvector('thesaurus_tst', 'Supernovae star is very new star and usually called supernovae (abbreviation SN)');
+-                         to_tsvector                          
+---------------------------------------------------------------
+- 'abbrevi':10 'call':8 'new':4 'sn':1,9,11 'star':5 'usual':7
+-(1 row)
+-
++ERROR:  incompatible library "/pglite/lib/postgresql/dict_snowball.so": missing magic block
++HINT:  Extension libraries are required to use the PG_MODULE_MAGIC macro.
+ SELECT to_tsvector('thesaurus_tst', 'Booking tickets is looking like a booking a tickets');
+-                      to_tsvector                      
+--------------------------------------------------------
+- 'card':3,10 'invit':2,9 'like':6 'look':5 'order':1,8
+-(1 row)
+-
++ERROR:  incompatible library "/pglite/lib/postgresql/dict_snowball.so": missing magic block
++HINT:  Extension libraries are required to use the PG_MODULE_MAGIC macro.
+ -- invalid: non-lowercase quoted identifiers
+ CREATE TEXT SEARCH DICTIONARY tsdict_case
+ (

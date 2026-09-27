@@ -1,0 +1,46 @@
+diff -U3 expected/temp.out results/temp.out
+--- expected/temp.out
++++ results/temp.out
+@@ -409,12 +409,15 @@
+ (1 row)
+ 
+ PREPARE TRANSACTION 'twophase_search';
+-ERROR:  cannot PREPARE a transaction that has operated on temporary objects
++ERROR:  prepared transactions are disabled
++HINT:  Set "max_prepared_transactions" to a nonzero value.
+ -- Tests to verify we recover correctly from exhausting buffer pins and
+ -- related matters.
+ -- use lower possible buffer limit to make the test cheaper
+ \c
+ SET temp_buffers = 100;
++ERROR:  invalid value for parameter "temp_buffers": 100
++DETAIL:  "temp_buffers" cannot be changed after any temporary tables have been accessed in the session.
+ CREATE TEMPORARY TABLE test_temp(a int not null unique, b TEXT not null, cnt int not null);
+ INSERT INTO test_temp SELECT generate_series(1, 10000) as id, repeat('a', 200), 0;
+ -- should be at least 2x as large than temp_buffers
+@@ -456,7 +459,11 @@
+ 
+ -- should fail, too many buffers pinned
+ SELECT test_temp_pin(10, 105);
+-ERROR:  no empty local buffer available
++ test_temp_pin 
++---------------
++ 
++(1 row)
++
+ ROLLBACK;
+ BEGIN;
+ -- have some working cursors to test after errors
+@@ -475,7 +482,11 @@
+ -- exhaust buffer pins in subtrans, check things work after
+ SAVEPOINT rescue_me;
+ SELECT test_temp_pin(10, 105);
+-ERROR:  no empty local buffer available
++ test_temp_pin 
++---------------
++ 
++(1 row)
++
+ ROLLBACK TO SAVEPOINT rescue_me;
+ -- pre-subtrans cursors continue to work
+ FETCH NEXT FROM c_3;

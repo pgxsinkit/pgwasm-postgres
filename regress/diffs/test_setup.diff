@@ -1,0 +1,11 @@
+diff -U3 expected/test_setup.out results/test_setup.out
+--- expected/test_setup.out
++++ results/test_setup.out
+@@ -205,6 +205,7 @@
+     RETURNS bool
+     AS :'regresslib', 'binary_coercible'
+     LANGUAGE C STRICT STABLE PARALLEL SAFE;
++ERROR:  could not access file "@abs_builddir@/lib/regress.so": No such file or directory
+ -- Use hand-rolled hash functions and operator classes to get predictable
+ -- result on different machines.  The hash function for int4 simply returns
+ -- the sum of the values passed to it and the one for text returns the length

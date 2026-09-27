@@ -1,0 +1,116 @@
+diff -U3 expected/equivclass.out results/equivclass.out
+--- expected/equivclass.out
++++ results/equivclass.out
+@@ -423,17 +423,34 @@
+ 
+ reset session authorization;
+ revoke select on ec0 from regress_user_ectest;
++WARNING:  no privileges could be revoked for "ec0"
++WARNING:  no privileges could be revoked for column "tableoid" of relation "ec0"
++WARNING:  no privileges could be revoked for column "cmax" of relation "ec0"
++WARNING:  no privileges could be revoked for column "xmax" of relation "ec0"
++WARNING:  no privileges could be revoked for column "cmin" of relation "ec0"
++WARNING:  no privileges could be revoked for column "xmin" of relation "ec0"
++WARNING:  no privileges could be revoked for column "ctid" of relation "ec0"
++WARNING:  no privileges could be revoked for column "ff" of relation "ec0"
++WARNING:  no privileges could be revoked for column "f1" of relation "ec0"
++WARNING:  no privileges could be revoked for column "f2" of relation "ec0"
+ revoke select on ec1 from regress_user_ectest;
++WARNING:  no privileges could be revoked for "ec1"
++WARNING:  no privileges could be revoked for column "tableoid" of relation "ec1"
++WARNING:  no privileges could be revoked for column "cmax" of relation "ec1"
++WARNING:  no privileges could be revoked for column "xmax" of relation "ec1"
++WARNING:  no privileges could be revoked for column "cmin" of relation "ec1"
++WARNING:  no privileges could be revoked for column "xmin" of relation "ec1"
++WARNING:  no privileges could be revoked for column "ctid" of relation "ec1"
++WARNING:  no privileges could be revoked for column "ff" of relation "ec1"
++WARNING:  no privileges could be revoked for column "f1" of relation "ec1"
++WARNING:  no privileges could be revoked for column "f2" of relation "ec1"
+ drop user regress_user_ectest;
++ERROR:  permission denied to drop role
++DETAIL:  Only roles with the CREATEROLE attribute and the ADMIN option on the target roles may drop roles.
+ -- check that X=X is converted to X IS NOT NULL when appropriate
+ explain (costs off)
+   select * from tenk1 where unique1 = unique1 and unique2 = unique2;
+-                         QUERY PLAN                          
+--------------------------------------------------------------
+- Seq Scan on tenk1
+-   Filter: ((unique1 IS NOT NULL) AND (unique2 IS NOT NULL))
+-(2 rows)
+-
++ERROR:  permission denied for table tenk1
+ -- Test that broken ECs are processed correctly during self join removal.
+ -- Disable merge joins so that we don't get an error about missing commutator.
+ -- Test both orientations of the join clause, because only one of them breaks
+@@ -442,14 +459,15 @@
+ explain (costs off)
+   select * from ec0 m join ec0 n on m.ff = n.ff
+   join ec1 p on m.ff + n.ff = p.f1;
+-              QUERY PLAN               
+----------------------------------------
++                  QUERY PLAN                  
++----------------------------------------------
+  Nested Loop
+    Join Filter: ((n.ff + n.ff) = p.f1)
+    ->  Seq Scan on ec0 n
+    ->  Materialize
+          ->  Seq Scan on ec1 p
+-(5 rows)
++               Filter: (f1 < '5'::int8alias1)
++(6 rows)
+ 
+ explain (costs off)
+   select * from ec0 m join ec0 n on m.ff = n.ff
+@@ -461,18 +479,14 @@
+    ->  Seq Scan on ec0 n
+    ->  Materialize
+          ->  Seq Scan on ec1 p
+-(5 rows)
++               Filter: (f1 < '5'::int8alias1)
++(6 rows)
+ 
+ reset enable_mergejoin;
+ -- this could be converted, but isn't at present
+ explain (costs off)
+   select * from tenk1 where unique1 = unique1 or unique2 = unique2;
+-                       QUERY PLAN                       
+---------------------------------------------------------
+- Seq Scan on tenk1
+-   Filter: ((unique1 = unique1) OR (unique2 = unique2))
+-(2 rows)
+-
++ERROR:  permission denied for table tenk1
+ -- check that we recognize equivalence with dummy domains in the way
+ create temp table undername (f1 name, f2 int);
+ create temp view overview as
+@@ -513,23 +527,21 @@
+ 
+ -- check that non-commutable hash clauses do not lead to error
+ alter operator = (int8, int8alias1) set (hashes);
++ERROR:  must be owner of operator =
+ alter operator family integer_ops using hash add
+   operator 1 = (int8, int8alias1);
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ create function hashint8alias1(int8alias1) returns int
+   strict immutable language internal as 'hashint8';
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ alter operator family integer_ops using hash add
+   function 1 hashint8alias1(int8alias1);
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set enable_hashjoin to on;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set enable_mergejoin to off;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ explain (costs off)
+ select * from tbl_nocom t1 full join tbl_nocom t2 on t2.a = t1.b;
+-              QUERY PLAN              
+---------------------------------------
+- Hash Full Join
+-   Hash Cond: (t2.a = t1.b)
+-   ->  Seq Scan on tbl_nocom t2
+-   ->  Hash
+-         ->  Seq Scan on tbl_nocom t1
+-(5 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ abort;

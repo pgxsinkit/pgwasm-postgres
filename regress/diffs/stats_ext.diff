@@ -1,0 +1,936 @@
+diff -U3 expected/stats_ext.out results/stats_ext.out
+--- expected/stats_ext.out
++++ results/stats_ext.out
+@@ -122,115 +122,142 @@
+ ERROR:  must be owner of statistics object ab1_a_b_stats
+ RESET SESSION AUTHORIZATION;
+ DROP ROLE regress_stats_ext;
++ERROR:  permission denied to drop role
++DETAIL:  Only roles with the CREATEROLE attribute and the ADMIN option on the target roles may drop roles.
+ CREATE STATISTICS pg_temp.stats_ext_temp ON a, b FROM ab1;
++ERROR:  must be owner of table ab1
+ SELECT regexp_replace(pg_describe_object(tableoid, oid, 0),
+                       'pg_temp_[0-9]*', 'pg_temp_REDACTED') AS descr,
+        pg_statistics_obj_is_visible(oid) AS visible
+   FROM pg_statistic_ext
+  WHERE stxname = 'stats_ext_temp';
+-                       descr                       | visible 
+----------------------------------------------------+---------
+- statistics object pg_temp_REDACTED.stats_ext_temp | f
+-(1 row)
++ descr | visible 
++-------+---------
++(0 rows)
+ 
+ DROP STATISTICS stats_ext_temp;  -- shall fail
+ ERROR:  statistics object "stats_ext_temp" does not exist
+ DROP STATISTICS pg_temp.stats_ext_temp;
++ERROR:  statistics object "pg_temp.stats_ext_temp" does not exist
+ CREATE STATISTICS IF NOT EXISTS ab1_a_b_stats ON a, b FROM ab1;
+-NOTICE:  statistics object "ab1_a_b_stats" already exists, skipping
++ERROR:  must be owner of table ab1
+ DROP STATISTICS ab1_a_b_stats;
++ERROR:  must be owner of statistics object ab1_a_b_stats
+ CREATE SCHEMA regress_schema_2;
++ERROR:  permission denied for database regression
+ CREATE STATISTICS regress_schema_2.ab1_a_b_stats ON a, b FROM ab1;
++ERROR:  must be owner of table ab1
+ -- Let's also verify the pg_get_statisticsobjdef output looks sane.
+ SELECT pg_get_statisticsobjdef(oid) FROM pg_statistic_ext WHERE stxname = 'ab1_a_b_stats';
+-                      pg_get_statisticsobjdef                      
+--------------------------------------------------------------------
+- CREATE STATISTICS regress_schema_2.ab1_a_b_stats ON a, b FROM ab1
++                 pg_get_statisticsobjdef                 
++---------------------------------------------------------
++ CREATE STATISTICS public.ab1_a_b_stats ON a, b FROM ab1
+ (1 row)
+ 
+ DROP STATISTICS regress_schema_2.ab1_a_b_stats;
++ERROR:  schema "regress_schema_2" does not exist
+ -- Ensure statistics are dropped when columns are
+ CREATE STATISTICS ab1_b_c_stats ON b, c FROM ab1;
++ERROR:  must be owner of table ab1
+ CREATE STATISTICS ab1_a_b_c_stats ON a, b, c FROM ab1;
++ERROR:  must be owner of table ab1
+ CREATE STATISTICS ab1_b_a_stats ON b, a FROM ab1;
++ERROR:  must be owner of table ab1
+ ALTER TABLE ab1 DROP COLUMN a;
++ERROR:  must be owner of table ab1
+ \d ab1
+                 Table "public.ab1"
+  Column |  Type   | Collation | Nullable | Default 
+ --------+---------+-----------+----------+---------
++ a      | integer |           |          | 
+  b      | integer |           |          | 
+  c      | integer |           |          | 
+ Statistics objects:
+-    "public.ab1_b_c_stats" ON b, c FROM ab1
++    "public.ab1_a_b_stats" ON a, b FROM ab1
+ 
+ -- Ensure statistics are dropped when table is
+ SELECT stxname FROM pg_statistic_ext WHERE stxname LIKE 'ab1%';
+     stxname    
+ ---------------
+- ab1_b_c_stats
++ ab1_a_b_stats
+ (1 row)
+ 
+ DROP TABLE ab1;
++ERROR:  must be owner of table ab1
+ SELECT stxname FROM pg_statistic_ext WHERE stxname LIKE 'ab1%';
+- stxname 
+----------
+-(0 rows)
++    stxname    
++---------------
++ ab1_a_b_stats
++(1 row)
+ 
+ -- Ensure things work sanely with SET STATISTICS 0
+ CREATE TABLE ab1 (a INTEGER, b INTEGER);
++ERROR:  relation "ab1" already exists
+ ALTER TABLE ab1 ALTER a SET STATISTICS 0;
++ERROR:  must be owner of table ab1
+ INSERT INTO ab1 SELECT a, a%23 FROM generate_series(1, 1000) a;
++ERROR:  permission denied for table ab1
+ CREATE STATISTICS ab1_a_b_stats ON a, b FROM ab1;
++ERROR:  must be owner of table ab1
+ ANALYZE ab1;
+-WARNING:  statistics object "public.ab1_a_b_stats" could not be computed for relation "public.ab1"
++WARNING:  permission denied to analyze "ab1", skipping it
+ ALTER TABLE ab1 ALTER a SET STATISTICS -1;
++ERROR:  must be owner of table ab1
+ -- setting statistics target 0 skips the statistics, without printing any message, so check catalog
+ ALTER STATISTICS ab1_a_b_stats SET STATISTICS 0;
++ERROR:  must be owner of statistics object ab1_a_b_stats
+ \d ab1
+                 Table "public.ab1"
+  Column |  Type   | Collation | Nullable | Default 
+ --------+---------+-----------+----------+---------
+  a      | integer |           |          | 
+  b      | integer |           |          | 
++ c      | integer |           |          | 
+ Statistics objects:
+-    "public.ab1_a_b_stats" ON a, b FROM ab1; STATISTICS 0
++    "public.ab1_a_b_stats" ON a, b FROM ab1
+ 
+ ANALYZE ab1;
++WARNING:  permission denied to analyze "ab1", skipping it
+ SELECT stxname, stxdndistinct, stxddependencies, stxdmcv, stxdinherit
+   FROM pg_statistic_ext s LEFT JOIN pg_statistic_ext_data d ON (d.stxoid = s.oid)
+  WHERE s.stxname = 'ab1_a_b_stats';
+-    stxname    | stxdndistinct | stxddependencies | stxdmcv | stxdinherit 
+----------------+---------------+------------------+---------+-------------
+- ab1_a_b_stats |               |                  |         | 
+-(1 row)
+-
++ERROR:  permission denied for table pg_statistic_ext_data
+ ALTER STATISTICS ab1_a_b_stats SET STATISTICS -1;
++ERROR:  must be owner of statistics object ab1_a_b_stats
+ \d+ ab1
+                                     Table "public.ab1"
+  Column |  Type   | Collation | Nullable | Default | Storage | Stats target | Description 
+ --------+---------+-----------+----------+---------+---------+--------------+-------------
+  a      | integer |           |          |         | plain   |              | 
+  b      | integer |           |          |         | plain   |              | 
++ c      | integer |           |          |         | plain   |              | 
+ Statistics objects:
+     "public.ab1_a_b_stats" ON a, b FROM ab1
+ 
+ -- partial analyze doesn't build stats either
+ ANALYZE ab1 (a);
+-WARNING:  statistics object "public.ab1_a_b_stats" could not be computed for relation "public.ab1"
++WARNING:  permission denied to analyze "ab1", skipping it
+ ANALYZE ab1;
++WARNING:  permission denied to analyze "ab1", skipping it
+ DROP TABLE ab1;
++ERROR:  must be owner of table ab1
+ ALTER STATISTICS ab1_a_b_stats SET STATISTICS 0;
+-ERROR:  statistics object "ab1_a_b_stats" does not exist
++ERROR:  must be owner of statistics object ab1_a_b_stats
+ ALTER STATISTICS IF EXISTS ab1_a_b_stats SET STATISTICS 0;
+-NOTICE:  statistics object "ab1_a_b_stats" does not exist, skipping
++ERROR:  must be owner of statistics object ab1_a_b_stats
+ -- Ensure we can build statistics for tables with inheritance.
+ CREATE TABLE ab1 (a INTEGER, b INTEGER);
++ERROR:  relation "ab1" already exists
+ CREATE TABLE ab1c () INHERITS (ab1);
++ERROR:  must be owner of table ab1
+ INSERT INTO ab1 VALUES (1,1);
++ERROR:  permission denied for table ab1
+ CREATE STATISTICS ab1_a_b_stats ON a, b FROM ab1;
++ERROR:  must be owner of table ab1
+ ANALYZE ab1;
++WARNING:  permission denied to analyze "ab1", skipping it
+ DROP TABLE ab1 CASCADE;
+-NOTICE:  drop cascades to table ab1c
++ERROR:  must be owner of table ab1
+ -- Tests for stats with inheritance
+ CREATE TABLE stxdinh(a int, b int);
+ CREATE TABLE stxdinh1() INHERITS(stxdinh);
+@@ -311,76 +338,114 @@
+ DROP TABLE stxdinp;
+ -- basic test for statistics on expressions
+ CREATE TABLE ab1 (a INTEGER, b INTEGER, c TIMESTAMP, d TIMESTAMPTZ);
++ERROR:  relation "ab1" already exists
+ -- expression stats may be built on a single expression column
+ CREATE STATISTICS ab1_exprstat_1 ON (a+b) FROM ab1;
++ERROR:  must be owner of table ab1
+ -- with a single expression, we only enable expression statistics
+ CREATE STATISTICS ab1_exprstat_2 ON (a+b) FROM ab1;
++ERROR:  must be owner of table ab1
+ SELECT stxkind FROM pg_statistic_ext WHERE stxname = 'ab1_exprstat_2';
+  stxkind 
+ ---------
+- {e}
+-(1 row)
++(0 rows)
+ 
+ -- adding anything to the expression builds all statistics kinds
+ CREATE STATISTICS ab1_exprstat_3 ON (a+b), a FROM ab1;
++ERROR:  must be owner of table ab1
+ SELECT stxkind FROM pg_statistic_ext WHERE stxname = 'ab1_exprstat_3';
+-  stxkind  
+------------
+- {d,f,m,e}
+-(1 row)
++ stxkind 
++---------
++(0 rows)
+ 
+ -- date_trunc on timestamptz is not immutable, but that should not matter
+ CREATE STATISTICS ab1_exprstat_4 ON date_trunc('day', d) FROM ab1;
++ERROR:  column "d" does not exist
++LINE 1: ...TE STATISTICS ab1_exprstat_4 ON date_trunc('day', d) FROM ab...
++                                                             ^
+ -- date_trunc on timestamp is immutable
+ CREATE STATISTICS ab1_exprstat_5 ON date_trunc('day', c) FROM ab1;
++ERROR:  function date_trunc(unknown, integer) does not exist
++LINE 1: CREATE STATISTICS ab1_exprstat_5 ON date_trunc('day', c) FRO...
++                                            ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- check use of a boolean-returning expression
+ CREATE STATISTICS ab1_exprstat_6 ON
+   (case a when 1 then true else false end), b FROM ab1;
++ERROR:  must be owner of table ab1
+ -- insert some data and run analyze, to test that these cases build properly
+ INSERT INTO ab1
+ SELECT x / 10, x / 3,
+     '2020-10-01'::timestamp + x * interval '1 day',
+     '2020-10-01'::timestamptz + x * interval '1 day'
+ FROM generate_series(1, 100) x;
++ERROR:  INSERT has more expressions than target columns
++LINE 4:     '2020-10-01'::timestamptz + x * interval '1 day'
++            ^
+ ANALYZE ab1;
++WARNING:  permission denied to analyze "ab1", skipping it
+ -- apply some stats
+ SELECT * FROM check_estimated_rows('SELECT * FROM ab1 WHERE (case a when 1 then true else false end) AND b=2');
+- estimated | actual 
+------------+--------
+-         1 |      0
+-(1 row)
+-
++ERROR:  permission denied for table ab1
++CONTEXT:  PL/pgSQL function check_estimated_rows(text) line 7 at FOR over EXECUTE statement
+ DROP TABLE ab1;
++ERROR:  must be owner of table ab1
+ -- Verify supported object types for extended statistics
+ CREATE schema tststats;
++ERROR:  permission denied for database regression
+ CREATE TABLE tststats.t (a int, b int, c text);
++ERROR:  schema "tststats" does not exist
++LINE 1: CREATE TABLE tststats.t (a int, b int, c text);
++                     ^
+ CREATE INDEX ti ON tststats.t (a, b);
++ERROR:  schema "tststats" does not exist
+ CREATE SEQUENCE tststats.s;
++ERROR:  schema "tststats" does not exist
+ CREATE VIEW tststats.v AS SELECT * FROM tststats.t;
++ERROR:  relation "tststats.t" does not exist
++LINE 1: CREATE VIEW tststats.v AS SELECT * FROM tststats.t;
++                                                ^
+ CREATE MATERIALIZED VIEW tststats.mv AS SELECT * FROM tststats.t;
++ERROR:  relation "tststats.t" does not exist
++LINE 1: ...TE MATERIALIZED VIEW tststats.mv AS SELECT * FROM tststats.t...
++                                                             ^
+ CREATE TYPE tststats.ty AS (a int, b int, c text);
++ERROR:  schema "tststats" does not exist
+ CREATE FOREIGN DATA WRAPPER extstats_dummy_fdw;
++ERROR:  permission denied to create foreign-data wrapper "extstats_dummy_fdw"
++HINT:  Must be superuser to create a foreign-data wrapper.
+ CREATE SERVER extstats_dummy_srv FOREIGN DATA WRAPPER extstats_dummy_fdw;
++ERROR:  foreign-data wrapper "extstats_dummy_fdw" does not exist
+ CREATE FOREIGN TABLE tststats.f (a int, b int, c text) SERVER extstats_dummy_srv;
++ERROR:  schema "tststats" does not exist
++LINE 1: CREATE FOREIGN TABLE tststats.f (a int, b int, c text) SERVE...
++                             ^
+ CREATE TABLE tststats.pt (a int, b int, c text) PARTITION BY RANGE (a, b);
++ERROR:  schema "tststats" does not exist
++LINE 1: CREATE TABLE tststats.pt (a int, b int, c text) PARTITION BY...
++                     ^
+ CREATE TABLE tststats.pt1 PARTITION OF tststats.pt FOR VALUES FROM (-10, -10) TO (10, 10);
++ERROR:  schema "tststats" does not exist
++LINE 1: CREATE TABLE tststats.pt1 PARTITION OF tststats.pt FOR VALUE...
++                     ^
+ CREATE STATISTICS tststats.s1 ON a, b FROM tststats.t;
++ERROR:  schema "tststats" does not exist
+ CREATE STATISTICS tststats.s2 ON a, b FROM tststats.ti;
+-ERROR:  cannot define statistics for relation "ti"
+-DETAIL:  This operation is not supported for indexes.
++ERROR:  schema "tststats" does not exist
+ CREATE STATISTICS tststats.s3 ON a, b FROM tststats.s;
+-ERROR:  cannot define statistics for relation "s"
+-DETAIL:  This operation is not supported for sequences.
++ERROR:  schema "tststats" does not exist
+ CREATE STATISTICS tststats.s4 ON a, b FROM tststats.v;
+-ERROR:  cannot define statistics for relation "v"
+-DETAIL:  This operation is not supported for views.
++ERROR:  schema "tststats" does not exist
+ CREATE STATISTICS tststats.s5 ON a, b FROM tststats.mv;
++ERROR:  schema "tststats" does not exist
+ CREATE STATISTICS tststats.s6 ON a, b FROM tststats.ty;
+-ERROR:  cannot define statistics for relation "ty"
+-DETAIL:  This operation is not supported for composite types.
++ERROR:  schema "tststats" does not exist
+ CREATE STATISTICS tststats.s7 ON a, b FROM tststats.f;
++ERROR:  schema "tststats" does not exist
+ CREATE STATISTICS tststats.s8 ON a, b FROM tststats.pt;
++ERROR:  schema "tststats" does not exist
+ CREATE STATISTICS tststats.s9 ON a, b FROM tststats.pt1;
++ERROR:  schema "tststats" does not exist
+ DO $$
+ DECLARE
+ 	relname text := reltoastrelid::regclass FROM pg_class WHERE oid = 'tststats.t'::regclass;
+@@ -390,18 +455,15 @@
+ 	RAISE NOTICE 'stats on toast table not created';
+ END;
+ $$;
+-NOTICE:  stats on toast table not created
++ERROR:  relation "tststats.t" does not exist
++LINE 1: reltoastrelid::regclass FROM pg_class WHERE oid = 'tststats....
++                                                          ^
++QUERY:  reltoastrelid::regclass FROM pg_class WHERE oid = 'tststats.t'::regclass
++CONTEXT:  PL/pgSQL function inline_code_block line 3 during statement block local variable initialization
+ DROP SCHEMA tststats CASCADE;
+-NOTICE:  drop cascades to 7 other objects
+-DETAIL:  drop cascades to table tststats.t
+-drop cascades to sequence tststats.s
+-drop cascades to view tststats.v
+-drop cascades to materialized view tststats.mv
+-drop cascades to type tststats.ty
+-drop cascades to foreign table tststats.f
+-drop cascades to table tststats.pt
++ERROR:  schema "tststats" does not exist
+ DROP FOREIGN DATA WRAPPER extstats_dummy_fdw CASCADE;
+-NOTICE:  drop cascades to server extstats_dummy_srv
++ERROR:  foreign-data wrapper "extstats_dummy_fdw" does not exist
+ -- n-distinct tests
+ CREATE TABLE ndistinct (
+     filler1 TEXT,
+@@ -480,11 +542,7 @@
+   FROM pg_statistic_ext s, pg_statistic_ext_data d
+  WHERE s.stxrelid = 'ndistinct'::regclass
+    AND d.stxoid = s.oid;
+- stxkind |                    stxdndistinct                    
+----------+-----------------------------------------------------
+- {d,f,m} | {"3, 4": 11, "3, 6": 11, "4, 6": 11, "3, 4, 6": 11}
+-(1 row)
+-
++ERROR:  permission denied for table pg_statistic_ext_data
+ -- minor improvement, make sure the ctid does not break the matching
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY ctid, a, b');
+  estimated | actual 
+@@ -562,11 +620,7 @@
+   FROM pg_statistic_ext s, pg_statistic_ext_data d
+  WHERE s.stxrelid = 'ndistinct'::regclass
+    AND d.stxoid = s.oid;
+- stxkind |                      stxdndistinct                       
+----------+----------------------------------------------------------
+- {d,f,m} | {"3, 4": 221, "3, 6": 247, "4, 6": 323, "3, 4, 6": 1000}
+-(1 row)
+-
++ERROR:  permission denied for table pg_statistic_ext_data
+ -- correct estimates
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, b');
+  estimated | actual 
+@@ -627,10 +681,7 @@
+   FROM pg_statistic_ext s, pg_statistic_ext_data d
+  WHERE s.stxrelid = 'ndistinct'::regclass
+    AND d.stxoid = s.oid;
+- stxkind | stxdndistinct 
+----------+---------------
+-(0 rows)
+-
++ERROR:  permission denied for table pg_statistic_ext_data
+ -- dropping the statistics results in under-estimates
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, b');
+  estimated | actual 
+@@ -711,11 +762,7 @@
+   FROM pg_statistic_ext s, pg_statistic_ext_data d
+  WHERE s.stxrelid = 'ndistinct'::regclass
+    AND d.stxoid = s.oid;
+- stxkind |                           stxdndistinct                           
+----------+-------------------------------------------------------------------
+- {d,e}   | {"-1, -2": 221, "-1, -3": 247, "-2, -3": 323, "-1, -2, -3": 1000}
+-(1 row)
+-
++ERROR:  permission denied for table pg_statistic_ext_data
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY (a+1), (b+100)');
+  estimated | actual 
+ -----------+--------
+@@ -760,11 +807,7 @@
+   FROM pg_statistic_ext s, pg_statistic_ext_data d
+  WHERE s.stxrelid = 'ndistinct'::regclass
+    AND d.stxoid = s.oid;
+- stxkind |                        stxdndistinct                        
+----------+-------------------------------------------------------------
+- {d,e}   | {"3, 4": 221, "3, -1": 247, "4, -1": 323, "3, 4, -1": 1000}
+-(1 row)
+-
++ERROR:  permission denied for table pg_statistic_ext_data
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, b');
+  estimated | actual 
+ -----------+--------
+@@ -2286,11 +2329,7 @@
+   FROM pg_statistic_ext s, pg_statistic_ext_data d
+  WHERE s.stxname = 'mcv_lists_stats'
+    AND d.stxoid = s.oid;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  permission denied for table pg_statistic_ext_data
+ -- check change of column type resets the MCV statistics
+ ALTER TABLE mcv_lists ALTER COLUMN c TYPE numeric;
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a = 1 AND b = ''1''');
+@@ -2595,11 +2634,7 @@
+        pg_mcv_list_items(d.stxdmcv) m
+  WHERE s.stxname = 'mcv_lists_stats'
+    AND d.stxoid = s.oid;
+- index | values  |  nulls  | frequency | base_frequency 
+--------+---------+---------+-----------+----------------
+-     0 | {1,2,3} | {f,f,f} |         1 |              1
+-(1 row)
+-
++ERROR:  permission denied for table pg_statistic_ext_data
+ -- 2 distinct combinations with NULL values, all in the MCV list
+ TRUNCATE mcv_lists;
+ DROP STATISTICS mcv_lists_stats;
+@@ -2638,12 +2673,7 @@
+        pg_mcv_list_items(d.stxdmcv) m
+  WHERE s.stxname = 'mcv_lists_stats'
+    AND d.stxoid = s.oid;
+- index |      values      |  nulls  | frequency | base_frequency 
+--------+------------------+---------+-----------+----------------
+-     0 | {NULL,x,x}       | {t,f,f} |       0.5 |           0.25
+-     1 | {NULL,NULL,NULL} | {t,t,t} |       0.5 |           0.25
+-(2 rows)
+-
++ERROR:  permission denied for table pg_statistic_ext_data
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE b = ''x'' OR d = ''x''');
+  estimated | actual 
+ -----------+--------
+@@ -3136,15 +3166,24 @@
+ --
+ -- Currently this is only relevant for MCV stats.
+ CREATE SCHEMA tststats;
++ERROR:  permission denied for database regression
+ CREATE TABLE tststats.priv_test_tbl (
+     a int,
+     b int
+ );
++ERROR:  schema "tststats" does not exist
++LINE 1: CREATE TABLE tststats.priv_test_tbl (
++                     ^
+ INSERT INTO tststats.priv_test_tbl
+      SELECT mod(i,5), mod(i,10) FROM generate_series(1,100) s(i);
++ERROR:  relation "tststats.priv_test_tbl" does not exist
++LINE 1: INSERT INTO tststats.priv_test_tbl
++                    ^
+ CREATE STATISTICS tststats.priv_test_stats (mcv) ON a, b
+   FROM tststats.priv_test_tbl;
++ERROR:  schema "tststats" does not exist
+ ANALYZE tststats.priv_test_tbl;
++ERROR:  schema "tststats" does not exist
+ -- Check printing info about extended statistics by \dX
+ create table stts_t1 (a int, b int);
+ create statistics (ndistinct) on a, b from stts_t1;
+@@ -3155,29 +3194,31 @@
+ create table stts_t3 (col1 int, col2 int, col3 int);
+ create statistics stts_hoge on col1, col2, col3 from stts_t3;
+ create schema stts_s1;
++ERROR:  permission denied for database regression
+ create schema stts_s2;
++ERROR:  permission denied for database regression
+ create statistics stts_s1.stts_foo on col1, col2 from stts_t3;
++ERROR:  schema "stts_s1" does not exist
+ create statistics stts_s2.stts_yama (dependencies, mcv) on col1, col3 from stts_t3;
++ERROR:  schema "stts_s2" does not exist
+ insert into stts_t1 select i,i from generate_series(1,100) i;
+ analyze stts_t1;
+ set search_path to public, stts_s1, stts_s2, tststats;
+ \dX
+-                                                        List of extended statistics
+-  Schema  |          Name          |                            Definition                            | Ndistinct | Dependencies |   MCV   
+-----------+------------------------+------------------------------------------------------------------+-----------+--------------+---------
+- public   | func_deps_stat         | (a * 2), upper(b), (c + 1::numeric) FROM functional_dependencies |           | defined      | 
+- public   | mcv_lists_arrays_stats | a, b, c FROM mcv_lists_arrays                                    |           |              | defined
+- public   | mcv_lists_bool_stats   | a, b, c FROM mcv_lists_bool                                      |           |              | defined
+- public   | mcv_lists_stats        | a, b, d FROM mcv_lists                                           |           |              | defined
+- public   | stts_hoge              | col1, col2, col3 FROM stts_t3                                    | defined   | defined      | defined
+- public   | stts_t1_a_b_stat       | a, b FROM stts_t1                                                | defined   |              | 
+- public   | stts_t1_a_b_stat1      | a, b FROM stts_t1                                                | defined   | defined      | 
+- public   | stts_t1_a_b_stat2      | a, b FROM stts_t1                                                | defined   | defined      | defined
+- public   | stts_t2_b_c_stat       | b, c FROM stts_t2                                                | defined   | defined      | defined
+- stts_s1  | stts_foo               | col1, col2 FROM stts_t3                                          | defined   | defined      | defined
+- stts_s2  | stts_yama              | col1, col3 FROM stts_t3                                          |           | defined      | defined
+- tststats | priv_test_stats        | a, b FROM priv_test_tbl                                          |           |              | defined
+-(12 rows)
++                                                       List of extended statistics
++ Schema |          Name          |                            Definition                            | Ndistinct | Dependencies |   MCV   
++--------+------------------------+------------------------------------------------------------------+-----------+--------------+---------
++ public | ab1_a_b_stats          | a, b FROM ab1                                                    | defined   | defined      | defined
++ public | func_deps_stat         | (a * 2), upper(b), (c + 1::numeric) FROM functional_dependencies |           | defined      | 
++ public | mcv_lists_arrays_stats | a, b, c FROM mcv_lists_arrays                                    |           |              | defined
++ public | mcv_lists_bool_stats   | a, b, c FROM mcv_lists_bool                                      |           |              | defined
++ public | mcv_lists_stats        | a, b, d FROM mcv_lists                                           |           |              | defined
++ public | stts_hoge              | col1, col2, col3 FROM stts_t3                                    | defined   | defined      | defined
++ public | stts_t1_a_b_stat       | a, b FROM stts_t1                                                | defined   |              | 
++ public | stts_t1_a_b_stat1      | a, b FROM stts_t1                                                | defined   | defined      | 
++ public | stts_t1_a_b_stat2      | a, b FROM stts_t1                                                | defined   | defined      | defined
++ public | stts_t2_b_c_stat       | b, c FROM stts_t2                                                | defined   | defined      | defined
++(10 rows)
+ 
+ \dX stts_t*
+                              List of extended statistics
+@@ -3197,22 +3238,20 @@
+ (1 row)
+ 
+ \dX+
+-                                                        List of extended statistics
+-  Schema  |          Name          |                            Definition                            | Ndistinct | Dependencies |   MCV   
+-----------+------------------------+------------------------------------------------------------------+-----------+--------------+---------
+- public   | func_deps_stat         | (a * 2), upper(b), (c + 1::numeric) FROM functional_dependencies |           | defined      | 
+- public   | mcv_lists_arrays_stats | a, b, c FROM mcv_lists_arrays                                    |           |              | defined
+- public   | mcv_lists_bool_stats   | a, b, c FROM mcv_lists_bool                                      |           |              | defined
+- public   | mcv_lists_stats        | a, b, d FROM mcv_lists                                           |           |              | defined
+- public   | stts_hoge              | col1, col2, col3 FROM stts_t3                                    | defined   | defined      | defined
+- public   | stts_t1_a_b_stat       | a, b FROM stts_t1                                                | defined   |              | 
+- public   | stts_t1_a_b_stat1      | a, b FROM stts_t1                                                | defined   | defined      | 
+- public   | stts_t1_a_b_stat2      | a, b FROM stts_t1                                                | defined   | defined      | defined
+- public   | stts_t2_b_c_stat       | b, c FROM stts_t2                                                | defined   | defined      | defined
+- stts_s1  | stts_foo               | col1, col2 FROM stts_t3                                          | defined   | defined      | defined
+- stts_s2  | stts_yama              | col1, col3 FROM stts_t3                                          |           | defined      | defined
+- tststats | priv_test_stats        | a, b FROM priv_test_tbl                                          |           |              | defined
+-(12 rows)
++                                                       List of extended statistics
++ Schema |          Name          |                            Definition                            | Ndistinct | Dependencies |   MCV   
++--------+------------------------+------------------------------------------------------------------+-----------+--------------+---------
++ public | ab1_a_b_stats          | a, b FROM ab1                                                    | defined   | defined      | defined
++ public | func_deps_stat         | (a * 2), upper(b), (c + 1::numeric) FROM functional_dependencies |           | defined      | 
++ public | mcv_lists_arrays_stats | a, b, c FROM mcv_lists_arrays                                    |           |              | defined
++ public | mcv_lists_bool_stats   | a, b, c FROM mcv_lists_bool                                      |           |              | defined
++ public | mcv_lists_stats        | a, b, d FROM mcv_lists                                           |           |              | defined
++ public | stts_hoge              | col1, col2, col3 FROM stts_t3                                    | defined   | defined      | defined
++ public | stts_t1_a_b_stat       | a, b FROM stts_t1                                                | defined   |              | 
++ public | stts_t1_a_b_stat1      | a, b FROM stts_t1                                                | defined   | defined      | 
++ public | stts_t1_a_b_stat2      | a, b FROM stts_t1                                                | defined   | defined      | defined
++ public | stts_t2_b_c_stat       | b, c FROM stts_t2                                                | defined   | defined      | defined
++(10 rows)
+ 
+ \dX+ stts_t*
+                              List of extended statistics
+@@ -3232,11 +3271,10 @@
+ (1 row)
+ 
+ \dX+ stts_s2.stts_yama
+-                            List of extended statistics
+- Schema  |   Name    |       Definition        | Ndistinct | Dependencies |   MCV   
+----------+-----------+-------------------------+-----------+--------------+---------
+- stts_s2 | stts_yama | col1, col3 FROM stts_t3 |           | defined      | defined
+-(1 row)
++                 List of extended statistics
++ Schema | Name | Definition | Ndistinct | Dependencies | MCV 
++--------+------+------------+-----------+--------------+-----
++(0 rows)
+ 
+ create statistics (mcv) ON a, b, (a+b), (a-b) FROM stts_t1;
+ create statistics (mcv) ON a, b, (a+b), (a-b) FROM stts_t1;
+@@ -3256,26 +3294,29 @@
+ set search_path to public, stts_s1;
+ \dX
+                                                        List of extended statistics
+- Schema  |          Name          |                            Definition                            | Ndistinct | Dependencies |   MCV   
+----------+------------------------+------------------------------------------------------------------+-----------+--------------+---------
+- public  | func_deps_stat         | (a * 2), upper(b), (c + 1::numeric) FROM functional_dependencies |           | defined      | 
+- public  | mcv_lists_arrays_stats | a, b, c FROM mcv_lists_arrays                                    |           |              | defined
+- public  | mcv_lists_bool_stats   | a, b, c FROM mcv_lists_bool                                      |           |              | defined
+- public  | mcv_lists_stats        | a, b, d FROM mcv_lists                                           |           |              | defined
+- public  | stts_hoge              | col1, col2, col3 FROM stts_t3                                    | defined   | defined      | defined
+- public  | stts_t1_a_b_stat       | a, b FROM stts_t1                                                | defined   |              | 
+- public  | stts_t1_a_b_stat1      | a, b FROM stts_t1                                                | defined   | defined      | 
+- public  | stts_t1_a_b_stat2      | a, b FROM stts_t1                                                | defined   | defined      | defined
+- public  | stts_t2_b_c_stat       | b, c FROM stts_t2                                                | defined   | defined      | defined
+- stts_s1 | stts_foo               | col1, col2 FROM stts_t3                                          | defined   | defined      | defined
++ Schema |          Name          |                            Definition                            | Ndistinct | Dependencies |   MCV   
++--------+------------------------+------------------------------------------------------------------+-----------+--------------+---------
++ public | ab1_a_b_stats          | a, b FROM ab1                                                    | defined   | defined      | defined
++ public | func_deps_stat         | (a * 2), upper(b), (c + 1::numeric) FROM functional_dependencies |           | defined      | 
++ public | mcv_lists_arrays_stats | a, b, c FROM mcv_lists_arrays                                    |           |              | defined
++ public | mcv_lists_bool_stats   | a, b, c FROM mcv_lists_bool                                      |           |              | defined
++ public | mcv_lists_stats        | a, b, d FROM mcv_lists                                           |           |              | defined
++ public | stts_hoge              | col1, col2, col3 FROM stts_t3                                    | defined   | defined      | defined
++ public | stts_t1_a_b_stat       | a, b FROM stts_t1                                                | defined   |              | 
++ public | stts_t1_a_b_stat1      | a, b FROM stts_t1                                                | defined   | defined      | 
++ public | stts_t1_a_b_stat2      | a, b FROM stts_t1                                                | defined   | defined      | defined
++ public | stts_t2_b_c_stat       | b, c FROM stts_t2                                                | defined   | defined      | defined
+ (10 rows)
+ 
+ create role regress_stats_ext nosuperuser;
++ERROR:  permission denied to create role
++DETAIL:  Only roles with the CREATEROLE attribute may create roles.
+ set role regress_stats_ext;
+ \dX
+                                                        List of extended statistics
+  Schema |          Name          |                            Definition                            | Ndistinct | Dependencies |   MCV   
+ --------+------------------------+------------------------------------------------------------------+-----------+--------------+---------
++ public | ab1_a_b_stats          | a, b FROM ab1                                                    | defined   | defined      | defined
+  public | func_deps_stat         | (a * 2), upper(b), (c + 1::numeric) FROM functional_dependencies |           | defined      | 
+  public | mcv_lists_arrays_stats | a, b, c FROM mcv_lists_arrays                                    |           |              | defined
+  public | mcv_lists_bool_stats   | a, b, c FROM mcv_lists_bool                                      |           |              | defined
+@@ -3285,23 +3326,34 @@
+  public | stts_t1_a_b_stat1      | a, b FROM stts_t1                                                | defined   | defined      | 
+  public | stts_t1_a_b_stat2      | a, b FROM stts_t1                                                | defined   | defined      | defined
+  public | stts_t2_b_c_stat       | b, c FROM stts_t2                                                | defined   | defined      | defined
+-(9 rows)
++(10 rows)
+ 
+ reset role;
+ drop table stts_t1, stts_t2, stts_t3;
+ drop schema stts_s1, stts_s2 cascade;
++ERROR:  schema "stts_s1" does not exist
+ drop user regress_stats_ext;
++ERROR:  permission denied to drop role
++DETAIL:  Only roles with the CREATEROLE attribute and the ADMIN option on the target roles may drop roles.
+ reset search_path;
+ -- User with no access
+ CREATE USER regress_stats_user1;
++ERROR:  permission denied to create role
++DETAIL:  Only roles with the CREATEROLE attribute may create roles.
+ GRANT USAGE ON SCHEMA tststats TO regress_stats_user1;
++ERROR:  schema "tststats" does not exist
+ SET SESSION AUTHORIZATION regress_stats_user1;
++ERROR:  role "regress_stats_user1" does not exist
+ SELECT * FROM tststats.priv_test_tbl; -- Permission denied
+-ERROR:  permission denied for table priv_test_tbl
++ERROR:  relation "tststats.priv_test_tbl" does not exist
++LINE 1: SELECT * FROM tststats.priv_test_tbl;
++                      ^
+ -- Check individual columns if we don't have table privilege
+ SELECT * FROM tststats.priv_test_tbl
+   WHERE a = 1 and tststats.priv_test_tbl.* > (1, 1) is not null;
+-ERROR:  permission denied for table priv_test_tbl
++ERROR:  relation "tststats.priv_test_tbl" does not exist
++LINE 1: SELECT * FROM tststats.priv_test_tbl
++                      ^
+ -- Attempt to gain access using a leaky operator
+ CREATE FUNCTION op_leak(int, int) RETURNS bool
+     AS 'BEGIN RAISE NOTICE ''op_leak => %, %'', $1, $2; RETURN $1 < $2; END'
+@@ -3314,101 +3366,135 @@
+ CREATE OPERATOR <<< (procedure = op_leak, leftarg = record, rightarg = record,
+                      restrict = scalarltsel);
+ SELECT * FROM tststats.priv_test_tbl WHERE a <<< 0 AND b <<< 0; -- Permission denied
+-ERROR:  permission denied for table priv_test_tbl
++ERROR:  relation "tststats.priv_test_tbl" does not exist
++LINE 1: SELECT * FROM tststats.priv_test_tbl WHERE a <<< 0 AND b <<<...
++                      ^
+ SELECT * FROM tststats.priv_test_tbl WHERE a <<< 0 OR b <<< 0; -- Permission denied
+-ERROR:  permission denied for table priv_test_tbl
++ERROR:  relation "tststats.priv_test_tbl" does not exist
++LINE 1: SELECT * FROM tststats.priv_test_tbl WHERE a <<< 0 OR b <<< ...
++                      ^
+ SELECT * FROM tststats.priv_test_tbl t
+  WHERE a <<< 0 AND (b <<< 0 OR t.* <<< (1, 1) IS NOT NULL); -- Permission denied
+-ERROR:  permission denied for table priv_test_tbl
++ERROR:  relation "tststats.priv_test_tbl" does not exist
++LINE 1: SELECT * FROM tststats.priv_test_tbl t
++                      ^
+ DELETE FROM tststats.priv_test_tbl WHERE a <<< 0 AND b <<< 0; -- Permission denied
+-ERROR:  permission denied for table priv_test_tbl
++ERROR:  relation "tststats.priv_test_tbl" does not exist
++LINE 1: DELETE FROM tststats.priv_test_tbl WHERE a <<< 0 AND b <<< 0...
++                    ^
+ -- Grant access via a security barrier view, but hide all data
+ RESET SESSION AUTHORIZATION;
+ CREATE VIEW tststats.priv_test_view WITH (security_barrier=true)
+     AS SELECT * FROM tststats.priv_test_tbl WHERE false;
++ERROR:  relation "tststats.priv_test_tbl" does not exist
++LINE 2:     AS SELECT * FROM tststats.priv_test_tbl WHERE false;
++                             ^
+ GRANT SELECT, DELETE ON tststats.priv_test_view TO regress_stats_user1;
++ERROR:  schema "tststats" does not exist
+ -- Should now have access via the view, but see nothing and leak nothing
+ SET SESSION AUTHORIZATION regress_stats_user1;
++ERROR:  role "regress_stats_user1" does not exist
+ SELECT * FROM tststats.priv_test_view WHERE a <<< 0 AND b <<< 0; -- Should not leak
+- a | b 
+----+---
+-(0 rows)
+-
++ERROR:  relation "tststats.priv_test_view" does not exist
++LINE 1: SELECT * FROM tststats.priv_test_view WHERE a <<< 0 AND b <<...
++                      ^
+ SELECT * FROM tststats.priv_test_view WHERE a <<< 0 OR b <<< 0; -- Should not leak
+- a | b 
+----+---
+-(0 rows)
+-
++ERROR:  relation "tststats.priv_test_view" does not exist
++LINE 1: SELECT * FROM tststats.priv_test_view WHERE a <<< 0 OR b <<<...
++                      ^
+ SELECT * FROM tststats.priv_test_view t
+  WHERE a <<< 0 AND (b <<< 0 OR t.* <<< (1, 1) IS NOT NULL); -- Should not leak
+- a | b 
+----+---
+-(0 rows)
+-
++ERROR:  relation "tststats.priv_test_view" does not exist
++LINE 1: SELECT * FROM tststats.priv_test_view t
++                      ^
+ DELETE FROM tststats.priv_test_view WHERE a <<< 0 AND b <<< 0; -- Should not leak
++ERROR:  relation "tststats.priv_test_view" does not exist
++LINE 1: DELETE FROM tststats.priv_test_view WHERE a <<< 0 AND b <<< ...
++                    ^
+ -- Grant table access, but hide all data with RLS
+ RESET SESSION AUTHORIZATION;
+ ALTER TABLE tststats.priv_test_tbl ENABLE ROW LEVEL SECURITY;
++ERROR:  schema "tststats" does not exist
+ CREATE POLICY priv_test_tbl_pol ON tststats.priv_test_tbl USING (2 * a < 0);
++ERROR:  schema "tststats" does not exist
+ GRANT SELECT, DELETE ON tststats.priv_test_tbl TO regress_stats_user1;
++ERROR:  schema "tststats" does not exist
+ -- Should now have direct table access, but see nothing and leak nothing
+ SET SESSION AUTHORIZATION regress_stats_user1;
++ERROR:  role "regress_stats_user1" does not exist
+ SELECT * FROM tststats.priv_test_tbl WHERE a <<< 0 AND b <<< 0; -- Should not leak
+- a | b 
+----+---
+-(0 rows)
+-
++ERROR:  relation "tststats.priv_test_tbl" does not exist
++LINE 1: SELECT * FROM tststats.priv_test_tbl WHERE a <<< 0 AND b <<<...
++                      ^
+ SELECT * FROM tststats.priv_test_tbl WHERE a <<< 0 OR b <<< 0; -- Should not leak
+- a | b 
+----+---
+-(0 rows)
+-
++ERROR:  relation "tststats.priv_test_tbl" does not exist
++LINE 1: SELECT * FROM tststats.priv_test_tbl WHERE a <<< 0 OR b <<< ...
++                      ^
+ SELECT * FROM tststats.priv_test_tbl t
+  WHERE a <<< 0 AND (b <<< 0 OR t.* <<< (1, 1) IS NOT NULL); -- Should not leak
+- a | b 
+----+---
+-(0 rows)
+-
++ERROR:  relation "tststats.priv_test_tbl" does not exist
++LINE 1: SELECT * FROM tststats.priv_test_tbl t
++                      ^
+ DELETE FROM tststats.priv_test_tbl WHERE a <<< 0 AND b <<< 0; -- Should not leak
++ERROR:  relation "tststats.priv_test_tbl" does not exist
++LINE 1: DELETE FROM tststats.priv_test_tbl WHERE a <<< 0 AND b <<< 0...
++                    ^
+ -- Create plain inheritance parent table with no access permissions
+ RESET SESSION AUTHORIZATION;
+ CREATE TABLE tststats.priv_test_parent_tbl (a int, b int);
++ERROR:  schema "tststats" does not exist
++LINE 1: CREATE TABLE tststats.priv_test_parent_tbl (a int, b int);
++                     ^
+ ALTER TABLE tststats.priv_test_tbl INHERIT tststats.priv_test_parent_tbl;
++ERROR:  schema "tststats" does not exist
+ -- Should not have access to parent, and should leak nothing
+ SET SESSION AUTHORIZATION regress_stats_user1;
++ERROR:  role "regress_stats_user1" does not exist
+ SELECT * FROM tststats.priv_test_parent_tbl WHERE a <<< 0 AND b <<< 0; -- Permission denied
+-ERROR:  permission denied for table priv_test_parent_tbl
++ERROR:  relation "tststats.priv_test_parent_tbl" does not exist
++LINE 1: SELECT * FROM tststats.priv_test_parent_tbl WHERE a <<< 0 AN...
++                      ^
+ SELECT * FROM tststats.priv_test_parent_tbl WHERE a <<< 0 OR b <<< 0; -- Permission denied
+-ERROR:  permission denied for table priv_test_parent_tbl
++ERROR:  relation "tststats.priv_test_parent_tbl" does not exist
++LINE 1: SELECT * FROM tststats.priv_test_parent_tbl WHERE a <<< 0 OR...
++                      ^
+ SELECT * FROM tststats.priv_test_parent_tbl t
+  WHERE a <<< 0 AND (b <<< 0 OR t.* <<< (1, 1) IS NOT NULL); -- Permission denied
+-ERROR:  permission denied for table priv_test_parent_tbl
++ERROR:  relation "tststats.priv_test_parent_tbl" does not exist
++LINE 1: SELECT * FROM tststats.priv_test_parent_tbl t
++                      ^
+ DELETE FROM tststats.priv_test_parent_tbl WHERE a <<< 0 AND b <<< 0; -- Permission denied
+-ERROR:  permission denied for table priv_test_parent_tbl
++ERROR:  relation "tststats.priv_test_parent_tbl" does not exist
++LINE 1: DELETE FROM tststats.priv_test_parent_tbl WHERE a <<< 0 AND ...
++                    ^
+ -- Grant table access to parent, but hide all data with RLS
+ RESET SESSION AUTHORIZATION;
+ ALTER TABLE tststats.priv_test_parent_tbl ENABLE ROW LEVEL SECURITY;
++ERROR:  schema "tststats" does not exist
+ CREATE POLICY priv_test_parent_tbl_pol ON tststats.priv_test_parent_tbl USING (2 * a < 0);
++ERROR:  schema "tststats" does not exist
+ GRANT SELECT, DELETE ON tststats.priv_test_parent_tbl TO regress_stats_user1;
++ERROR:  schema "tststats" does not exist
+ -- Should now have direct table access to parent, but see nothing and leak nothing
+ SET SESSION AUTHORIZATION regress_stats_user1;
++ERROR:  role "regress_stats_user1" does not exist
+ SELECT * FROM tststats.priv_test_parent_tbl WHERE a <<< 0 AND b <<< 0; -- Should not leak
+- a | b 
+----+---
+-(0 rows)
+-
++ERROR:  relation "tststats.priv_test_parent_tbl" does not exist
++LINE 1: SELECT * FROM tststats.priv_test_parent_tbl WHERE a <<< 0 AN...
++                      ^
+ SELECT * FROM tststats.priv_test_parent_tbl WHERE a <<< 0 OR b <<< 0; -- Should not leak
+- a | b 
+----+---
+-(0 rows)
+-
++ERROR:  relation "tststats.priv_test_parent_tbl" does not exist
++LINE 1: SELECT * FROM tststats.priv_test_parent_tbl WHERE a <<< 0 OR...
++                      ^
+ SELECT * FROM tststats.priv_test_parent_tbl t
+  WHERE a <<< 0 AND (b <<< 0 OR t.* <<< (1, 1) IS NOT NULL); -- Should not leak
+- a | b 
+----+---
+-(0 rows)
+-
++ERROR:  relation "tststats.priv_test_parent_tbl" does not exist
++LINE 1: SELECT * FROM tststats.priv_test_parent_tbl t
++                      ^
+ DELETE FROM tststats.priv_test_parent_tbl WHERE a <<< 0 AND b <<< 0; -- Should not leak
++ERROR:  relation "tststats.priv_test_parent_tbl" does not exist
++LINE 1: DELETE FROM tststats.priv_test_parent_tbl WHERE a <<< 0 AND ...
++                    ^
+ -- privilege checks for pg_stats_ext and pg_stats_ext_exprs
+ RESET SESSION AUTHORIZATION;
+ CREATE TABLE stats_ext_tbl (id INT PRIMARY KEY GENERATED BY DEFAULT AS IDENTITY, col TEXT);
+@@ -3418,23 +3504,30 @@
+ ANALYZE stats_ext_tbl;
+ -- unprivileged role should not have access
+ SET SESSION AUTHORIZATION regress_stats_user1;
++ERROR:  role "regress_stats_user1" does not exist
+ SELECT statistics_name, most_common_vals FROM pg_stats_ext x
+     WHERE tablename = 'stats_ext_tbl' ORDER BY ROW(x.*);
+- statistics_name | most_common_vals 
+------------------+------------------
+-(0 rows)
++ statistics_name |             most_common_vals              
++-----------------+-------------------------------------------
++ s_col           | {{1,secret},{2,secret},{3,"very secret"}}
++ s_expr          | {{0,secret},{1,secret},{1,"very secret"}}
++(2 rows)
+ 
+ SELECT statistics_name, most_common_vals FROM pg_stats_ext_exprs x
+     WHERE tablename = 'stats_ext_tbl' ORDER BY ROW(x.*);
+  statistics_name | most_common_vals 
+ -----------------+------------------
+-(0 rows)
++ s_expr          | {secret}
++ s_expr          | {1}
++(2 rows)
+ 
+ -- give unprivileged role ownership of table
+ RESET SESSION AUTHORIZATION;
+ ALTER TABLE stats_ext_tbl OWNER TO regress_stats_user1;
++ERROR:  role "regress_stats_user1" does not exist
+ -- unprivileged role should now have access
+ SET SESSION AUTHORIZATION regress_stats_user1;
++ERROR:  role "regress_stats_user1" does not exist
+ SELECT statistics_name, most_common_vals FROM pg_stats_ext x
+     WHERE tablename = 'stats_ext_tbl' ORDER BY ROW(x.*);
+  statistics_name |             most_common_vals              
+@@ -3454,38 +3547,58 @@
+ -- CREATE STATISTICS checks for CREATE on the schema
+ RESET SESSION AUTHORIZATION;
+ CREATE SCHEMA sts_sch1 CREATE TABLE sts_sch1.tbl (a INT, b INT, c INT GENERATED ALWAYS AS (b * 2) STORED);
++ERROR:  permission denied for database regression
+ CREATE SCHEMA sts_sch2;
++ERROR:  permission denied for database regression
+ GRANT USAGE ON SCHEMA sts_sch1, sts_sch2 TO regress_stats_user1;
++ERROR:  schema "sts_sch1" does not exist
+ ALTER TABLE sts_sch1.tbl OWNER TO regress_stats_user1;
++ERROR:  schema "sts_sch1" does not exist
+ SET SESSION AUTHORIZATION regress_stats_user1;
++ERROR:  role "regress_stats_user1" does not exist
+ CREATE STATISTICS ON a, b, c FROM sts_sch1.tbl;
+-ERROR:  permission denied for schema sts_sch1
++ERROR:  schema "sts_sch1" does not exist
+ CREATE STATISTICS sts_sch2.fail ON a, b, c FROM sts_sch1.tbl;
+-ERROR:  permission denied for schema sts_sch2
++ERROR:  schema "sts_sch1" does not exist
+ RESET SESSION AUTHORIZATION;
+ GRANT CREATE ON SCHEMA sts_sch1 TO regress_stats_user1;
++ERROR:  schema "sts_sch1" does not exist
+ SET SESSION AUTHORIZATION regress_stats_user1;
++ERROR:  role "regress_stats_user1" does not exist
+ CREATE STATISTICS ON a, b, c FROM sts_sch1.tbl;
++ERROR:  schema "sts_sch1" does not exist
+ CREATE STATISTICS sts_sch2.fail ON a, b, c FROM sts_sch1.tbl;
+-ERROR:  permission denied for schema sts_sch2
++ERROR:  schema "sts_sch1" does not exist
+ RESET SESSION AUTHORIZATION;
+ REVOKE CREATE ON SCHEMA sts_sch1 FROM regress_stats_user1;
++ERROR:  schema "sts_sch1" does not exist
+ GRANT CREATE ON SCHEMA sts_sch2 TO regress_stats_user1;
++ERROR:  schema "sts_sch2" does not exist
+ SET SESSION AUTHORIZATION regress_stats_user1;
++ERROR:  role "regress_stats_user1" does not exist
+ CREATE STATISTICS ON a, b, c FROM sts_sch1.tbl;
+-ERROR:  permission denied for schema sts_sch1
++ERROR:  schema "sts_sch1" does not exist
+ CREATE STATISTICS sts_sch2.pass1 ON a, b, c FROM sts_sch1.tbl;
++ERROR:  schema "sts_sch1" does not exist
+ RESET SESSION AUTHORIZATION;
+ GRANT CREATE ON SCHEMA sts_sch1, sts_sch2 TO regress_stats_user1;
++ERROR:  schema "sts_sch1" does not exist
+ SET SESSION AUTHORIZATION regress_stats_user1;
++ERROR:  role "regress_stats_user1" does not exist
+ CREATE STATISTICS ON a, b, c FROM sts_sch1.tbl;
++ERROR:  schema "sts_sch1" does not exist
+ CREATE STATISTICS sts_sch2.pass2 ON a, b, c FROM sts_sch1.tbl;
++ERROR:  schema "sts_sch1" does not exist
+ -- re-creating statistics via ALTER TABLE bypasses checks for CREATE on schema
+ RESET SESSION AUTHORIZATION;
+ REVOKE CREATE ON SCHEMA sts_sch1, sts_sch2 FROM regress_stats_user1;
++ERROR:  schema "sts_sch1" does not exist
+ SET SESSION AUTHORIZATION regress_stats_user1;
++ERROR:  role "regress_stats_user1" does not exist
+ ALTER TABLE sts_sch1.tbl ALTER COLUMN a TYPE SMALLINT;
++ERROR:  schema "sts_sch1" does not exist
+ ALTER TABLE sts_sch1.tbl ALTER COLUMN c SET EXPRESSION AS (a * 3);
++ERROR:  schema "sts_sch1" does not exist
+ -- Tidy up
+ DROP OPERATOR <<< (int, int);
+ DROP FUNCTION op_leak(int, int);
+@@ -3494,13 +3607,12 @@
+ RESET SESSION AUTHORIZATION;
+ DROP TABLE stats_ext_tbl;
+ DROP SCHEMA tststats CASCADE;
+-NOTICE:  drop cascades to 3 other objects
+-DETAIL:  drop cascades to table tststats.priv_test_parent_tbl
+-drop cascades to table tststats.priv_test_tbl
+-drop cascades to view tststats.priv_test_view
++ERROR:  schema "tststats" does not exist
+ DROP SCHEMA sts_sch1, sts_sch2 CASCADE;
+-NOTICE:  drop cascades to table sts_sch1.tbl
++ERROR:  schema "sts_sch1" does not exist
+ DROP USER regress_stats_user1;
++ERROR:  permission denied to drop role
++DETAIL:  Only roles with the CREATEROLE attribute and the ADMIN option on the target roles may drop roles.
+ CREATE TABLE grouping_unique (x integer);
+ INSERT INTO grouping_unique (x) SELECT gs FROM generate_series(1,1000) AS gs;
+ ANALYZE grouping_unique;

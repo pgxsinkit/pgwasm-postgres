@@ -1,0 +1,79 @@
+diff -U3 expected/cluster.out results/cluster.out
+--- expected/cluster.out
++++ results/cluster.out
+@@ -501,19 +501,23 @@
+ CREATE INDEX ptnowner_i_idx ON ptnowner(i);
+ CREATE TABLE ptnowner1 PARTITION OF ptnowner FOR VALUES IN (1);
+ CREATE ROLE regress_ptnowner;
++ERROR:  permission denied to create role
++DETAIL:  Only roles with the CREATEROLE attribute may create roles.
+ CREATE TABLE ptnowner2 PARTITION OF ptnowner FOR VALUES IN (2);
+ ALTER TABLE ptnowner1 OWNER TO regress_ptnowner;
++ERROR:  role "regress_ptnowner" does not exist
+ SET SESSION AUTHORIZATION regress_ptnowner;
++ERROR:  role "regress_ptnowner" does not exist
+ CLUSTER ptnowner USING ptnowner_i_idx;
+-ERROR:  permission denied for table ptnowner
+ RESET SESSION AUTHORIZATION;
+ ALTER TABLE ptnowner OWNER TO regress_ptnowner;
++ERROR:  role "regress_ptnowner" does not exist
+ CREATE TEMP TABLE ptnowner_oldnodes AS
+   SELECT oid, relname, relfilenode FROM pg_partition_tree('ptnowner') AS tree
+   JOIN pg_class AS c ON c.oid=tree.relid;
+ SET SESSION AUTHORIZATION regress_ptnowner;
++ERROR:  role "regress_ptnowner" does not exist
+ CLUSTER ptnowner USING ptnowner_i_idx;
+-WARNING:  permission denied to cluster "ptnowner2", skipping it
+ RESET SESSION AUTHORIZATION;
+ SELECT a.relname, a.relfilenode=b.relfilenode FROM pg_class a
+   JOIN ptnowner_oldnodes b USING (oid) ORDER BY a.relname COLLATE "C";
+@@ -521,28 +525,32 @@
+ -----------+----------
+  ptnowner  | t
+  ptnowner1 | f
+- ptnowner2 | t
++ ptnowner2 | f
+ (3 rows)
+ 
+ DROP TABLE ptnowner;
+ DROP ROLE regress_ptnowner;
++ERROR:  permission denied to drop role
++DETAIL:  Only roles with the CREATEROLE attribute and the ADMIN option on the target roles may drop roles.
+ -- Test CLUSTER with external tuplesorting
+ create table clstr_4 as select * from tenk1;
++ERROR:  permission denied for table tenk1
+ create index cluster_sort on clstr_4 (hundred, thousand, tenthous);
++ERROR:  relation "clstr_4" does not exist
+ -- ensure we don't use the index in CLUSTER nor the checking SELECTs
+ set enable_indexscan = off;
+ -- Use external sort:
+ set maintenance_work_mem = '1MB';
+ cluster clstr_4 using cluster_sort;
++ERROR:  relation "clstr_4" does not exist
+ select * from
+ (select hundred, lag(hundred) over () as lhundred,
+         thousand, lag(thousand) over () as lthousand,
+         tenthous, lag(tenthous) over () as ltenthous from clstr_4) ss
+ where row(hundred, thousand, tenthous) <= row(lhundred, lthousand, ltenthous);
+- hundred | lhundred | thousand | lthousand | tenthous | ltenthous 
+----------+----------+----------+-----------+----------+-----------
+-(0 rows)
+-
++ERROR:  relation "clstr_4" does not exist
++LINE 4: ...tenthous, lag(tenthous) over () as ltenthous from clstr_4) s...
++                                                             ^
+ reset enable_indexscan;
+ reset maintenance_work_mem;
+ -- test CLUSTER on expression index
+@@ -669,7 +677,11 @@
+ DROP TABLE clustertest;
+ DROP TABLE clstr_1;
+ DROP TABLE clstr_2;
++ERROR:  must be owner of table clstr_2
+ DROP TABLE clstr_3;
+ DROP TABLE clstr_4;
++ERROR:  table "clstr_4" does not exist
+ DROP TABLE clstr_expression;
+ DROP USER regress_clstr_user;
++ERROR:  permission denied to drop role
++DETAIL:  Only roles with the CREATEROLE attribute and the ADMIN option on the target roles may drop roles.

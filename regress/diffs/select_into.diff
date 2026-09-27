@@ -1,0 +1,75 @@
+diff -U3 expected/select_into.out results/select_into.out
+--- expected/select_into.out
++++ results/select_into.out
+@@ -78,16 +78,10 @@
+ RESET SESSION AUTHORIZATION;
+ DEALLOCATE data_sel;
+ DROP SCHEMA selinto_schema CASCADE;
+-NOTICE:  drop cascades to 8 other objects
+-DETAIL:  drop cascades to table selinto_schema.tbl_withdata1
+-drop cascades to table selinto_schema.tbl_withdata2
+-drop cascades to table selinto_schema.tbl_nodata1
+-drop cascades to table selinto_schema.tbl_nodata2
+-drop cascades to table selinto_schema.tbl_withdata3
+-drop cascades to table selinto_schema.tbl_withdata4
+-drop cascades to table selinto_schema.tbl_nodata3
+-drop cascades to table selinto_schema.tbl_nodata4
++ERROR:  must be owner of schema selinto_schema
+ DROP USER regress_selinto_user;
++ERROR:  permission denied to drop role
++DETAIL:  Only roles with the CREATEROLE attribute and the ADMIN option on the target roles may drop roles.
+ -- Tests for WITH NO DATA and column name consistency
+ CREATE TABLE ctas_base (i int, j int);
+ INSERT INTO ctas_base VALUES (1, 2);
+@@ -135,21 +129,12 @@
+   CREATE TABLE created_table AS SELECT * FROM int8_tbl;
+ $$ LANGUAGE SQL;
+ SELECT make_table();
+- make_table 
+-------------
+- 
+-(1 row)
+-
++ERROR:  permission denied for table int8_tbl
++CONTEXT:  SQL function "make_table" statement 1
+ SELECT * FROM created_table;
+-        q1        |        q2         
+-------------------+-------------------
+-              123 |               456
+-              123 |  4567890123456789
+- 4567890123456789 |               123
+- 4567890123456789 |  4567890123456789
+- 4567890123456789 | -4567890123456789
+-(5 rows)
+-
++ERROR:  relation "created_table" does not exist
++LINE 1: SELECT * FROM created_table;
++                      ^
+ -- Try EXPLAIN ANALYZE SELECT INTO and EXPLAIN ANALYZE CREATE TABLE AS
+ -- WITH NO DATA, but hide the outputs since they won't be stable.
+ DO $$
+@@ -157,8 +142,13 @@
+ 	EXECUTE 'EXPLAIN ANALYZE SELECT * INTO TABLE easi FROM int8_tbl';
+ 	EXECUTE 'EXPLAIN ANALYZE CREATE TABLE easi2 AS SELECT * FROM int8_tbl WITH NO DATA';
+ END$$;
++ERROR:  permission denied for table int8_tbl
++CONTEXT:  SQL statement "EXPLAIN ANALYZE SELECT * INTO TABLE easi FROM int8_tbl"
++PL/pgSQL function inline_code_block line 3 at EXECUTE
+ DROP TABLE created_table;
++ERROR:  table "created_table" does not exist
+ DROP TABLE easi, easi2;
++ERROR:  table "easi" does not exist
+ --
+ -- Disallowed uses of SELECT ... INTO.  All should fail
+ --
+@@ -167,7 +157,9 @@
+ LINE 1: DECLARE foo CURSOR FOR SELECT 1 INTO int4_tbl;
+                                              ^
+ COPY (SELECT 1 INTO frak UNION SELECT 2) TO 'blob';
+-ERROR:  COPY (SELECT INTO) is not supported
++ERROR:  permission denied to COPY to a file
++DETAIL:  Only roles with privileges of the "pg_write_server_files" role may COPY to a file.
++HINT:  Anyone can COPY to stdout or from stdin. psql's \copy command also works for anyone.
+ SELECT * FROM (SELECT 1 INTO f) bar;
+ ERROR:  SELECT ... INTO is not allowed here
+ LINE 1: SELECT * FROM (SELECT 1 INTO f) bar;

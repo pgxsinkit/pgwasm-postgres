@@ -1,0 +1,176 @@
+diff -U3 expected/create_type.out results/create_type.out
+--- expected/create_type.out
++++ results/create_type.out
+@@ -15,11 +15,12 @@
+    LANGUAGE C STRICT IMMUTABLE;
+ NOTICE:  type "widget" is not yet defined
+ DETAIL:  Creating a shell type definition.
++ERROR:  could not access file "@abs_builddir@/lib/regress.so": No such file or directory
+ CREATE FUNCTION widget_out(widget)
+    RETURNS cstring
+    AS :'regresslib'
+    LANGUAGE C STRICT IMMUTABLE;
+-NOTICE:  argument type widget is only a shell
++ERROR:  type widget does not exist
+ LINE 1: CREATE FUNCTION widget_out(widget)
+                                    ^
+ CREATE FUNCTION int44in(cstring)
+@@ -28,11 +29,12 @@
+    LANGUAGE C STRICT IMMUTABLE;
+ NOTICE:  type "city_budget" is not yet defined
+ DETAIL:  Creating a shell type definition.
++ERROR:  could not access file "@abs_builddir@/lib/regress.so": No such file or directory
+ CREATE FUNCTION int44out(city_budget)
+    RETURNS cstring
+    AS :'regresslib'
+    LANGUAGE C STRICT IMMUTABLE;
+-NOTICE:  argument type city_budget is only a shell
++ERROR:  type city_budget does not exist
+ LINE 1: CREATE FUNCTION int44out(city_budget)
+                                  ^
+ CREATE TYPE widget (
+@@ -43,6 +45,8 @@
+    typmod_out = numerictypmodout,
+    alignment = double
+ );
++ERROR:  type "widget" does not exist
++HINT:  Create the type as a shell type, then create its I/O functions, then do a full CREATE TYPE.
+ CREATE TYPE city_budget (
+    internallength = 16,
+    input = int44in,
+@@ -51,6 +55,8 @@
+    category = 'x',   -- just to verify the system will take it
+    preferred = true  -- ditto
+ );
++ERROR:  type "city_budget" does not exist
++HINT:  Create the type as a shell type, then create its I/O functions, then do a full CREATE TYPE.
+ -- Test creation and destruction of shell types
+ CREATE TYPE shell;
+ CREATE TYPE shell;   -- fail, type already present
+@@ -219,26 +225,27 @@
+ -- Check usage of typmod with a user-defined type
+ -- (we have borrowed numeric's typmod functions)
+ CREATE TEMP TABLE mytab (foo widget(42,13,7));     -- should fail
+-ERROR:  invalid NUMERIC type modifier
++ERROR:  type "widget" does not exist
+ LINE 1: CREATE TEMP TABLE mytab (foo widget(42,13,7));
+                                      ^
+ CREATE TEMP TABLE mytab (foo widget(42,13));
++ERROR:  type "widget" does not exist
++LINE 1: CREATE TEMP TABLE mytab (foo widget(42,13));
++                                     ^
+ SELECT format_type(atttypid,atttypmod) FROM pg_attribute
+ WHERE attrelid = 'mytab'::regclass AND attnum > 0;
+-  format_type  
+----------------
+- widget(42,13)
+-(1 row)
+-
++ERROR:  relation "mytab" does not exist
++LINE 2: WHERE attrelid = 'mytab'::regclass AND attnum > 0;
++                         ^
+ -- might as well exercise the widget type while we're here
+ INSERT INTO mytab VALUES ('(1,2,3)'), ('(-44,5.5,12)');
++ERROR:  relation "mytab" does not exist
++LINE 1: INSERT INTO mytab VALUES ('(1,2,3)'), ('(-44,5.5,12)');
++                    ^
+ TABLE mytab;
+-     foo      
+---------------
+- (1,2,3)
+- (-44,5.5,12)
+-(2 rows)
+-
++ERROR:  relation "mytab" does not exist
++LINE 1: TABLE mytab;
++              ^
+ -- and test format_type() a bit more, too
+ select format_type('varchar'::regtype, 42);
+       format_type      
+@@ -261,34 +268,25 @@
+ 
+ -- Test non-error-throwing APIs using widget, which still throws errors
+ SELECT pg_input_is_valid('(1,2,3)', 'widget');
+- pg_input_is_valid 
+--------------------
+- t
+-(1 row)
+-
++ERROR:  type "widget" does not exist
+ SELECT pg_input_is_valid('(1,2)', 'widget');  -- hard error expected
+-ERROR:  invalid input syntax for type widget: "(1,2)"
++ERROR:  type "widget" does not exist
+ SELECT pg_input_is_valid('{"(1,2,3)"}', 'widget[]');
+- pg_input_is_valid 
+--------------------
+- t
+-(1 row)
+-
++ERROR:  type "widget[]" does not exist
+ SELECT pg_input_is_valid('{"(1,2)"}', 'widget[]');  -- hard error expected
+-ERROR:  invalid input syntax for type widget: "(1,2)"
++ERROR:  type "widget[]" does not exist
+ SELECT pg_input_is_valid('("(1,2,3)")', 'mytab');
+- pg_input_is_valid 
+--------------------
+- t
+-(1 row)
+-
++ERROR:  type "mytab" does not exist
+ SELECT pg_input_is_valid('("(1,2)")', 'mytab');  -- hard error expected
+-ERROR:  invalid input syntax for type widget: "(1,2)"
++ERROR:  type "mytab" does not exist
+ -- Test creation of an operator over a user-defined type
+ CREATE FUNCTION pt_in_widget(point, widget)
+    RETURNS bool
+    AS :'regresslib'
+    LANGUAGE C STRICT;
++ERROR:  type widget does not exist
++LINE 1: CREATE FUNCTION pt_in_widget(point, widget)
++                                            ^
+ CREATE OPERATOR <% (
+    leftarg = point,
+    rightarg = widget,
+@@ -296,29 +294,31 @@
+    commutator = >% ,
+    negator = >=%
+ );
++ERROR:  type "widget" does not exist
+ SELECT point '(1,2)' <% widget '(0,0,3)' AS t,
+        point '(1,2)' <% widget '(0,0,1)' AS f;
+- t | f 
+----+---
+- t | f
+-(1 row)
+-
++ERROR:  type "widget" does not exist
++LINE 1: SELECT point '(1,2)' <% widget '(0,0,3)' AS t,
++                                ^
+ -- exercise city_budget type
+ CREATE TABLE city (
+ 	name		name,
+ 	location 	box,
+ 	budget 		city_budget
+ );
++ERROR:  type "city_budget" does not exist
++LINE 4:  budget   city_budget
++                  ^
+ INSERT INTO city VALUES
+ ('Podunk', '(1,2),(3,4)', '100,127,1000'),
+ ('Gotham', '(1000,34),(1100,334)', '123456,127,-1000,6789');
++ERROR:  relation "city" does not exist
++LINE 1: INSERT INTO city VALUES
++                    ^
+ TABLE city;
+-  name  |       location       |        budget         
+---------+----------------------+-----------------------
+- Podunk | (3,4),(1,2)          | 100,127,1000,0
+- Gotham | (1100,334),(1000,34) | 123456,127,-1000,6789
+-(2 rows)
+-
++ERROR:  relation "city" does not exist
++LINE 1: TABLE city;
++              ^
+ --
+ -- Test CREATE/ALTER TYPE using a type that's compatible with varchar,
+ -- so we can re-use those support functions

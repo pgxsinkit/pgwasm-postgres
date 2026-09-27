@@ -1,0 +1,325 @@
+diff -U3 expected/misc_functions.out results/misc_functions.out
+--- expected/misc_functions.out
++++ results/misc_functions.out
+@@ -184,138 +184,117 @@
+    RETURNS text
+    AS :'regresslib'
+    LANGUAGE C STRICT IMMUTABLE;
++ERROR:  could not access file "@abs_builddir@/lib/regress.so": No such file or directory
+ SELECT test_canonicalize_path('/');
+- test_canonicalize_path 
+-------------------------
+- /
+-(1 row)
+-
++ERROR:  function test_canonicalize_path(unknown) does not exist
++LINE 1: SELECT test_canonicalize_path('/');
++               ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT test_canonicalize_path('/./abc/def/');
+- test_canonicalize_path 
+-------------------------
+- /abc/def
+-(1 row)
+-
++ERROR:  function test_canonicalize_path(unknown) does not exist
++LINE 1: SELECT test_canonicalize_path('/./abc/def/');
++               ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT test_canonicalize_path('/./../abc/def');
+- test_canonicalize_path 
+-------------------------
+- /abc/def
+-(1 row)
+-
++ERROR:  function test_canonicalize_path(unknown) does not exist
++LINE 1: SELECT test_canonicalize_path('/./../abc/def');
++               ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT test_canonicalize_path('/./../../abc/def/');
+- test_canonicalize_path 
+-------------------------
+- /abc/def
+-(1 row)
+-
++ERROR:  function test_canonicalize_path(unknown) does not exist
++LINE 1: SELECT test_canonicalize_path('/./../../abc/def/');
++               ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT test_canonicalize_path('/abc/.././def/ghi');
+- test_canonicalize_path 
+-------------------------
+- /def/ghi
+-(1 row)
+-
++ERROR:  function test_canonicalize_path(unknown) does not exist
++LINE 1: SELECT test_canonicalize_path('/abc/.././def/ghi');
++               ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT test_canonicalize_path('/abc/./../def/ghi//');
+- test_canonicalize_path 
+-------------------------
+- /def/ghi
+-(1 row)
+-
++ERROR:  function test_canonicalize_path(unknown) does not exist
++LINE 1: SELECT test_canonicalize_path('/abc/./../def/ghi//');
++               ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT test_canonicalize_path('/abc/def/../..');
+- test_canonicalize_path 
+-------------------------
+- /
+-(1 row)
+-
++ERROR:  function test_canonicalize_path(unknown) does not exist
++LINE 1: SELECT test_canonicalize_path('/abc/def/../..');
++               ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT test_canonicalize_path('/abc/def/../../..');
+- test_canonicalize_path 
+-------------------------
+- /
+-(1 row)
+-
++ERROR:  function test_canonicalize_path(unknown) does not exist
++LINE 1: SELECT test_canonicalize_path('/abc/def/../../..');
++               ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT test_canonicalize_path('/abc/def/../../../../ghi/jkl');
+- test_canonicalize_path 
+-------------------------
+- /ghi/jkl
+-(1 row)
+-
++ERROR:  function test_canonicalize_path(unknown) does not exist
++LINE 1: SELECT test_canonicalize_path('/abc/def/../../../../ghi/jkl'...
++               ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT test_canonicalize_path('.');
+- test_canonicalize_path 
+-------------------------
+- .
+-(1 row)
+-
++ERROR:  function test_canonicalize_path(unknown) does not exist
++LINE 1: SELECT test_canonicalize_path('.');
++               ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT test_canonicalize_path('./');
+- test_canonicalize_path 
+-------------------------
+- .
+-(1 row)
+-
++ERROR:  function test_canonicalize_path(unknown) does not exist
++LINE 1: SELECT test_canonicalize_path('./');
++               ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT test_canonicalize_path('./abc/..');
+- test_canonicalize_path 
+-------------------------
+- .
+-(1 row)
+-
++ERROR:  function test_canonicalize_path(unknown) does not exist
++LINE 1: SELECT test_canonicalize_path('./abc/..');
++               ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT test_canonicalize_path('abc/../');
+- test_canonicalize_path 
+-------------------------
+- .
+-(1 row)
+-
++ERROR:  function test_canonicalize_path(unknown) does not exist
++LINE 1: SELECT test_canonicalize_path('abc/../');
++               ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT test_canonicalize_path('abc/../def');
+- test_canonicalize_path 
+-------------------------
+- def
+-(1 row)
+-
++ERROR:  function test_canonicalize_path(unknown) does not exist
++LINE 1: SELECT test_canonicalize_path('abc/../def');
++               ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT test_canonicalize_path('..');
+- test_canonicalize_path 
+-------------------------
+- ..
+-(1 row)
+-
++ERROR:  function test_canonicalize_path(unknown) does not exist
++LINE 1: SELECT test_canonicalize_path('..');
++               ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT test_canonicalize_path('../abc/def');
+- test_canonicalize_path 
+-------------------------
+- ../abc/def
+-(1 row)
+-
++ERROR:  function test_canonicalize_path(unknown) does not exist
++LINE 1: SELECT test_canonicalize_path('../abc/def');
++               ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT test_canonicalize_path('../abc/..');
+- test_canonicalize_path 
+-------------------------
+- ..
+-(1 row)
+-
++ERROR:  function test_canonicalize_path(unknown) does not exist
++LINE 1: SELECT test_canonicalize_path('../abc/..');
++               ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT test_canonicalize_path('../abc/../def');
+- test_canonicalize_path 
+-------------------------
+- ../def
+-(1 row)
+-
++ERROR:  function test_canonicalize_path(unknown) does not exist
++LINE 1: SELECT test_canonicalize_path('../abc/../def');
++               ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT test_canonicalize_path('../abc/../../def/ghi');
+- test_canonicalize_path 
+-------------------------
+- ../../def/ghi
+-(1 row)
+-
++ERROR:  function test_canonicalize_path(unknown) does not exist
++LINE 1: SELECT test_canonicalize_path('../abc/../../def/ghi');
++               ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT test_canonicalize_path('./abc/./def/.');
+- test_canonicalize_path 
+-------------------------
+- abc/def
+-(1 row)
+-
++ERROR:  function test_canonicalize_path(unknown) does not exist
++LINE 1: SELECT test_canonicalize_path('./abc/./def/.');
++               ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT test_canonicalize_path('./abc/././def/.');
+- test_canonicalize_path 
+-------------------------
+- abc/def
+-(1 row)
+-
++ERROR:  function test_canonicalize_path(unknown) does not exist
++LINE 1: SELECT test_canonicalize_path('./abc/././def/.');
++               ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT test_canonicalize_path('./abc/./def/.././ghi/../../../jkl/mno');
+- test_canonicalize_path 
+-------------------------
+- ../jkl/mno
+-(1 row)
+-
++ERROR:  function test_canonicalize_path(unknown) does not exist
++LINE 1: SELECT test_canonicalize_path('./abc/./def/.././ghi/../../.....
++               ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ --
+ -- pg_log_backend_memory_contexts()
+ --
+@@ -334,8 +313,7 @@
+   WHERE backend_type = 'checkpointer';
+  pg_log_backend_memory_contexts 
+ --------------------------------
+- t
+-(1 row)
++(0 rows)
+ 
+ CREATE ROLE regress_log_memory;
+ SELECT has_function_privilege('regress_log_memory',
+@@ -601,45 +579,40 @@
+     RETURNS internal
+     AS :'regresslib', 'test_support_func'
+     LANGUAGE C STRICT;
++ERROR:  could not access file "@abs_builddir@/lib/regress.so": No such file or directory
+ ALTER FUNCTION my_int_eq(int, int) SUPPORT test_support_func;
++ERROR:  function test_support_func(internal) does not exist
+ EXPLAIN (COSTS OFF)
+ SELECT * FROM tenk1 a JOIN tenk1 b ON a.unique1 = b.unique1
+ WHERE my_int_eq(a.unique2, 42);
+-                   QUERY PLAN                    
+--------------------------------------------------
+- Nested Loop
+-   ->  Seq Scan on tenk1 a
+-         Filter: my_int_eq(unique2, 42)
+-   ->  Index Scan using tenk1_unique1 on tenk1 b
+-         Index Cond: (unique1 = a.unique1)
+-(5 rows)
++                  QUERY PLAN                  
++----------------------------------------------
++ Hash Join
++   Hash Cond: (b.unique1 = a.unique1)
++   ->  Seq Scan on tenk1 b
++   ->  Hash
++         ->  Seq Scan on tenk1 a
++               Filter: my_int_eq(unique2, 42)
++(6 rows)
+ 
+ -- Also test non-default rowcount estimate
+ CREATE FUNCTION my_gen_series(int, int) RETURNS SETOF integer
+   LANGUAGE internal STRICT IMMUTABLE PARALLEL SAFE
+   AS $$generate_series_int4$$
+   SUPPORT test_support_func;
++ERROR:  function test_support_func(internal) does not exist
+ EXPLAIN (COSTS OFF)
+ SELECT * FROM tenk1 a JOIN my_gen_series(1,1000) g ON a.unique1 = g;
+-               QUERY PLAN               
+-----------------------------------------
+- Hash Join
+-   Hash Cond: (g.g = a.unique1)
+-   ->  Function Scan on my_gen_series g
+-   ->  Hash
+-         ->  Seq Scan on tenk1 a
+-(5 rows)
+-
++ERROR:  function my_gen_series(integer, integer) does not exist
++LINE 2: SELECT * FROM tenk1 a JOIN my_gen_series(1,1000) g ON a.uniq...
++                                   ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ EXPLAIN (COSTS OFF)
+ SELECT * FROM tenk1 a JOIN my_gen_series(1,10) g ON a.unique1 = g;
+-                   QUERY PLAN                    
+--------------------------------------------------
+- Nested Loop
+-   ->  Function Scan on my_gen_series g
+-   ->  Index Scan using tenk1_unique1 on tenk1 a
+-         Index Cond: (unique1 = g.g)
+-(4 rows)
+-
++ERROR:  function my_gen_series(integer, integer) does not exist
++LINE 2: SELECT * FROM tenk1 a JOIN my_gen_series(1,10) g ON a.unique...
++                                   ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ --
+ -- Test the SupportRequestRows support function for generate_series_timestamp()
+ --
+@@ -908,12 +881,12 @@
+     RETURNS void
+     AS :'regresslib'
+     LANGUAGE C;
++ERROR:  could not access file "@abs_builddir@/lib/regress.so": No such file or directory
+ SELECT test_relpath();
+- test_relpath 
+---------------
+- 
+-(1 row)
+-
++ERROR:  function test_relpath() does not exist
++LINE 1: SELECT test_relpath();
++               ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- pg_replication_origin.roname limit
+ SELECT pg_replication_origin_create('regress_' || repeat('a', 505));
+ ERROR:  replication origin name is too long

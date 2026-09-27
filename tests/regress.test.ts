@@ -1,9 +1,13 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 
+import { layoutFor, repoRoot } from "../scripts/lib/layout.ts";
 import {
   combineRuns,
   compare,
+  formatBaseline,
   passes,
+  readBaseline,
   recordBaseline,
   UNCLASSIFIED,
   validateBaseline,
@@ -186,6 +190,19 @@ describe("the baseline", () => {
     });
     expect(passes(comparison)).toBe(false);
     expect(passes(compare(baseline, diffs, combineRuns([run({ ok1: ok, extra: ok })])))).toBe(false);
+  });
+
+  test("the committed baseline is consistent, and written as --record writes it", () => {
+    const layout = layoutFor(repoRoot);
+    const recorded = readBaseline(layout);
+    expect(recorded).toBeDefined();
+    if (recorded === undefined) return;
+    expect(validateBaseline(recorded.baseline, [...recorded.diffs.keys()])).toEqual([]);
+    expect(formatBaseline(recorded.baseline)).toBe(readFileSync(layout.regressBaseline, "utf8"));
+    for (const [name, diff] of recorded.diffs) {
+      expect(diff.startsWith(`diff -U3 expected/`), name).toBe(true);
+      expect(diff.includes(layout.root), name).toBe(false);
+    }
   });
 });
 

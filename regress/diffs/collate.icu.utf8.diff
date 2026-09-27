@@ -1,0 +1,1537 @@
+diff -U3 expected/collate.icu.utf8.out results/collate.icu.utf8.out
+--- expected/collate.icu.utf8.out
++++ results/collate.icu.utf8.out
+@@ -15,13 +15,10 @@
+     a int,
+     b text COLLATE "en-x-icu" NOT NULL
+ );
++ERROR:  collation "en-x-icu" for encoding "UTF8" does not exist
++LINE 3:     b text COLLATE "en-x-icu" NOT NULL
++                   ^
+ \d collate_test1
+-        Table "collate_tests.collate_test1"
+- Column |  Type   | Collation | Nullable | Default 
+---------+---------+-----------+----------+---------
+- a      | integer |           |          | 
+- b      | text    | en-x-icu  | not null | 
+-
+ CREATE TABLE collate_test_fail (
+     a int,
+     b text COLLATE "ja_JP.eucjp-x-icu"
+@@ -40,313 +37,229 @@
+     a int COLLATE "en-x-icu",
+     b text
+ );
+-ERROR:  collations are not supported by type integer
++ERROR:  collation "en-x-icu" for encoding "UTF8" does not exist
+ LINE 2:     a int COLLATE "en-x-icu",
+                   ^
+ CREATE TABLE collate_test_like (
+     LIKE collate_test1
+ );
++ERROR:  relation "collate_test1" does not exist
++LINE 2:     LIKE collate_test1
++                 ^
+ \d collate_test_like
+-      Table "collate_tests.collate_test_like"
+- Column |  Type   | Collation | Nullable | Default 
+---------+---------+-----------+----------+---------
+- a      | integer |           |          | 
+- b      | text    | en-x-icu  | not null | 
+-
+ CREATE TABLE collate_test2 (
+     a int,
+     b text COLLATE "sv-x-icu"
+ );
++ERROR:  collation "sv-x-icu" for encoding "UTF8" does not exist
++LINE 3:     b text COLLATE "sv-x-icu"
++                   ^
+ CREATE TABLE collate_test3 (
+     a int,
+     b text COLLATE "C"
+ );
+ INSERT INTO collate_test1 VALUES (1, 'abc'), (2, 'äbc'), (3, 'bbc'), (4, 'ABC');
++ERROR:  relation "collate_test1" does not exist
++LINE 1: INSERT INTO collate_test1 VALUES (1, 'abc'), (2, 'äbc'), (3,...
++                    ^
+ INSERT INTO collate_test2 SELECT * FROM collate_test1;
++ERROR:  relation "collate_test2" does not exist
++LINE 1: INSERT INTO collate_test2 SELECT * FROM collate_test1;
++                    ^
+ INSERT INTO collate_test3 SELECT * FROM collate_test1;
++ERROR:  relation "collate_test1" does not exist
++LINE 1: INSERT INTO collate_test3 SELECT * FROM collate_test1;
++                                                ^
+ SELECT * FROM collate_test1 WHERE b >= 'bbc';
+- a |  b  
+----+-----
+- 3 | bbc
+-(1 row)
+-
++ERROR:  relation "collate_test1" does not exist
++LINE 1: SELECT * FROM collate_test1 WHERE b >= 'bbc';
++                      ^
+ SELECT * FROM collate_test2 WHERE b >= 'bbc';
+- a |  b  
+----+-----
+- 2 | äbc
+- 3 | bbc
+-(2 rows)
+-
++ERROR:  relation "collate_test2" does not exist
++LINE 1: SELECT * FROM collate_test2 WHERE b >= 'bbc';
++                      ^
+ SELECT * FROM collate_test3 WHERE b >= 'bbc';
+- a |  b  
+----+-----
+- 2 | äbc
+- 3 | bbc
+-(2 rows)
++ a | b 
++---+---
++(0 rows)
+ 
+ SELECT * FROM collate_test3 WHERE b >= 'BBC';
+- a |  b  
+----+-----
+- 1 | abc
+- 2 | äbc
+- 3 | bbc
+-(3 rows)
++ a | b 
++---+---
++(0 rows)
+ 
+ SELECT * FROM collate_test1 WHERE b COLLATE "C" >= 'bbc';
+- a |  b  
+----+-----
+- 2 | äbc
+- 3 | bbc
+-(2 rows)
+-
++ERROR:  relation "collate_test1" does not exist
++LINE 1: SELECT * FROM collate_test1 WHERE b COLLATE "C" >= 'bbc';
++                      ^
+ SELECT * FROM collate_test1 WHERE b >= 'bbc' COLLATE "C";
+- a |  b  
+----+-----
+- 2 | äbc
+- 3 | bbc
+-(2 rows)
+-
++ERROR:  relation "collate_test1" does not exist
++LINE 1: SELECT * FROM collate_test1 WHERE b >= 'bbc' COLLATE "C";
++                      ^
+ SELECT * FROM collate_test1 WHERE b COLLATE "C" >= 'bbc' COLLATE "C";
+- a |  b  
+----+-----
+- 2 | äbc
+- 3 | bbc
+-(2 rows)
+-
++ERROR:  relation "collate_test1" does not exist
++LINE 1: SELECT * FROM collate_test1 WHERE b COLLATE "C" >= 'bbc' COL...
++                      ^
+ SELECT * FROM collate_test1 WHERE b COLLATE "C" >= 'bbc' COLLATE "en-x-icu";
+-ERROR:  collation mismatch between explicit collations "C" and "en-x-icu"
+-LINE 1: ...* FROM collate_test1 WHERE b COLLATE "C" >= 'bbc' COLLATE "e...
+-                                                             ^
++ERROR:  relation "collate_test1" does not exist
++LINE 1: SELECT * FROM collate_test1 WHERE b COLLATE "C" >= 'bbc' COL...
++                      ^
+ CREATE DOMAIN testdomain_sv AS text COLLATE "sv-x-icu";
++ERROR:  collation "sv-x-icu" for encoding "UTF8" does not exist
+ CREATE DOMAIN testdomain_i AS int COLLATE "sv-x-icu"; -- fails
+-ERROR:  collations are not supported by type integer
+-LINE 1: CREATE DOMAIN testdomain_i AS int COLLATE "sv-x-icu";
+-                                      ^
++ERROR:  collation "sv-x-icu" for encoding "UTF8" does not exist
+ CREATE TABLE collate_test4 (
+     a int,
+     b testdomain_sv
+ );
++ERROR:  type "testdomain_sv" does not exist
++LINE 3:     b testdomain_sv
++              ^
+ INSERT INTO collate_test4 SELECT * FROM collate_test1;
++ERROR:  relation "collate_test4" does not exist
++LINE 1: INSERT INTO collate_test4 SELECT * FROM collate_test1;
++                    ^
+ SELECT a, b FROM collate_test4 ORDER BY b;
+- a |  b  
+----+-----
+- 1 | abc
+- 4 | ABC
+- 3 | bbc
+- 2 | äbc
+-(4 rows)
+-
++ERROR:  relation "collate_test4" does not exist
++LINE 1: SELECT a, b FROM collate_test4 ORDER BY b;
++                         ^
+ CREATE TABLE collate_test5 (
+     a int,
+     b testdomain_sv COLLATE "en-x-icu"
+ );
++ERROR:  type "testdomain_sv" does not exist
++LINE 3:     b testdomain_sv COLLATE "en-x-icu"
++              ^
+ INSERT INTO collate_test5 SELECT * FROM collate_test1;
++ERROR:  relation "collate_test5" does not exist
++LINE 1: INSERT INTO collate_test5 SELECT * FROM collate_test1;
++                    ^
+ SELECT a, b FROM collate_test5 ORDER BY b;
+- a |  b  
+----+-----
+- 1 | abc
+- 4 | ABC
+- 2 | äbc
+- 3 | bbc
+-(4 rows)
+-
++ERROR:  relation "collate_test5" does not exist
++LINE 1: SELECT a, b FROM collate_test5 ORDER BY b;
++                         ^
+ SELECT a, b FROM collate_test1 ORDER BY b;
+- a |  b  
+----+-----
+- 1 | abc
+- 4 | ABC
+- 2 | äbc
+- 3 | bbc
+-(4 rows)
+-
++ERROR:  relation "collate_test1" does not exist
++LINE 1: SELECT a, b FROM collate_test1 ORDER BY b;
++                         ^
+ SELECT a, b FROM collate_test2 ORDER BY b;
+- a |  b  
+----+-----
+- 1 | abc
+- 4 | ABC
+- 3 | bbc
+- 2 | äbc
+-(4 rows)
+-
++ERROR:  relation "collate_test2" does not exist
++LINE 1: SELECT a, b FROM collate_test2 ORDER BY b;
++                         ^
+ SELECT a, b FROM collate_test3 ORDER BY b;
+- a |  b  
+----+-----
+- 4 | ABC
+- 1 | abc
+- 3 | bbc
+- 2 | äbc
+-(4 rows)
++ a | b 
++---+---
++(0 rows)
+ 
+ SELECT a, b FROM collate_test1 ORDER BY b COLLATE "C";
+- a |  b  
+----+-----
+- 4 | ABC
+- 1 | abc
+- 3 | bbc
+- 2 | äbc
+-(4 rows)
+-
++ERROR:  relation "collate_test1" does not exist
++LINE 1: SELECT a, b FROM collate_test1 ORDER BY b COLLATE "C";
++                         ^
+ -- star expansion
+ SELECT * FROM collate_test1 ORDER BY b;
+- a |  b  
+----+-----
+- 1 | abc
+- 4 | ABC
+- 2 | äbc
+- 3 | bbc
+-(4 rows)
+-
++ERROR:  relation "collate_test1" does not exist
++LINE 1: SELECT * FROM collate_test1 ORDER BY b;
++                      ^
+ SELECT * FROM collate_test2 ORDER BY b;
+- a |  b  
+----+-----
+- 1 | abc
+- 4 | ABC
+- 3 | bbc
+- 2 | äbc
+-(4 rows)
+-
++ERROR:  relation "collate_test2" does not exist
++LINE 1: SELECT * FROM collate_test2 ORDER BY b;
++                      ^
+ SELECT * FROM collate_test3 ORDER BY b;
+- a |  b  
+----+-----
+- 4 | ABC
+- 1 | abc
+- 3 | bbc
+- 2 | äbc
+-(4 rows)
++ a | b 
++---+---
++(0 rows)
+ 
+ -- constant expression folding
+ SELECT 'bbc' COLLATE "en-x-icu" > 'äbc' COLLATE "en-x-icu" AS "true";
+- true 
+-------
+- t
+-(1 row)
+-
++ERROR:  collation "en-x-icu" for encoding "UTF8" does not exist
++LINE 1: SELECT 'bbc' COLLATE "en-x-icu" > 'äbc' COLLATE "en-x-icu" A...
++                     ^
+ SELECT 'bbc' COLLATE "sv-x-icu" > 'äbc' COLLATE "sv-x-icu" AS "false";
+- false 
+--------
+- f
+-(1 row)
+-
++ERROR:  collation "sv-x-icu" for encoding "UTF8" does not exist
++LINE 1: SELECT 'bbc' COLLATE "sv-x-icu" > 'äbc' COLLATE "sv-x-icu" A...
++                     ^
+ -- upper/lower
+ CREATE TABLE collate_test10 (
+     a int,
+     x text COLLATE "en-x-icu",
+     y text COLLATE "tr-x-icu"
+ );
++ERROR:  collation "en-x-icu" for encoding "UTF8" does not exist
++LINE 3:     x text COLLATE "en-x-icu",
++                   ^
+ INSERT INTO collate_test10 VALUES (1, 'hij', 'hij'), (2, 'HIJ', 'HIJ');
++ERROR:  relation "collate_test10" does not exist
++LINE 1: INSERT INTO collate_test10 VALUES (1, 'hij', 'hij'), (2, 'HI...
++                    ^
+ SELECT a, lower(x), lower(y), upper(x), upper(y), initcap(x), initcap(y) FROM collate_test10;
+- a | lower | lower | upper | upper | initcap | initcap 
+----+-------+-------+-------+-------+---------+---------
+- 1 | hij   | hij   | HIJ   | HİJ   | Hij     | Hij
+- 2 | hij   | hıj   | HIJ   | HIJ   | Hij     | Hıj
+-(2 rows)
+-
++ERROR:  relation "collate_test10" does not exist
++LINE 1: ..., upper(x), upper(y), initcap(x), initcap(y) FROM collate_te...
++                                                             ^
+ SELECT a, lower(x COLLATE "C"), lower(y COLLATE "C") FROM collate_test10;
+- a | lower | lower 
+----+-------+-------
+- 1 | hij   | hij
+- 2 | hij   | hij
+-(2 rows)
+-
++ERROR:  relation "collate_test10" does not exist
++LINE 1: ..., lower(x COLLATE "C"), lower(y COLLATE "C") FROM collate_te...
++                                                             ^
+ SELECT a, x, y FROM collate_test10 ORDER BY lower(y), a;
+- a |  x  |  y  
+----+-----+-----
+- 2 | HIJ | HIJ
+- 1 | hij | hij
+-(2 rows)
+-
++ERROR:  relation "collate_test10" does not exist
++LINE 1: SELECT a, x, y FROM collate_test10 ORDER BY lower(y), a;
++                            ^
+ SELECT lower('AbCd 123 #$% ıiIİ ẞ ß Ǆǅǆ Σσς' COLLATE "en-x-icu");
+-             lower             
+--------------------------------
+- abcd 123 #$% ıiii̇ ß ß ǆǆǆ σσς
+-(1 row)
+-
++ERROR:  collation "en-x-icu" for encoding "UTF8" does not exist
++LINE 1: SELECT lower('AbCd 123 #$% ıiIİ ẞ ß Ǆǅǆ Σσς' COLLATE "en-x-i...
++                                                     ^
+ SELECT casefold('AbCd 123 #$% ıiIİ ẞ ß Ǆǅǆ Σσς' COLLATE "en-x-icu");
+-            casefold             
+----------------------------------
+- abcd 123 #$% ıiii̇ ss ss ǆǆǆ σσσ
+-(1 row)
+-
++ERROR:  collation "en-x-icu" for encoding "UTF8" does not exist
++LINE 1: SELECT casefold('AbCd 123 #$% ıiIİ ẞ ß Ǆǅǆ Σσς' COLLATE "en-...
++                                                        ^
+ SELECT lower('AbCd 123 #$% ıiIİ ẞ ß Ǆǅǆ Σσς' COLLATE "tr-x-icu");
+-             lower             
+--------------------------------
+- abcd 123 #$% ıiıi ß ß ǆǆǆ σσς
+-(1 row)
+-
++ERROR:  collation "tr-x-icu" for encoding "UTF8" does not exist
++LINE 1: SELECT lower('AbCd 123 #$% ıiIİ ẞ ß Ǆǅǆ Σσς' COLLATE "tr-x-i...
++                                                     ^
+ SELECT casefold('AbCd 123 #$% ıiIİ ẞ ß Ǆǅǆ Σσς' COLLATE "tr-x-icu");
+-            casefold             
+----------------------------------
+- abcd 123 #$% ıiıi ss ss ǆǆǆ σσσ
+-(1 row)
+-
++ERROR:  collation "tr-x-icu" for encoding "UTF8" does not exist
++LINE 1: SELECT casefold('AbCd 123 #$% ıiIİ ẞ ß Ǆǅǆ Σσς' COLLATE "tr-...
++                                                        ^
+ -- LIKE/ILIKE
+ SELECT * FROM collate_test1 WHERE b LIKE 'abc';
+- a |  b  
+----+-----
+- 1 | abc
+-(1 row)
+-
++ERROR:  relation "collate_test1" does not exist
++LINE 1: SELECT * FROM collate_test1 WHERE b LIKE 'abc';
++                      ^
+ SELECT * FROM collate_test1 WHERE b LIKE 'abc%';
+- a |  b  
+----+-----
+- 1 | abc
+-(1 row)
+-
++ERROR:  relation "collate_test1" does not exist
++LINE 1: SELECT * FROM collate_test1 WHERE b LIKE 'abc%';
++                      ^
+ SELECT * FROM collate_test1 WHERE b LIKE '%bc%';
+- a |  b  
+----+-----
+- 1 | abc
+- 2 | äbc
+- 3 | bbc
+-(3 rows)
+-
++ERROR:  relation "collate_test1" does not exist
++LINE 1: SELECT * FROM collate_test1 WHERE b LIKE '%bc%';
++                      ^
+ SELECT * FROM collate_test1 WHERE b ILIKE 'abc';
+- a |  b  
+----+-----
+- 1 | abc
+- 4 | ABC
+-(2 rows)
+-
++ERROR:  relation "collate_test1" does not exist
++LINE 1: SELECT * FROM collate_test1 WHERE b ILIKE 'abc';
++                      ^
+ SELECT * FROM collate_test1 WHERE b ILIKE 'abc%';
+- a |  b  
+----+-----
+- 1 | abc
+- 4 | ABC
+-(2 rows)
+-
++ERROR:  relation "collate_test1" does not exist
++LINE 1: SELECT * FROM collate_test1 WHERE b ILIKE 'abc%';
++                      ^
+ SELECT * FROM collate_test1 WHERE b ILIKE '%bc%';
+- a |  b  
+----+-----
+- 1 | abc
+- 2 | äbc
+- 3 | bbc
+- 4 | ABC
+-(4 rows)
+-
++ERROR:  relation "collate_test1" does not exist
++LINE 1: SELECT * FROM collate_test1 WHERE b ILIKE '%bc%';
++                      ^
+ SELECT 'Türkiye' COLLATE "en-x-icu" ILIKE '%KI%' AS "true";
+- true 
+-------
+- t
+-(1 row)
+-
++ERROR:  collation "en-x-icu" for encoding "UTF8" does not exist
++LINE 1: SELECT 'Türkiye' COLLATE "en-x-icu" ILIKE '%KI%' AS "true";
++                         ^
+ SELECT 'Türkiye' COLLATE "tr-x-icu" ILIKE '%KI%' AS "false";
+- false 
+--------
+- f
+-(1 row)
+-
++ERROR:  collation "tr-x-icu" for encoding "UTF8" does not exist
++LINE 1: SELECT 'Türkiye' COLLATE "tr-x-icu" ILIKE '%KI%' AS "false";
++                         ^
+ SELECT 'bıt' ILIKE 'BIT' COLLATE "en-x-icu" AS "false";
+- false 
+--------
+- f
+-(1 row)
+-
++ERROR:  collation "en-x-icu" for encoding "UTF8" does not exist
++LINE 1: SELECT 'bıt' ILIKE 'BIT' COLLATE "en-x-icu" AS "false";
++                                 ^
+ SELECT 'bıt' ILIKE 'BIT' COLLATE "tr-x-icu" AS "true";
+- true 
+-------
+- t
+-(1 row)
+-
++ERROR:  collation "tr-x-icu" for encoding "UTF8" does not exist
++LINE 1: SELECT 'bıt' ILIKE 'BIT' COLLATE "tr-x-icu" AS "true";
++                                 ^
+ -- The following actually exercises the selectivity estimation for ILIKE.
+ SELECT relname FROM pg_class WHERE relname ILIKE 'abc%';
+  relname 
+@@ -355,55 +268,42 @@
+ 
+ -- regular expressions
+ SELECT * FROM collate_test1 WHERE b ~ '^abc$';
+- a |  b  
+----+-----
+- 1 | abc
+-(1 row)
+-
++ERROR:  relation "collate_test1" does not exist
++LINE 1: SELECT * FROM collate_test1 WHERE b ~ '^abc$';
++                      ^
+ SELECT * FROM collate_test1 WHERE b ~ '^abc';
+- a |  b  
+----+-----
+- 1 | abc
+-(1 row)
+-
++ERROR:  relation "collate_test1" does not exist
++LINE 1: SELECT * FROM collate_test1 WHERE b ~ '^abc';
++                      ^
+ SELECT * FROM collate_test1 WHERE b ~ 'bc';
+- a |  b  
+----+-----
+- 1 | abc
+- 2 | äbc
+- 3 | bbc
+-(3 rows)
+-
++ERROR:  relation "collate_test1" does not exist
++LINE 1: SELECT * FROM collate_test1 WHERE b ~ 'bc';
++                      ^
+ SELECT * FROM collate_test1 WHERE b ~* '^abc$';
+- a |  b  
+----+-----
+- 1 | abc
+- 4 | ABC
+-(2 rows)
+-
++ERROR:  relation "collate_test1" does not exist
++LINE 1: SELECT * FROM collate_test1 WHERE b ~* '^abc$';
++                      ^
+ SELECT * FROM collate_test1 WHERE b ~* '^abc';
+- a |  b  
+----+-----
+- 1 | abc
+- 4 | ABC
+-(2 rows)
+-
++ERROR:  relation "collate_test1" does not exist
++LINE 1: SELECT * FROM collate_test1 WHERE b ~* '^abc';
++                      ^
+ SELECT * FROM collate_test1 WHERE b ~* 'bc';
+- a |  b  
+----+-----
+- 1 | abc
+- 2 | äbc
+- 3 | bbc
+- 4 | ABC
+-(4 rows)
+-
++ERROR:  relation "collate_test1" does not exist
++LINE 1: SELECT * FROM collate_test1 WHERE b ~* 'bc';
++                      ^
+ CREATE TABLE collate_test6 (
+     a int,
+     b text COLLATE "en-x-icu"
+ );
++ERROR:  collation "en-x-icu" for encoding "UTF8" does not exist
++LINE 3:     b text COLLATE "en-x-icu"
++                   ^
+ INSERT INTO collate_test6 VALUES (1, 'abc'), (2, 'ABC'), (3, '123'), (4, 'ab1'),
+                                  (5, 'a1!'), (6, 'a c'), (7, '!.;'), (8, '   '),
+                                  (9, 'äbç'), (10, 'ÄBÇ');
++ERROR:  relation "collate_test6" does not exist
++LINE 1: INSERT INTO collate_test6 VALUES (1, 'abc'), (2, 'ABC'), (3,...
++                    ^
+ SELECT b,
+        b ~ '^[[:alpha:]]+$' AS is_alpha,
+        b ~ '^[[:upper:]]+$' AS is_upper,
+@@ -415,44 +315,25 @@
+        b ~ '^[[:punct:]]+$' AS is_punct,
+        b ~ '^[[:space:]]+$' AS is_space
+ FROM collate_test6;
+-  b  | is_alpha | is_upper | is_lower | is_digit | is_alnum | is_graph | is_print | is_punct | is_space 
+------+----------+----------+----------+----------+----------+----------+----------+----------+----------
+- abc | t        | f        | t        | f        | t        | t        | t        | f        | f
+- ABC | t        | t        | f        | f        | t        | t        | t        | f        | f
+- 123 | f        | f        | f        | t        | t        | t        | t        | f        | f
+- ab1 | f        | f        | f        | f        | t        | t        | t        | f        | f
+- a1! | f        | f        | f        | f        | f        | t        | t        | f        | f
+- a c | f        | f        | f        | f        | f        | f        | t        | f        | f
+- !.; | f        | f        | f        | f        | f        | t        | t        | t        | f
+-     | f        | f        | f        | f        | f        | f        | t        | f        | t
+- äbç | t        | f        | t        | f        | t        | t        | t        | f        | f
+- ÄBÇ | t        | t        | f        | f        | t        | t        | t        | f        | f
+-(10 rows)
+-
++ERROR:  relation "collate_test6" does not exist
++LINE 11: FROM collate_test6;
++              ^
+ SELECT 'Türkiye' COLLATE "en-x-icu" ~* 'KI' AS "true";
+- true 
+-------
+- t
+-(1 row)
+-
++ERROR:  collation "en-x-icu" for encoding "UTF8" does not exist
++LINE 1: SELECT 'Türkiye' COLLATE "en-x-icu" ~* 'KI' AS "true";
++                         ^
+ SELECT 'Türkiye' COLLATE "tr-x-icu" ~* 'KI' AS "true";  -- true with ICU
+- true 
+-------
+- t
+-(1 row)
+-
++ERROR:  collation "tr-x-icu" for encoding "UTF8" does not exist
++LINE 1: SELECT 'Türkiye' COLLATE "tr-x-icu" ~* 'KI' AS "true";
++                         ^
+ SELECT 'bıt' ~* 'BIT' COLLATE "en-x-icu" AS "false";
+- false 
+--------
+- f
+-(1 row)
+-
++ERROR:  collation "en-x-icu" for encoding "UTF8" does not exist
++LINE 1: SELECT 'bıt' ~* 'BIT' COLLATE "en-x-icu" AS "false";
++                              ^
+ SELECT 'bıt' ~* 'BIT' COLLATE "tr-x-icu" AS "false";  -- false with ICU
+- false 
+--------
+- f
+-(1 row)
+-
++ERROR:  collation "tr-x-icu" for encoding "UTF8" does not exist
++LINE 1: SELECT 'bıt' ~* 'BIT' COLLATE "tr-x-icu" AS "false";
++                              ^
+ -- The following actually exercises the selectivity estimation for ~*.
+ SELECT relname FROM pg_class WHERE relname ~* '^abc';
+  relname 
+@@ -468,372 +349,223 @@
+ */
+ -- backwards parsing
+ CREATE VIEW collview1 AS SELECT * FROM collate_test1 WHERE b COLLATE "C" >= 'bbc';
++ERROR:  relation "collate_test1" does not exist
++LINE 9: CREATE VIEW collview1 AS SELECT * FROM collate_test1 WHERE b...
++                                               ^
+ CREATE VIEW collview2 AS SELECT a, b FROM collate_test1 ORDER BY b COLLATE "C";
++ERROR:  relation "collate_test1" does not exist
++LINE 1: CREATE VIEW collview2 AS SELECT a, b FROM collate_test1 ORDE...
++                                                  ^
+ CREATE VIEW collview3 AS SELECT a, lower((x || x) COLLATE "C") FROM collate_test10;
++ERROR:  relation "collate_test10" does not exist
++LINE 1: ...ew3 AS SELECT a, lower((x || x) COLLATE "C") FROM collate_te...
++                                                             ^
+ SELECT table_name, view_definition FROM information_schema.views
+   WHERE table_name LIKE 'collview%' ORDER BY 1;
+- table_name |              view_definition               
+-------------+--------------------------------------------
+- collview1  |  SELECT a,                                +
+-            |     b                                     +
+-            |    FROM collate_test1                     +
+-            |   WHERE ((b COLLATE "C") >= 'bbc'::text);
+- collview2  |  SELECT a,                                +
+-            |     b                                     +
+-            |    FROM collate_test1                     +
+-            |   ORDER BY (b COLLATE "C");
+- collview3  |  SELECT a,                                +
+-            |     lower(((x || x) COLLATE "C")) AS lower+
+-            |    FROM collate_test10;
+-(3 rows)
++ table_name | view_definition 
++------------+-----------------
++(0 rows)
+ 
+ -- collation propagation in various expression types
+ SELECT a, coalesce(b, 'foo') FROM collate_test1 ORDER BY 2;
+- a | coalesce 
+----+----------
+- 1 | abc
+- 4 | ABC
+- 2 | äbc
+- 3 | bbc
+-(4 rows)
+-
++ERROR:  relation "collate_test1" does not exist
++LINE 1: SELECT a, coalesce(b, 'foo') FROM collate_test1 ORDER BY 2;
++                                          ^
+ SELECT a, coalesce(b, 'foo') FROM collate_test2 ORDER BY 2;
+- a | coalesce 
+----+----------
+- 1 | abc
+- 4 | ABC
+- 3 | bbc
+- 2 | äbc
+-(4 rows)
+-
++ERROR:  relation "collate_test2" does not exist
++LINE 1: SELECT a, coalesce(b, 'foo') FROM collate_test2 ORDER BY 2;
++                                          ^
+ SELECT a, coalesce(b, 'foo') FROM collate_test3 ORDER BY 2;
+  a | coalesce 
+ ---+----------
+- 4 | ABC
+- 1 | abc
+- 3 | bbc
+- 2 | äbc
+-(4 rows)
++(0 rows)
+ 
+ SELECT a, lower(coalesce(x, 'foo')), lower(coalesce(y, 'foo')) FROM collate_test10;
+- a | lower | lower 
+----+-------+-------
+- 1 | hij   | hij
+- 2 | hij   | hıj
+-(2 rows)
+-
++ERROR:  relation "collate_test10" does not exist
++LINE 1: ...alesce(x, 'foo')), lower(coalesce(y, 'foo')) FROM collate_te...
++                                                             ^
+ SELECT a, b, greatest(b, 'CCC') FROM collate_test1 ORDER BY 3;
+- a |  b  | greatest 
+----+-----+----------
+- 1 | abc | CCC
+- 2 | äbc | CCC
+- 3 | bbc | CCC
+- 4 | ABC | CCC
+-(4 rows)
+-
++ERROR:  relation "collate_test1" does not exist
++LINE 1: SELECT a, b, greatest(b, 'CCC') FROM collate_test1 ORDER BY ...
++                                             ^
+ SELECT a, b, greatest(b, 'CCC') FROM collate_test2 ORDER BY 3;
+- a |  b  | greatest 
+----+-----+----------
+- 1 | abc | CCC
+- 3 | bbc | CCC
+- 4 | ABC | CCC
+- 2 | äbc | äbc
+-(4 rows)
+-
++ERROR:  relation "collate_test2" does not exist
++LINE 1: SELECT a, b, greatest(b, 'CCC') FROM collate_test2 ORDER BY ...
++                                             ^
+ SELECT a, b, greatest(b, 'CCC') FROM collate_test3 ORDER BY 3;
+- a |  b  | greatest 
+----+-----+----------
+- 4 | ABC | CCC
+- 1 | abc | abc
+- 3 | bbc | bbc
+- 2 | äbc | äbc
+-(4 rows)
++ a | b | greatest 
++---+---+----------
++(0 rows)
+ 
+ SELECT a, x, y, lower(greatest(x, 'foo')), lower(greatest(y, 'foo')) FROM collate_test10;
+- a |  x  |  y  | lower | lower 
+----+-----+-----+-------+-------
+- 1 | hij | hij | hij   | hij
+- 2 | HIJ | HIJ | hij   | hıj
+-(2 rows)
+-
++ERROR:  relation "collate_test10" does not exist
++LINE 1: ...eatest(x, 'foo')), lower(greatest(y, 'foo')) FROM collate_te...
++                                                             ^
+ SELECT a, nullif(b, 'abc') FROM collate_test1 ORDER BY 2;
+- a | nullif 
+----+--------
+- 4 | ABC
+- 2 | äbc
+- 3 | bbc
+- 1 | 
+-(4 rows)
+-
++ERROR:  relation "collate_test1" does not exist
++LINE 1: SELECT a, nullif(b, 'abc') FROM collate_test1 ORDER BY 2;
++                                        ^
+ SELECT a, nullif(b, 'abc') FROM collate_test2 ORDER BY 2;
+- a | nullif 
+----+--------
+- 4 | ABC
+- 3 | bbc
+- 2 | äbc
+- 1 | 
+-(4 rows)
+-
++ERROR:  relation "collate_test2" does not exist
++LINE 1: SELECT a, nullif(b, 'abc') FROM collate_test2 ORDER BY 2;
++                                        ^
+ SELECT a, nullif(b, 'abc') FROM collate_test3 ORDER BY 2;
+  a | nullif 
+ ---+--------
+- 4 | ABC
+- 3 | bbc
+- 2 | äbc
+- 1 | 
+-(4 rows)
++(0 rows)
+ 
+ SELECT a, lower(nullif(x, 'foo')), lower(nullif(y, 'foo')) FROM collate_test10;
+- a | lower | lower 
+----+-------+-------
+- 1 | hij   | hij
+- 2 | hij   | hıj
+-(2 rows)
+-
++ERROR:  relation "collate_test10" does not exist
++LINE 1: ...r(nullif(x, 'foo')), lower(nullif(y, 'foo')) FROM collate_te...
++                                                             ^
+ SELECT a, CASE b WHEN 'abc' THEN 'abcd' ELSE b END FROM collate_test1 ORDER BY 2;
+- a |  b   
+----+------
+- 4 | ABC
+- 2 | äbc
+- 1 | abcd
+- 3 | bbc
+-(4 rows)
+-
++ERROR:  relation "collate_test1" does not exist
++LINE 1: ... a, CASE b WHEN 'abc' THEN 'abcd' ELSE b END FROM collate_te...
++                                                             ^
+ SELECT a, CASE b WHEN 'abc' THEN 'abcd' ELSE b END FROM collate_test2 ORDER BY 2;
+- a |  b   
+----+------
+- 4 | ABC
+- 1 | abcd
+- 3 | bbc
+- 2 | äbc
+-(4 rows)
+-
++ERROR:  relation "collate_test2" does not exist
++LINE 1: ... a, CASE b WHEN 'abc' THEN 'abcd' ELSE b END FROM collate_te...
++                                                             ^
+ SELECT a, CASE b WHEN 'abc' THEN 'abcd' ELSE b END FROM collate_test3 ORDER BY 2;
+- a |  b   
+----+------
+- 4 | ABC
+- 1 | abcd
+- 3 | bbc
+- 2 | äbc
+-(4 rows)
++ a | b 
++---+---
++(0 rows)
+ 
+ CREATE DOMAIN testdomain AS text;
+ SELECT a, b::testdomain FROM collate_test1 ORDER BY 2;
+- a |  b  
+----+-----
+- 1 | abc
+- 4 | ABC
+- 2 | äbc
+- 3 | bbc
+-(4 rows)
+-
++ERROR:  relation "collate_test1" does not exist
++LINE 1: SELECT a, b::testdomain FROM collate_test1 ORDER BY 2;
++                                     ^
+ SELECT a, b::testdomain FROM collate_test2 ORDER BY 2;
+- a |  b  
+----+-----
+- 1 | abc
+- 4 | ABC
+- 3 | bbc
+- 2 | äbc
+-(4 rows)
+-
++ERROR:  relation "collate_test2" does not exist
++LINE 1: SELECT a, b::testdomain FROM collate_test2 ORDER BY 2;
++                                     ^
+ SELECT a, b::testdomain FROM collate_test3 ORDER BY 2;
+- a |  b  
+----+-----
+- 4 | ABC
+- 1 | abc
+- 3 | bbc
+- 2 | äbc
+-(4 rows)
++ a | b 
++---+---
++(0 rows)
+ 
+ SELECT a, b::testdomain_sv FROM collate_test3 ORDER BY 2;
+- a |  b  
+----+-----
+- 1 | abc
+- 4 | ABC
+- 3 | bbc
+- 2 | äbc
+-(4 rows)
+-
++ERROR:  type "testdomain_sv" does not exist
++LINE 1: SELECT a, b::testdomain_sv FROM collate_test3 ORDER BY 2;
++                     ^
+ SELECT a, lower(x::testdomain), lower(y::testdomain) FROM collate_test10;
+- a | lower | lower 
+----+-------+-------
+- 1 | hij   | hij
+- 2 | hij   | hıj
+-(2 rows)
+-
++ERROR:  relation "collate_test10" does not exist
++LINE 1: ..., lower(x::testdomain), lower(y::testdomain) FROM collate_te...
++                                                             ^
+ SELECT min(b), max(b) FROM collate_test1;
+- min | max 
+------+-----
+- abc | bbc
+-(1 row)
+-
++ERROR:  relation "collate_test1" does not exist
++LINE 1: SELECT min(b), max(b) FROM collate_test1;
++                                   ^
+ SELECT min(b), max(b) FROM collate_test2;
+- min | max 
+------+-----
+- abc | äbc
+-(1 row)
+-
++ERROR:  relation "collate_test2" does not exist
++LINE 1: SELECT min(b), max(b) FROM collate_test2;
++                                   ^
+ SELECT min(b), max(b) FROM collate_test3;
+  min | max 
+ -----+-----
+- ABC | äbc
++     | 
+ (1 row)
+ 
+ SELECT array_agg(b ORDER BY b) FROM collate_test1;
+-     array_agg     
+--------------------
+- {abc,ABC,äbc,bbc}
+-(1 row)
+-
++ERROR:  relation "collate_test1" does not exist
++LINE 1: SELECT array_agg(b ORDER BY b) FROM collate_test1;
++                                            ^
+ SELECT array_agg(b ORDER BY b) FROM collate_test2;
+-     array_agg     
+--------------------
+- {abc,ABC,bbc,äbc}
+-(1 row)
+-
++ERROR:  relation "collate_test2" does not exist
++LINE 1: SELECT array_agg(b ORDER BY b) FROM collate_test2;
++                                            ^
+ SELECT array_agg(b ORDER BY b) FROM collate_test3;
+-     array_agg     
+--------------------
+- {ABC,abc,bbc,äbc}
++ array_agg 
++-----------
++ 
+ (1 row)
+ 
+ SELECT a, b FROM collate_test1 UNION ALL SELECT a, b FROM collate_test1 ORDER BY 2;
+- a |  b  
+----+-----
+- 1 | abc
+- 1 | abc
+- 4 | ABC
+- 4 | ABC
+- 2 | äbc
+- 2 | äbc
+- 3 | bbc
+- 3 | bbc
+-(8 rows)
+-
++ERROR:  relation "collate_test1" does not exist
++LINE 1: SELECT a, b FROM collate_test1 UNION ALL SELECT a, b FROM co...
++                         ^
+ SELECT a, b FROM collate_test2 UNION SELECT a, b FROM collate_test2 ORDER BY 2;
+- a |  b  
+----+-----
+- 1 | abc
+- 4 | ABC
+- 3 | bbc
+- 2 | äbc
+-(4 rows)
+-
++ERROR:  relation "collate_test2" does not exist
++LINE 1: SELECT a, b FROM collate_test2 UNION SELECT a, b FROM collat...
++                         ^
+ SELECT a, b FROM collate_test3 WHERE a < 4 INTERSECT SELECT a, b FROM collate_test3 WHERE a > 1 ORDER BY 2;
+- a |  b  
+----+-----
+- 3 | bbc
+- 2 | äbc
+-(2 rows)
++ a | b 
++---+---
++(0 rows)
+ 
+ SELECT a, b FROM collate_test3 EXCEPT SELECT a, b FROM collate_test3 WHERE a < 2 ORDER BY 2;
+- a |  b  
+----+-----
+- 4 | ABC
+- 3 | bbc
+- 2 | äbc
+-(3 rows)
++ a | b 
++---+---
++(0 rows)
+ 
+ SELECT a, b FROM collate_test1 UNION ALL SELECT a, b FROM collate_test3 ORDER BY 2; -- fail
+-ERROR:  could not determine which collation to use for string comparison
+-HINT:  Use the COLLATE clause to set the collation explicitly.
++ERROR:  relation "collate_test1" does not exist
++LINE 1: SELECT a, b FROM collate_test1 UNION ALL SELECT a, b FROM co...
++                         ^
+ SELECT a, b FROM collate_test1 UNION ALL SELECT a, b FROM collate_test3; -- ok
+- a |  b  
+----+-----
+- 1 | abc
+- 2 | äbc
+- 3 | bbc
+- 4 | ABC
+- 1 | abc
+- 2 | äbc
+- 3 | bbc
+- 4 | ABC
+-(8 rows)
+-
++ERROR:  relation "collate_test1" does not exist
++LINE 1: SELECT a, b FROM collate_test1 UNION ALL SELECT a, b FROM co...
++                         ^
+ SELECT a, b FROM collate_test1 UNION SELECT a, b FROM collate_test3 ORDER BY 2; -- fail
+-ERROR:  collation mismatch between implicit collations "en-x-icu" and "C"
++ERROR:  relation "collate_test1" does not exist
+ LINE 1: SELECT a, b FROM collate_test1 UNION SELECT a, b FROM collat...
+-                                                       ^
+-HINT:  You can choose the collation by applying the COLLATE clause to one or both expressions.
++                         ^
+ SELECT a, b COLLATE "C" FROM collate_test1 UNION SELECT a, b FROM collate_test3 ORDER BY 2; -- ok
+- a |  b  
+----+-----
+- 4 | ABC
+- 1 | abc
+- 3 | bbc
+- 2 | äbc
+-(4 rows)
+-
++ERROR:  relation "collate_test1" does not exist
++LINE 1: SELECT a, b COLLATE "C" FROM collate_test1 UNION SELECT a, b...
++                                     ^
+ SELECT a, b FROM collate_test1 INTERSECT SELECT a, b FROM collate_test3 ORDER BY 2; -- fail
+-ERROR:  collation mismatch between implicit collations "en-x-icu" and "C"
+-LINE 1: ...ELECT a, b FROM collate_test1 INTERSECT SELECT a, b FROM col...
+-                                                             ^
+-HINT:  You can choose the collation by applying the COLLATE clause to one or both expressions.
++ERROR:  relation "collate_test1" does not exist
++LINE 1: SELECT a, b FROM collate_test1 INTERSECT SELECT a, b FROM co...
++                         ^
+ SELECT a, b FROM collate_test1 EXCEPT SELECT a, b FROM collate_test3 ORDER BY 2; -- fail
+-ERROR:  collation mismatch between implicit collations "en-x-icu" and "C"
++ERROR:  relation "collate_test1" does not exist
+ LINE 1: SELECT a, b FROM collate_test1 EXCEPT SELECT a, b FROM colla...
+-                                                        ^
+-HINT:  You can choose the collation by applying the COLLATE clause to one or both expressions.
++                         ^
+ CREATE TABLE test_u AS SELECT a, b FROM collate_test1 UNION ALL SELECT a, b FROM collate_test3; -- fail
+-ERROR:  no collation was derived for column "b" with collatable type text
+-HINT:  Use the COLLATE clause to set the collation explicitly.
++ERROR:  relation "collate_test1" does not exist
++LINE 1: CREATE TABLE test_u AS SELECT a, b FROM collate_test1 UNION ...
++                                                ^
+ -- ideally this would be a parse-time error, but for now it must be run-time:
+ select x < y from collate_test10; -- fail
+-ERROR:  could not determine which collation to use for string comparison
+-HINT:  Use the COLLATE clause to set the collation explicitly.
++ERROR:  relation "collate_test10" does not exist
++LINE 1: select x < y from collate_test10;
++                          ^
+ select x || y from collate_test10; -- ok, because || is not collation aware
+- ?column? 
+-----------
+- hijhij
+- HIJHIJ
+-(2 rows)
+-
++ERROR:  relation "collate_test10" does not exist
++LINE 1: select x || y from collate_test10;
++                           ^
+ select x, y from collate_test10 order by x || y; -- not so ok
+-ERROR:  collation mismatch between implicit collations "en-x-icu" and "tr-x-icu"
++ERROR:  relation "collate_test10" does not exist
+ LINE 1: select x, y from collate_test10 order by x || y;
+-                                                      ^
+-HINT:  You can choose the collation by applying the COLLATE clause to one or both expressions.
++                         ^
+ -- collation mismatch between recursive and non-recursive term
+ WITH RECURSIVE foo(x) AS
+    (SELECT x FROM (VALUES('a' COLLATE "en-x-icu"),('b')) t(x)
+    UNION ALL
+    SELECT (x || 'c') COLLATE "de-x-icu" FROM foo WHERE length(x) < 10)
+ SELECT * FROM foo;
+-ERROR:  recursive query "foo" column 1 has collation "en-x-icu" in non-recursive term but collation "de-x-icu" overall
++ERROR:  collation "en-x-icu" for encoding "UTF8" does not exist
+ LINE 2:    (SELECT x FROM (VALUES('a' COLLATE "en-x-icu"),('b')) t(x...
+-                   ^
+-HINT:  Use the COLLATE clause to set the collation of the non-recursive term.
++                                      ^
+ -- casting
+ SELECT CAST('42' AS text COLLATE "C");
+ ERROR:  syntax error at or near "COLLATE"
+ LINE 1: SELECT CAST('42' AS text COLLATE "C");
+                                  ^
+ SELECT a, CAST(b AS varchar) FROM collate_test1 ORDER BY 2;
+- a |  b  
+----+-----
+- 1 | abc
+- 4 | ABC
+- 2 | äbc
+- 3 | bbc
+-(4 rows)
+-
++ERROR:  relation "collate_test1" does not exist
++LINE 1: SELECT a, CAST(b AS varchar) FROM collate_test1 ORDER BY 2;
++                                          ^
+ SELECT a, CAST(b AS varchar) FROM collate_test2 ORDER BY 2;
+- a |  b  
+----+-----
+- 1 | abc
+- 4 | ABC
+- 3 | bbc
+- 2 | äbc
+-(4 rows)
+-
++ERROR:  relation "collate_test2" does not exist
++LINE 1: SELECT a, CAST(b AS varchar) FROM collate_test2 ORDER BY 2;
++                                          ^
+ SELECT a, CAST(b AS varchar) FROM collate_test3 ORDER BY 2;
+- a |  b  
+----+-----
+- 4 | ABC
+- 1 | abc
+- 3 | bbc
+- 2 | äbc
+-(4 rows)
++ a | b 
++---+---
++(0 rows)
+ 
+ -- propagation of collation in SQL functions (inlined and non-inlined cases)
+ -- and plpgsql functions too
+@@ -847,51 +579,17 @@
+        mylt(a.b, b.b), mylt_noninline(a.b, b.b), mylt_plpgsql(a.b, b.b)
+ FROM collate_test1 a, collate_test1 b
+ ORDER BY a.b, b.b;
+-  a  |  b  | lt | mylt | mylt_noninline | mylt_plpgsql 
+------+-----+----+------+----------------+--------------
+- abc | abc | f  | f    | f              | f
+- abc | ABC | t  | t    | t              | t
+- abc | äbc | t  | t    | t              | t
+- abc | bbc | t  | t    | t              | t
+- ABC | abc | f  | f    | f              | f
+- ABC | ABC | f  | f    | f              | f
+- ABC | äbc | t  | t    | t              | t
+- ABC | bbc | t  | t    | t              | t
+- äbc | abc | f  | f    | f              | f
+- äbc | ABC | f  | f    | f              | f
+- äbc | äbc | f  | f    | f              | f
+- äbc | bbc | t  | t    | t              | t
+- bbc | abc | f  | f    | f              | f
+- bbc | ABC | f  | f    | f              | f
+- bbc | äbc | f  | f    | f              | f
+- bbc | bbc | f  | f    | f              | f
+-(16 rows)
+-
++ERROR:  relation "collate_test1" does not exist
++LINE 3: FROM collate_test1 a, collate_test1 b
++             ^
+ SELECT a.b AS a, b.b AS b, a.b < b.b COLLATE "C" AS lt,
+        mylt(a.b, b.b COLLATE "C"), mylt_noninline(a.b, b.b COLLATE "C"),
+        mylt_plpgsql(a.b, b.b COLLATE "C")
+ FROM collate_test1 a, collate_test1 b
+ ORDER BY a.b, b.b;
+-  a  |  b  | lt | mylt | mylt_noninline | mylt_plpgsql 
+------+-----+----+------+----------------+--------------
+- abc | abc | f  | f    | f              | f
+- abc | ABC | f  | f    | f              | f
+- abc | äbc | t  | t    | t              | t
+- abc | bbc | t  | t    | t              | t
+- ABC | abc | t  | t    | t              | t
+- ABC | ABC | f  | f    | f              | f
+- ABC | äbc | t  | t    | t              | t
+- ABC | bbc | t  | t    | t              | t
+- äbc | abc | f  | f    | f              | f
+- äbc | ABC | f  | f    | f              | f
+- äbc | äbc | f  | f    | f              | f
+- äbc | bbc | f  | f    | f              | f
+- bbc | abc | f  | f    | f              | f
+- bbc | ABC | f  | f    | f              | f
+- bbc | äbc | t  | t    | t              | t
+- bbc | bbc | f  | f    | f              | f
+-(16 rows)
+-
++ERROR:  relation "collate_test1" does not exist
++LINE 4: FROM collate_test1 a, collate_test1 b
++             ^
+ -- collation override in plpgsql
+ CREATE FUNCTION mylt2 (x text, y text) RETURNS boolean LANGUAGE plpgsql AS $$
+ declare
+@@ -902,11 +600,9 @@
+ end
+ $$;
+ SELECT mylt2('a', 'B' collate "en-x-icu") as t, mylt2('a', 'B' collate "C") as f;
+- t | f 
+----+---
+- t | f
+-(1 row)
+-
++ERROR:  collation "en-x-icu" for encoding "UTF8" does not exist
++LINE 1: SELECT mylt2('a', 'B' collate "en-x-icu") as t, mylt2('a', '...
++                              ^
+ CREATE OR REPLACE FUNCTION
+   mylt2 (x text, y text) RETURNS boolean LANGUAGE plpgsql AS $$
+ declare
+@@ -934,114 +630,70 @@
+ 
+ -- polymorphism
+ SELECT * FROM unnest((SELECT array_agg(b ORDER BY b) FROM collate_test1)) ORDER BY 1;
+- unnest 
+---------
+- abc
+- ABC
+- äbc
+- bbc
+-(4 rows)
+-
++ERROR:  relation "collate_test1" does not exist
++LINE 1: ... FROM unnest((SELECT array_agg(b ORDER BY b) FROM collate_te...
++                                                             ^
+ SELECT * FROM unnest((SELECT array_agg(b ORDER BY b) FROM collate_test2)) ORDER BY 1;
+- unnest 
+---------
+- abc
+- ABC
+- bbc
+- äbc
+-(4 rows)
+-
++ERROR:  relation "collate_test2" does not exist
++LINE 1: ... FROM unnest((SELECT array_agg(b ORDER BY b) FROM collate_te...
++                                                             ^
+ SELECT * FROM unnest((SELECT array_agg(b ORDER BY b) FROM collate_test3)) ORDER BY 1;
+  unnest 
+ --------
+- ABC
+- abc
+- bbc
+- äbc
+-(4 rows)
++(0 rows)
+ 
+ CREATE FUNCTION dup (anyelement) RETURNS anyelement
+     AS 'select $1' LANGUAGE sql;
+ SELECT a, dup(b) FROM collate_test1 ORDER BY 2;
+- a | dup 
+----+-----
+- 1 | abc
+- 4 | ABC
+- 2 | äbc
+- 3 | bbc
+-(4 rows)
+-
++ERROR:  relation "collate_test1" does not exist
++LINE 1: SELECT a, dup(b) FROM collate_test1 ORDER BY 2;
++                              ^
+ SELECT a, dup(b) FROM collate_test2 ORDER BY 2;
+- a | dup 
+----+-----
+- 1 | abc
+- 4 | ABC
+- 3 | bbc
+- 2 | äbc
+-(4 rows)
+-
++ERROR:  relation "collate_test2" does not exist
++LINE 1: SELECT a, dup(b) FROM collate_test2 ORDER BY 2;
++                              ^
+ SELECT a, dup(b) FROM collate_test3 ORDER BY 2;
+  a | dup 
+ ---+-----
+- 4 | ABC
+- 1 | abc
+- 3 | bbc
+- 2 | äbc
+-(4 rows)
++(0 rows)
+ 
+ -- indexes
+ CREATE INDEX collate_test1_idx1 ON collate_test1 (b);
++ERROR:  relation "collate_test1" does not exist
+ CREATE INDEX collate_test1_idx2 ON collate_test1 (b COLLATE "C");
++ERROR:  relation "collate_test1" does not exist
+ CREATE INDEX collate_test1_idx3 ON collate_test1 ((b COLLATE "C")); -- this is different grammatically
++ERROR:  relation "collate_test1" does not exist
+ CREATE INDEX collate_test1_idx4 ON collate_test1 (((b||'foo') COLLATE "POSIX"));
++ERROR:  relation "collate_test1" does not exist
+ CREATE INDEX collate_test1_idx5 ON collate_test1 (a COLLATE "C"); -- fail
+-ERROR:  collations are not supported by type integer
++ERROR:  relation "collate_test1" does not exist
+ CREATE INDEX collate_test1_idx6 ON collate_test1 ((a COLLATE "C")); -- fail
+-ERROR:  collations are not supported by type integer
+-LINE 1: ...ATE INDEX collate_test1_idx6 ON collate_test1 ((a COLLATE "C...
+-                                                             ^
++ERROR:  relation "collate_test1" does not exist
+ SELECT relname, pg_get_indexdef(oid) FROM pg_class WHERE relname LIKE 'collate_test%_idx%' ORDER BY 1;
+-      relname       |                                                  pg_get_indexdef                                                  
+---------------------+-------------------------------------------------------------------------------------------------------------------
+- collate_test1_idx1 | CREATE INDEX collate_test1_idx1 ON collate_tests.collate_test1 USING btree (b)
+- collate_test1_idx2 | CREATE INDEX collate_test1_idx2 ON collate_tests.collate_test1 USING btree (b COLLATE "C")
+- collate_test1_idx3 | CREATE INDEX collate_test1_idx3 ON collate_tests.collate_test1 USING btree (b COLLATE "C")
+- collate_test1_idx4 | CREATE INDEX collate_test1_idx4 ON collate_tests.collate_test1 USING btree (((b || 'foo'::text)) COLLATE "POSIX")
+-(4 rows)
++ relname | pg_get_indexdef 
++---------+-----------------
++(0 rows)
+ 
+ set enable_seqscan = off;
+ explain (costs off)
+ select * from collate_test1 where b ilike 'abc';
+-          QUERY PLAN           
+--------------------------------
+- Seq Scan on collate_test1
+-   Disabled: true
+-   Filter: (b ~~* 'abc'::text)
+-(3 rows)
+-
++ERROR:  relation "collate_test1" does not exist
++LINE 2: select * from collate_test1 where b ilike 'abc';
++                      ^
+ select * from collate_test1 where b ilike 'abc';
+- a |  b  
+----+-----
+- 1 | abc
+- 4 | ABC
+-(2 rows)
+-
++ERROR:  relation "collate_test1" does not exist
++LINE 1: select * from collate_test1 where b ilike 'abc';
++                      ^
+ explain (costs off)
+ select * from collate_test1 where b ilike 'ABC';
+-          QUERY PLAN           
+--------------------------------
+- Seq Scan on collate_test1
+-   Disabled: true
+-   Filter: (b ~~* 'ABC'::text)
+-(3 rows)
+-
++ERROR:  relation "collate_test1" does not exist
++LINE 2: select * from collate_test1 where b ilike 'ABC';
++                      ^
+ select * from collate_test1 where b ilike 'ABC';
+- a |  b  
+----+-----
+- 1 | abc
+- 4 | ABC
+-(2 rows)
+-
++ERROR:  relation "collate_test1" does not exist
++LINE 1: select * from collate_test1 where b ilike 'ABC';
++                      ^
+ reset enable_seqscan;
+ -- schema manipulation commands
+ CREATE ROLE regress_test_role;
+@@ -1125,7 +777,7 @@
+ DROP ROLE regress_test_role;
+ -- ALTER
+ ALTER COLLATION "en-x-icu" REFRESH VERSION;
+-NOTICE:  version has not changed
++ERROR:  collation "en-x-icu" for encoding "UTF8" does not exist
+ -- also test for database while we are here
+ SELECT current_database() AS datname \gset
+ ALTER DATABASE :"datname" REFRESH COLLATION VERSION;
+@@ -1170,6 +822,7 @@
+ -- test range types and collations
+ create type textrange_c as range(subtype=text, collation="C");
+ create type textrange_en_us as range(subtype=text, collation="en-x-icu");
++ERROR:  collation "en-x-icu" for encoding "UTF8" does not exist
+ select textrange_c('A','Z') @> 'b'::text;
+  ?column? 
+ ----------
+@@ -1177,36 +830,27 @@
+ (1 row)
+ 
+ select textrange_en_us('A','Z') @> 'b'::text;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  function textrange_en_us(unknown, unknown) does not exist
++LINE 1: select textrange_en_us('A','Z') @> 'b'::text;
++               ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ drop type textrange_c;
+ drop type textrange_en_us;
++ERROR:  type "textrange_en_us" does not exist
+ -- standard collations
+ SELECT * FROM collate_test2 ORDER BY b COLLATE UCS_BASIC;
+- a |  b  
+----+-----
+- 4 | ABC
+- 1 | abc
+- 3 | bbc
+- 2 | äbc
+-(4 rows)
+-
++ERROR:  relation "collate_test2" does not exist
++LINE 1: SELECT * FROM collate_test2 ORDER BY b COLLATE UCS_BASIC;
++                      ^
+ SELECT * FROM collate_test2 ORDER BY b COLLATE UNICODE;
+- a |  b  
+----+-----
+- 1 | abc
+- 4 | ABC
+- 2 | äbc
+- 3 | bbc
+-(4 rows)
+-
++ERROR:  relation "collate_test2" does not exist
++LINE 1: SELECT * FROM collate_test2 ORDER BY b COLLATE UNICODE;
++                      ^
+ -- test ICU collation customization
+ -- test the attributes handled by icu_set_collation_attributes()
+ SET client_min_messages=WARNING;
+ CREATE COLLATION testcoll_ignore_accents (provider = icu, locale = '@colStrength=primary;colCaseLevel=yes');
++WARNING:  could not convert locale name "@colStrength=primary;colCaseLevel=yes" to language tag: U_ILLEGAL_ARGUMENT_ERROR
+ RESET client_min_messages;
+ SELECT 'aaá' > 'AAA' COLLATE "und-x-icu", 'aaá' < 'AAA' COLLATE testcoll_ignore_accents;
+  ?column? | ?column? 
+@@ -1216,6 +860,7 @@
+ 
+ SET client_min_messages=WARNING;
+ CREATE COLLATION testcoll_backwards (provider = icu, locale = '@colBackwards=yes');
++WARNING:  could not convert locale name "@colBackwards=yes" to language tag: U_ILLEGAL_ARGUMENT_ERROR
+ RESET client_min_messages;
+ SELECT 'coté' < 'côte' COLLATE "und-x-icu", 'coté' > 'côte' COLLATE testcoll_backwards;
+  ?column? | ?column? 
+@@ -1224,9 +869,9 @@
+ (1 row)
+ 
+ CREATE COLLATION testcoll_lower_first (provider = icu, locale = '@colCaseFirst=lower');
+-NOTICE:  using standard form "und-u-kf-lower" for ICU locale "@colCaseFirst=lower"
++WARNING:  could not convert locale name "@colCaseFirst=lower" to language tag: U_ILLEGAL_ARGUMENT_ERROR
+ CREATE COLLATION testcoll_upper_first (provider = icu, locale = '@colCaseFirst=upper');
+-NOTICE:  using standard form "und-u-kf-upper" for ICU locale "@colCaseFirst=upper"
++WARNING:  could not convert locale name "@colCaseFirst=upper" to language tag: U_ILLEGAL_ARGUMENT_ERROR
+ SELECT 'aaa' < 'AAA' COLLATE testcoll_lower_first, 'aaa' > 'AAA' COLLATE testcoll_upper_first;
+  ?column? | ?column? 
+ ----------+----------
+@@ -1234,7 +879,7 @@
+ (1 row)
+ 
+ CREATE COLLATION testcoll_shifted (provider = icu, locale = '@colAlternate=shifted');
+-NOTICE:  using standard form "und-u-ka-shifted" for ICU locale "@colAlternate=shifted"
++WARNING:  could not convert locale name "@colAlternate=shifted" to language tag: U_ILLEGAL_ARGUMENT_ERROR
+ SELECT 'de-luge' < 'deanza' COLLATE "und-x-icu", 'de-luge' > 'deanza' COLLATE testcoll_shifted;
+  ?column? | ?column? 
+ ----------+----------
+@@ -1243,6 +888,7 @@
+ 
+ SET client_min_messages=WARNING;
+ CREATE COLLATION testcoll_numeric (provider = icu, locale = '@colNumeric=yes');
++WARNING:  could not convert locale name "@colNumeric=yes" to language tag: U_ILLEGAL_ARGUMENT_ERROR
+ RESET client_min_messages;
+ SELECT 'A-21' > 'A-123' COLLATE "und-x-icu", 'A-21' < 'A-123' COLLATE testcoll_numeric;
+  ?column? | ?column? 
+@@ -1251,18 +897,18 @@
+ (1 row)
+ 
+ CREATE COLLATION testcoll_error1 (provider = icu, locale = '@colNumeric=lower');
+-NOTICE:  using standard form "und-u-kn-lower" for ICU locale "@colNumeric=lower"
+-ERROR:  could not open collator for locale "und-u-kn-lower": U_ILLEGAL_ARGUMENT_ERROR
++WARNING:  could not convert locale name "@colNumeric=lower" to language tag: U_ILLEGAL_ARGUMENT_ERROR
++ERROR:  could not open collator for locale "@colNumeric=lower": U_ILLEGAL_ARGUMENT_ERROR
+ -- test that attributes not handled by icu_set_collation_attributes()
+ -- (handled by ucol_open() directly) also work
+ CREATE COLLATION testcoll_de_phonebook (provider = icu, locale = 'de@collation=phonebook');
+-NOTICE:  using standard form "de-u-co-phonebk" for ICU locale "de@collation=phonebook"
++WARNING:  could not convert locale name "de@collation=phonebook" to language tag: U_ILLEGAL_ARGUMENT_ERROR
++WARNING:  ICU locale "de@collation=phonebook" has unknown language "de"
++HINT:  To disable ICU locale validation, set the parameter "icu_validation_level" to "disabled".
+ SELECT 'Goldmann' < 'Götz' COLLATE "de-x-icu", 'Goldmann' > 'Götz' COLLATE testcoll_de_phonebook;
+- ?column? | ?column? 
+-----------+----------
+- t        | t
+-(1 row)
+-
++ERROR:  collation "de-x-icu" for encoding "UTF8" does not exist
++LINE 1: SELECT 'Goldmann' < 'Götz' COLLATE "de-x-icu", 'Goldmann' > ...
++                                   ^
+ -- rules
+ CREATE COLLATION testcoll_rules1 (provider = icu, locale = '', rules = '&a < g');
+ NOTICE:  using standard form "und" for ICU locale ""
+@@ -1270,16 +916,9 @@
+ -- example from https://unicode-org.github.io/icu/userguide/collation/customization/#syntax
+ INSERT INTO test7 VALUES ('Abernathy'), ('apple'), ('bird'), ('Boston'), ('Graham'), ('green');
+ SELECT * FROM test7 ORDER BY a COLLATE "en-x-icu";
+-     a     
+------------
+- Abernathy
+- apple
+- bird
+- Boston
+- Graham
+- green
+-(6 rows)
+-
++ERROR:  collation "en-x-icu" for encoding "UTF8" does not exist
++LINE 1: SELECT * FROM test7 ORDER BY a COLLATE "en-x-icu";
++                                       ^
+ SELECT * FROM test7 ORDER BY a COLLATE testcoll_rules1;
+      a     
+ -----------
+@@ -1458,7 +1097,7 @@
+ CREATE COLLATION case_sensitive (provider = icu, locale = '');
+ NOTICE:  using standard form "und" for ICU locale ""
+ CREATE COLLATION case_insensitive (provider = icu, locale = '@colStrength=secondary', deterministic = false);
+-NOTICE:  using standard form "und-u-ks-level2" for ICU locale "@colStrength=secondary"
++WARNING:  could not convert locale name "@colStrength=secondary" to language tag: U_ILLEGAL_ARGUMENT_ERROR
+ SELECT 'abc' <= 'ABC' COLLATE case_sensitive, 'abc' >= 'ABC' COLLATE case_sensitive;
+  ?column? | ?column? 
+ ----------+----------
+@@ -1493,17 +1132,19 @@
+ 
+ -- test language tags
+ CREATE COLLATION lt_insensitive (provider = icu, locale = 'en-u-ks-level1', deterministic = false);
++WARNING:  ICU locale "en-u-ks-level1" has unknown language "en"
++HINT:  To disable ICU locale validation, set the parameter "icu_validation_level" to "disabled".
+ SELECT 'aBcD' COLLATE lt_insensitive = 'AbCd' COLLATE lt_insensitive;
+  ?column? 
+ ----------
+- t
++ f
+ (1 row)
+ 
+ CREATE COLLATION lt_upperfirst (provider = icu, locale = 'und-u-kf-upper');
+ SELECT 'Z' COLLATE lt_upperfirst < 'z' COLLATE lt_upperfirst;
+  ?column? 
+ ----------
+- t
++ f
+ (1 row)
+ 
+ CREATE TABLE test1cs (x text COLLATE case_sensitive);
+@@ -1990,6 +1631,7 @@
+ -- accents
+ SET client_min_messages=WARNING;
+ CREATE COLLATION ignore_accents (provider = icu, locale = '@colStrength=primary;colCaseLevel=yes', deterministic = false);
++WARNING:  could not convert locale name "@colStrength=primary;colCaseLevel=yes" to language tag: U_ILLEGAL_ARGUMENT_ERROR
+ RESET client_min_messages;
+ CREATE TABLE test4 (a int, b text);
+ INSERT INTO test4 VALUES (1, 'cote'), (2, 'côte'), (3, 'coté'), (4, 'côté');

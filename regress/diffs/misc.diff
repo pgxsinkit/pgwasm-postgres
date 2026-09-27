@@ -1,0 +1,57 @@
+diff -U3 expected/misc.out results/misc.out
+--- expected/misc.out
++++ results/misc.out
+@@ -11,10 +11,12 @@
+    RETURNS bool
+    AS :'regresslib'
+    LANGUAGE C STRICT;
++ERROR:  could not access file "@abs_builddir@/lib/regress.so": No such file or directory
+ CREATE FUNCTION reverse_name(name)
+    RETURNS name
+    AS :'regresslib'
+    LANGUAGE C STRICT;
++ERROR:  could not access file "@abs_builddir@/lib/regress.so": No such file or directory
+ --
+ -- BTREE
+ --
+@@ -44,11 +46,19 @@
+    FROM onek
+    WHERE onek.stringu1 = 'JBAAAA' and
+ 	  onek.stringu1 = tmp.stringu1;
++ERROR:  function reverse_name(name) does not exist
++LINE 2:    SET stringu1 = reverse_name(onek.stringu1)
++                          ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ UPDATE tmp
+    SET stringu1 = reverse_name(onek2.stringu1)
+    FROM onek2
+    WHERE onek2.stringu1 = 'JCAAAA' and
+ 	  onek2.stringu1 = tmp.stringu1;
++ERROR:  function reverse_name(name) does not exist
++LINE 2:    SET stringu1 = reverse_name(onek2.stringu1)
++                          ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ DROP TABLE tmp;
+ --UPDATE person*
+ --   SET age = age + 1;
+@@ -338,16 +348,10 @@
+ (1 row)
+ 
+ SELECT name, overpaid(emp.*) FROM emp;
+-  name  | overpaid 
+---------+----------
+- sharon | t
+- sam    | t
+- bill   | t
+- jeff   | f
+- cim    | f
+- linda  | f
+-(6 rows)
+-
++ERROR:  function overpaid(emp) does not exist
++LINE 1: SELECT name, overpaid(emp.*) FROM emp;
++                     ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ --
+ -- Try a few cases with SQL-spec row constructor expressions
+ --

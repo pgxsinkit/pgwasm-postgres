@@ -1,0 +1,11 @@
+diff -U3 expected/publication.out results/publication.out
+--- expected/publication.out
++++ results/publication.out
+@@ -1977,6 +1977,7 @@
+ DROP TABLE testpub_merge_pk;
+ RESET SESSION AUTHORIZATION;
+ DROP ROLE regress_publication_user, regress_publication_user2;
++ERROR:  current user cannot be dropped
+ DROP ROLE regress_publication_user_dummy;
+ -- stage objects for pg_dump tests
+ CREATE SCHEMA pubme CREATE TABLE t0 (c int, d int) CREATE TABLE t1 (c int);

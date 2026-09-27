@@ -1,0 +1,86 @@
+diff -U3 expected/create_function_sql.out results/create_function_sql.out
+--- expected/create_function_sql.out
++++ results/create_function_sql.out
+@@ -549,8 +549,9 @@
+ CREATE FUNCTION functest_B_2(bigint) RETURNS bool LANGUAGE 'sql'
+        IMMUTABLE AS 'SELECT $1 > 0';
+ DROP FUNCTION functest_b_1;
++ERROR:  must be owner of function functest_b_1
+ DROP FUNCTION functest_b_1;  -- error, not found
+-ERROR:  could not find a function named "functest_b_1"
++ERROR:  must be owner of function functest_b_1
+ DROP FUNCTION functest_b_2;  -- error, ambiguous
+ ERROR:  function name "functest_b_2" is not unique
+ HINT:  Specify the argument list to select the function unambiguously.
+@@ -741,14 +742,19 @@
+ -- Put it into an operator class so that FmgrInfo will be cached in relcache.
+ CREATE OPERATOR CLASS part_test_int4_ops_bad FOR TYPE int4 USING hash AS
+   FUNCTION 2 part_hashint4_error(int4, int8);
++ERROR:  must be superuser to create an operator class
+ CREATE TABLE pt(i int) PARTITION BY hash (i part_test_int4_ops_bad);
++ERROR:  operator class "part_test_int4_ops_bad" does not exist for access method "hash"
+ CREATE TABLE p1 PARTITION OF pt FOR VALUES WITH (modulus 4, remainder 0);
++ERROR:  relation "pt" does not exist
+ INSERT INTO pt VALUES (1);
+-ERROR:  division by zero
+-CONTEXT:  SQL function "part_hashint4_error" statement 1
++ERROR:  relation "pt" does not exist
++LINE 1: INSERT INTO pt VALUES (1);
++                    ^
+ INSERT INTO pt VALUES (1);
+-ERROR:  division by zero
+-CONTEXT:  SQL function "part_hashint4_error" statement 1
++ERROR:  relation "pt" does not exist
++LINE 1: INSERT INTO pt VALUES (1);
++                    ^
+ -- Things that shouldn't work:
+ CREATE FUNCTION test1 (int) RETURNS int LANGUAGE SQL
+     AS 'SELECT ''not an integer'';';
+@@ -789,44 +795,8 @@
+ RESET check_function_bodies;
+ -- Cleanup
+ DROP SCHEMA temp_func_test CASCADE;
+-NOTICE:  drop cascades to 38 other objects
+-DETAIL:  drop cascades to function functest_a_1(text,date)
+-drop cascades to function functest_a_2(text[])
+-drop cascades to function functest_a_3()
+-drop cascades to function functest_b_2(integer)
+-drop cascades to function functest_b_3(integer)
+-drop cascades to function functest_b_4(integer)
+-drop cascades to function functest_c_1(integer)
+-drop cascades to function functest_c_2(integer)
+-drop cascades to function functest_c_3(integer)
+-drop cascades to function functest_e_1(integer)
+-drop cascades to function functest_e_2(integer)
+-drop cascades to function functest_f_1(integer)
+-drop cascades to function functest_f_2(integer)
+-drop cascades to function functest_f_3(integer)
+-drop cascades to function functest_f_4(integer)
+-drop cascades to function functest_s_1(text,date)
+-drop cascades to function functest_s_2(text[])
+-drop cascades to function functest_s_3()
+-drop cascades to function functest_s_3a()
+-drop cascades to function functest_s_10(text,date)
+-drop cascades to function functest_s_13()
+-drop cascades to function functest_s_15(integer)
+-drop cascades to function functest_b_2(bigint)
+-drop cascades to function functest_srf0()
+-drop cascades to function functest_sri1()
+-drop cascades to function voidtest1(integer)
+-drop cascades to function voidtest2(integer,integer)
+-drop cascades to function voidtest3(integer)
+-drop cascades to function voidtest4(integer)
+-drop cascades to function voidtest5(integer)
+-drop cascades to function create_and_insert()
+-drop cascades to table ddl_test
+-drop cascades to function alter_and_insert()
+-drop cascades to function double_append(anyarray,anyelement)
+-drop cascades to function part_hashint4_error(integer,bigint)
+-drop cascades to operator family part_test_int4_ops_bad for access method hash
+-drop cascades to table pt
+-drop cascades to function test1(anyelement)
++ERROR:  must be owner of schema temp_func_test
+ DROP USER regress_unpriv_user;
++ERROR:  permission denied to drop role
++DETAIL:  Only roles with the CREATEROLE attribute and the ADMIN option on the target roles may drop roles.
+ RESET search_path;

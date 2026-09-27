@@ -1,0 +1,24 @@
+diff -U3 expected/copyencoding.out results/copyencoding.out
+--- expected/copyencoding.out
++++ results/copyencoding.out
+@@ -31,16 +31,7 @@
+ COPY (SELECT E'\u3042') TO :'utf8_csv' WITH (FORMAT csv, ENCODING 'UTF8');
+ -- Read UTF8 data as EUC_JP: no error
+ COPY copy_encoding_tab FROM :'utf8_csv' WITH (FORMAT csv, ENCODING 'EUC_JP');
+-ERROR:  invalid byte sequence for encoding "EUC_JP": 0xe3 0x81
+-CONTEXT:  COPY copy_encoding_tab, line 1
+--- Use client_encoding
+-SET client_encoding TO UTF8;
+--- U+3042 HIRAGANA LETTER A
+-COPY (SELECT E'\u3042') TO :'utf8_csv' WITH (FORMAT csv);
+--- Read UTF8 data as EUC_JP: no error
+-SET client_encoding TO EUC_JP;
+-COPY copy_encoding_tab FROM :'utf8_csv' WITH (FORMAT csv);
+-ERROR:  invalid byte sequence for encoding "EUC_JP": 0xe3 0x81
+-CONTEXT:  COPY copy_encoding_tab, line 1
+-RESET client_encoding;
+-DROP TABLE copy_encoding_tab;
++server closed the connection unexpectedly
++	This probably means the server terminated abnormally
++	before or while processing the request.
++connection to server was lost

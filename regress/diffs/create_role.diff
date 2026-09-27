@@ -1,0 +1,35 @@
+diff -U3 expected/create_role.out results/create_role.out
+--- expected/create_role.out
++++ results/create_role.out
+@@ -248,14 +248,31 @@
+ RESET SESSION AUTHORIZATION;
+ REVOKE CREATE ON DATABASE regression FROM regress_role_admin CASCADE;
+ DROP INDEX tenant_idx;
++ERROR:  must be owner of index tenant_idx
+ DROP TABLE tenant_table;
++ERROR:  must be owner of table tenant_table
+ DROP VIEW tenant_view;
++ERROR:  must be owner of view tenant_view
+ DROP SCHEMA regress_tenant2_schema;
++ERROR:  must be owner of schema regress_tenant2_schema
+ -- check for duplicated drop
+ DROP ROLE regress_tenant, regress_tenant;
++ERROR:  permission denied to drop role
++DETAIL:  Only roles with the CREATEROLE attribute and the ADMIN option on role "regress_tenant" may drop this role.
+ DROP ROLE regress_tenant2;
++ERROR:  permission denied to drop role
++DETAIL:  Only roles with the CREATEROLE attribute and the ADMIN option on role "regress_tenant2" may drop this role.
+ DROP ROLE regress_rolecreator;
++ERROR:  permission denied to drop role
++DETAIL:  Only roles with the CREATEROLE attribute and the ADMIN option on role "regress_rolecreator" may drop this role.
+ DROP ROLE regress_role_admin;
++ERROR:  current user cannot be dropped
+ DROP ROLE regress_role_limited_admin;
++ERROR:  permission denied to drop role
++DETAIL:  Only roles with the CREATEROLE attribute and the ADMIN option on role "regress_role_limited_admin" may drop this role.
+ DROP ROLE regress_role_super;
++ERROR:  permission denied to drop role
++DETAIL:  Only roles with the SUPERUSER attribute may drop roles with the SUPERUSER attribute.
+ DROP ROLE regress_role_normal;
++ERROR:  permission denied to drop role
++DETAIL:  Only roles with the CREATEROLE attribute and the ADMIN option on role "regress_role_normal" may drop this role.

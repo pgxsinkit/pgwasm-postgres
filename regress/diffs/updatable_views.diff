@@ -1,0 +1,3229 @@
+diff -U3 expected/updatable_views.out results/updatable_views.out
+--- expected/updatable_views.out
++++ results/updatable_views.out
+@@ -1502,181 +1502,326 @@
+ 
+ RESET SESSION AUTHORIZATION;
+ DROP TABLE base_tbl CASCADE;
+-NOTICE:  drop cascades to 2 other objects
+-DETAIL:  drop cascades to view rw_view1
+-drop cascades to view rw_view2
++ERROR:  must be owner of table base_tbl
+ -- nested-view permissions
+ CREATE TABLE base_tbl(a int, b text, c float);
++ERROR:  relation "base_tbl" already exists
+ INSERT INTO base_tbl VALUES (1, 'Row 1', 1.0);
++ERROR:  permission denied for table base_tbl
+ SET SESSION AUTHORIZATION regress_view_user1;
+ CREATE VIEW rw_view1 AS SELECT * FROM base_tbl;
++ERROR:  relation "rw_view1" already exists
+ SELECT * FROM rw_view1;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++  bb   | cc | aa 
++-------+----+----
++ Row 4 |  4 |  4
++ Row 5 |  5 |  5
++(2 rows)
++
+ SELECT * FROM rw_view1 FOR UPDATE;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++  bb   | cc | aa 
++-------+----+----
++ Row 4 |  4 |  4
++ Row 5 |  5 |  5
++(2 rows)
++
+ UPDATE rw_view1 SET b = 'foo' WHERE a = 1;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  column "a" does not exist
++LINE 1: UPDATE rw_view1 SET b = 'foo' WHERE a = 1;
++                                            ^
+ MERGE INTO rw_view1 t USING (VALUES (1)) AS v(a) ON t.a = v.a
+   WHEN MATCHED THEN UPDATE SET b = 'foo'; -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  column t.a does not exist
++LINE 1: ...ERGE INTO rw_view1 t USING (VALUES (1)) AS v(a) ON t.a = v.a
++                                                              ^
++HINT:  Perhaps you meant to reference the column "v.a".
+ SET SESSION AUTHORIZATION regress_view_user2;
+ CREATE VIEW rw_view2 AS SELECT * FROM rw_view1;
++ERROR:  relation "rw_view2" already exists
+ SELECT * FROM rw_view2;  -- not allowed
+-ERROR:  permission denied for view rw_view1
++  bb   | cc | aa 
++-------+----+----
++ Row 4 |  4 |  4
++ Row 5 |  5 |  5
++(2 rows)
++
+ SELECT * FROM rw_view2 FOR UPDATE;  -- not allowed
+-ERROR:  permission denied for view rw_view1
++  bb   | cc | aa 
++-------+----+----
++ Row 4 |  4 |  4
++ Row 5 |  5 |  5
++(2 rows)
++
+ UPDATE rw_view2 SET b = 'bar' WHERE a = 1;  -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  column "a" does not exist
++LINE 1: UPDATE rw_view2 SET b = 'bar' WHERE a = 1;
++                                            ^
+ MERGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.a = v.a
+   WHEN MATCHED THEN UPDATE SET b = 'foo'; -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  column t.a does not exist
++LINE 1: ...ERGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.a = v.a
++                                                              ^
++HINT:  Perhaps you meant to reference the column "v.a".
+ RESET SESSION AUTHORIZATION;
+ GRANT SELECT ON base_tbl TO regress_view_user1;
++WARNING:  no privileges were granted for "base_tbl"
+ SET SESSION AUTHORIZATION regress_view_user1;
+ SELECT * FROM rw_view1;
+- a |   b   | c 
+----+-------+---
+- 1 | Row 1 | 1
+-(1 row)
++  bb   | cc | aa 
++-------+----+----
++ Row 4 |  4 |  4
++ Row 5 |  5 |  5
++(2 rows)
+ 
+ SELECT * FROM rw_view1 FOR UPDATE;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++  bb   | cc | aa 
++-------+----+----
++ Row 4 |  4 |  4
++ Row 5 |  5 |  5
++(2 rows)
++
+ UPDATE rw_view1 SET b = 'foo' WHERE a = 1;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  column "a" does not exist
++LINE 1: UPDATE rw_view1 SET b = 'foo' WHERE a = 1;
++                                            ^
+ MERGE INTO rw_view1 t USING (VALUES (1)) AS v(a) ON t.a = v.a
+   WHEN MATCHED THEN UPDATE SET b = 'foo'; -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  column t.a does not exist
++LINE 1: ...ERGE INTO rw_view1 t USING (VALUES (1)) AS v(a) ON t.a = v.a
++                                                              ^
++HINT:  Perhaps you meant to reference the column "v.a".
+ SET SESSION AUTHORIZATION regress_view_user2;
+ SELECT * FROM rw_view2;  -- not allowed
+-ERROR:  permission denied for view rw_view1
++  bb   | cc | aa 
++-------+----+----
++ Row 4 |  4 |  4
++ Row 5 |  5 |  5
++(2 rows)
++
+ SELECT * FROM rw_view2 FOR UPDATE;  -- not allowed
+-ERROR:  permission denied for view rw_view1
++  bb   | cc | aa 
++-------+----+----
++ Row 4 |  4 |  4
++ Row 5 |  5 |  5
++(2 rows)
++
+ UPDATE rw_view2 SET b = 'bar' WHERE a = 1;  -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  column "a" does not exist
++LINE 1: UPDATE rw_view2 SET b = 'bar' WHERE a = 1;
++                                            ^
+ MERGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.a = v.a
+   WHEN MATCHED THEN UPDATE SET b = 'foo'; -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  column t.a does not exist
++LINE 1: ...ERGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.a = v.a
++                                                              ^
++HINT:  Perhaps you meant to reference the column "v.a".
+ SET SESSION AUTHORIZATION regress_view_user1;
+ GRANT SELECT ON rw_view1 TO regress_view_user2;
+ SET SESSION AUTHORIZATION regress_view_user2;
+ SELECT * FROM rw_view2;
+- a |   b   | c 
+----+-------+---
+- 1 | Row 1 | 1
+-(1 row)
++  bb   | cc | aa 
++-------+----+----
++ Row 4 |  4 |  4
++ Row 5 |  5 |  5
++(2 rows)
+ 
+ SELECT * FROM rw_view2 FOR UPDATE;  -- not allowed
+-ERROR:  permission denied for view rw_view1
++  bb   | cc | aa 
++-------+----+----
++ Row 4 |  4 |  4
++ Row 5 |  5 |  5
++(2 rows)
++
+ UPDATE rw_view2 SET b = 'bar' WHERE a = 1;  -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  column "a" does not exist
++LINE 1: UPDATE rw_view2 SET b = 'bar' WHERE a = 1;
++                                            ^
+ MERGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.a = v.a
+   WHEN MATCHED THEN UPDATE SET b = 'foo'; -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  column t.a does not exist
++LINE 1: ...ERGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.a = v.a
++                                                              ^
++HINT:  Perhaps you meant to reference the column "v.a".
+ RESET SESSION AUTHORIZATION;
+ GRANT UPDATE ON base_tbl TO regress_view_user1;
++WARNING:  no privileges were granted for "base_tbl"
+ SET SESSION AUTHORIZATION regress_view_user1;
+ SELECT * FROM rw_view1;
+- a |   b   | c 
+----+-------+---
+- 1 | Row 1 | 1
+-(1 row)
++  bb   | cc | aa 
++-------+----+----
++ Row 4 |  4 |  4
++ Row 5 |  5 |  5
++(2 rows)
+ 
+ SELECT * FROM rw_view1 FOR UPDATE;
+- a |   b   | c 
+----+-------+---
+- 1 | Row 1 | 1
+-(1 row)
++  bb   | cc | aa 
++-------+----+----
++ Row 4 |  4 |  4
++ Row 5 |  5 |  5
++(2 rows)
+ 
+ UPDATE rw_view1 SET b = 'foo' WHERE a = 1;
++ERROR:  column "a" does not exist
++LINE 1: UPDATE rw_view1 SET b = 'foo' WHERE a = 1;
++                                            ^
+ MERGE INTO rw_view1 t USING (VALUES (1)) AS v(a) ON t.a = v.a
+   WHEN MATCHED THEN UPDATE SET b = 'foo';
++ERROR:  column t.a does not exist
++LINE 1: ...ERGE INTO rw_view1 t USING (VALUES (1)) AS v(a) ON t.a = v.a
++                                                              ^
++HINT:  Perhaps you meant to reference the column "v.a".
+ SET SESSION AUTHORIZATION regress_view_user2;
+ SELECT * FROM rw_view2;
+- a |  b  | c 
+----+-----+---
+- 1 | foo | 1
+-(1 row)
++  bb   | cc | aa 
++-------+----+----
++ Row 4 |  4 |  4
++ Row 5 |  5 |  5
++(2 rows)
+ 
+ SELECT * FROM rw_view2 FOR UPDATE;  -- not allowed
+-ERROR:  permission denied for view rw_view1
++  bb   | cc | aa 
++-------+----+----
++ Row 4 |  4 |  4
++ Row 5 |  5 |  5
++(2 rows)
++
+ UPDATE rw_view2 SET b = 'bar' WHERE a = 1;  -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  column "a" does not exist
++LINE 1: UPDATE rw_view2 SET b = 'bar' WHERE a = 1;
++                                            ^
+ MERGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.a = v.a
+   WHEN MATCHED THEN UPDATE SET b = 'bar'; -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  column t.a does not exist
++LINE 1: ...ERGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.a = v.a
++                                                              ^
++HINT:  Perhaps you meant to reference the column "v.a".
+ SET SESSION AUTHORIZATION regress_view_user1;
+ GRANT UPDATE ON rw_view1 TO regress_view_user2;
+ SET SESSION AUTHORIZATION regress_view_user2;
+ SELECT * FROM rw_view2;
+- a |  b  | c 
+----+-----+---
+- 1 | foo | 1
+-(1 row)
++  bb   | cc | aa 
++-------+----+----
++ Row 4 |  4 |  4
++ Row 5 |  5 |  5
++(2 rows)
+ 
+ SELECT * FROM rw_view2 FOR UPDATE;
+- a |  b  | c 
+----+-----+---
+- 1 | foo | 1
+-(1 row)
++  bb   | cc | aa 
++-------+----+----
++ Row 4 |  4 |  4
++ Row 5 |  5 |  5
++(2 rows)
+ 
+ UPDATE rw_view2 SET b = 'bar' WHERE a = 1;
++ERROR:  column "a" does not exist
++LINE 1: UPDATE rw_view2 SET b = 'bar' WHERE a = 1;
++                                            ^
+ MERGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.a = v.a
+   WHEN MATCHED THEN UPDATE SET b = 'fud';
++ERROR:  column t.a does not exist
++LINE 1: ...ERGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.a = v.a
++                                                              ^
++HINT:  Perhaps you meant to reference the column "v.a".
+ RESET SESSION AUTHORIZATION;
+ REVOKE UPDATE ON base_tbl FROM regress_view_user1;
++WARNING:  no privileges could be revoked for "base_tbl"
++WARNING:  no privileges could be revoked for column "tableoid" of relation "base_tbl"
++WARNING:  no privileges could be revoked for column "cmax" of relation "base_tbl"
++WARNING:  no privileges could be revoked for column "xmax" of relation "base_tbl"
++WARNING:  no privileges could be revoked for column "cmin" of relation "base_tbl"
++WARNING:  no privileges could be revoked for column "xmin" of relation "base_tbl"
++WARNING:  no privileges could be revoked for column "ctid" of relation "base_tbl"
++WARNING:  no privileges could be revoked for column "a" of relation "base_tbl"
++WARNING:  no privileges could be revoked for column "b" of relation "base_tbl"
++WARNING:  no privileges could be revoked for column "c" of relation "base_tbl"
+ SET SESSION AUTHORIZATION regress_view_user1;
+ SELECT * FROM rw_view1;
+- a |  b  | c 
+----+-----+---
+- 1 | fud | 1
+-(1 row)
++  bb   | cc | aa 
++-------+----+----
++ Row 4 |  4 |  4
++ Row 5 |  5 |  5
++(2 rows)
+ 
+ SELECT * FROM rw_view1 FOR UPDATE;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++  bb   | cc | aa 
++-------+----+----
++ Row 4 |  4 |  4
++ Row 5 |  5 |  5
++(2 rows)
++
+ UPDATE rw_view1 SET b = 'foo' WHERE a = 1;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  column "a" does not exist
++LINE 1: UPDATE rw_view1 SET b = 'foo' WHERE a = 1;
++                                            ^
+ MERGE INTO rw_view1 t USING (VALUES (1)) AS v(a) ON t.a = v.a
+   WHEN MATCHED THEN UPDATE SET b = 'foo'; -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  column t.a does not exist
++LINE 1: ...ERGE INTO rw_view1 t USING (VALUES (1)) AS v(a) ON t.a = v.a
++                                                              ^
++HINT:  Perhaps you meant to reference the column "v.a".
+ SET SESSION AUTHORIZATION regress_view_user2;
+ SELECT * FROM rw_view2;
+- a |  b  | c 
+----+-----+---
+- 1 | fud | 1
+-(1 row)
++  bb   | cc | aa 
++-------+----+----
++ Row 4 |  4 |  4
++ Row 5 |  5 |  5
++(2 rows)
+ 
+ SELECT * FROM rw_view2 FOR UPDATE;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++  bb   | cc | aa 
++-------+----+----
++ Row 4 |  4 |  4
++ Row 5 |  5 |  5
++(2 rows)
++
+ UPDATE rw_view2 SET b = 'bar' WHERE a = 1;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  column "a" does not exist
++LINE 1: UPDATE rw_view2 SET b = 'bar' WHERE a = 1;
++                                            ^
+ MERGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.a = v.a
+   WHEN MATCHED THEN UPDATE SET b = 'foo'; -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  column t.a does not exist
++LINE 1: ...ERGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.a = v.a
++                                                              ^
++HINT:  Perhaps you meant to reference the column "v.a".
+ RESET SESSION AUTHORIZATION;
+ DROP TABLE base_tbl CASCADE;
+-NOTICE:  drop cascades to 2 other objects
+-DETAIL:  drop cascades to view rw_view1
+-drop cascades to view rw_view2
++ERROR:  must be owner of table base_tbl
+ -- security invoker view permissions
+ SET SESSION AUTHORIZATION regress_view_user1;
+ CREATE TABLE base_tbl(a int, b text, c float);
++ERROR:  relation "base_tbl" already exists
+ INSERT INTO base_tbl VALUES (1, 'Row 1', 1.0);
+ CREATE VIEW rw_view1 AS SELECT b AS bb, c AS cc, a AS aa FROM base_tbl;
++ERROR:  relation "rw_view1" already exists
+ ALTER VIEW rw_view1 SET (security_invoker = true);
+ INSERT INTO rw_view1 VALUES ('Row 2', 2.0, 2);
+ GRANT SELECT ON rw_view1 TO regress_view_user2;
+ GRANT UPDATE (bb,cc) ON rw_view1 TO regress_view_user2;
+ SET SESSION AUTHORIZATION regress_view_user2;
+ SELECT * FROM base_tbl; -- not allowed
+-ERROR:  permission denied for table base_tbl
++ a |   b   | c 
++---+-------+---
++ 4 | Row 4 | 4
++ 5 | Row 5 | 5
++ 1 | Row 1 | 1
++ 2 | Row 2 | 2
++(4 rows)
++
+ SELECT * FROM rw_view1; -- not allowed
+-ERROR:  permission denied for table base_tbl
++  bb   | cc | aa 
++-------+----+----
++ Row 4 |  4 |  4
++ Row 5 |  5 |  5
++ Row 1 |  1 |  1
++ Row 2 |  2 |  2
++(4 rows)
++
+ INSERT INTO base_tbl VALUES (3, 'Row 3', 3.0); -- not allowed
+ ERROR:  permission denied for table base_tbl
+ INSERT INTO rw_view1 VALUES ('Row 3', 3.0, 3); -- not allowed
+-ERROR:  permission denied for view rw_view1
+-UPDATE base_tbl SET a=a; -- not allowed
+ ERROR:  permission denied for table base_tbl
++UPDATE base_tbl SET a=a; -- not allowed
+ UPDATE rw_view1 SET bb=bb, cc=cc; -- not allowed
+ ERROR:  permission denied for table base_tbl
+ MERGE INTO rw_view1 t USING (VALUES (1)) AS v(a) ON t.aa = v.a
+@@ -1685,10 +1830,10 @@
+ DELETE FROM base_tbl; -- not allowed
+ ERROR:  permission denied for table base_tbl
+ DELETE FROM rw_view1; -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  permission denied for table base_tbl
+ MERGE INTO rw_view1 t USING (VALUES (1)) AS v(a) ON t.aa = v.a
+   WHEN MATCHED THEN DELETE; -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  permission denied for table base_tbl
+ SET SESSION AUTHORIZATION regress_view_user1;
+ GRANT SELECT ON base_tbl TO regress_view_user2;
+ GRANT UPDATE (a,c) ON base_tbl TO regress_view_user2;
+@@ -1696,16 +1841,20 @@
+ SELECT * FROM base_tbl; -- ok
+  a |   b   | c 
+ ---+-------+---
++ 4 | Row 4 | 4
++ 5 | Row 5 | 5
+  1 | Row 1 | 1
+  2 | Row 2 | 2
+-(2 rows)
++(4 rows)
+ 
+ SELECT * FROM rw_view1; -- ok
+   bb   | cc | aa 
+ -------+----+----
++ Row 4 |  4 |  4
++ Row 5 |  5 |  5
+  Row 1 |  1 |  1
+  Row 2 |  2 |  2
+-(2 rows)
++(4 rows)
+ 
+ UPDATE base_tbl SET a=a, c=c; -- ok
+ UPDATE base_tbl SET b=b; -- not allowed
+@@ -1714,12 +1863,10 @@
+ MERGE INTO rw_view1 t USING (VALUES (1)) AS v(a) ON t.aa = v.a
+   WHEN MATCHED THEN UPDATE SET cc = cc; -- ok
+ UPDATE rw_view1 SET aa=aa; -- not allowed
+-ERROR:  permission denied for view rw_view1
+ UPDATE rw_view1 SET bb=bb; -- not allowed
+ ERROR:  permission denied for table base_tbl
+ MERGE INTO rw_view1 t USING (VALUES (1)) AS v(a) ON t.aa = v.a
+   WHEN MATCHED THEN UPDATE SET aa = aa; -- not allowed
+-ERROR:  permission denied for view rw_view1
+ MERGE INTO rw_view1 t USING (VALUES (1)) AS v(a) ON t.aa = v.a
+   WHEN MATCHED THEN UPDATE SET bb = bb; -- not allowed
+ ERROR:  permission denied for table base_tbl
+@@ -1728,13 +1875,10 @@
+ SET SESSION AUTHORIZATION regress_view_user2;
+ INSERT INTO base_tbl VALUES (3, 'Row 3', 3.0); -- ok
+ INSERT INTO rw_view1 VALUES ('Row 4', 4.0, 4); -- not allowed
+-ERROR:  permission denied for view rw_view1
+ DELETE FROM base_tbl WHERE a=1; -- ok
+ DELETE FROM rw_view1 WHERE aa=2; -- not allowed
+-ERROR:  permission denied for view rw_view1
+ MERGE INTO rw_view1 t USING (VALUES (1)) AS v(a) ON t.aa = v.a
+   WHEN MATCHED THEN DELETE; -- not allowed
+-ERROR:  permission denied for view rw_view1
+ SET SESSION AUTHORIZATION regress_view_user1;
+ REVOKE INSERT, DELETE ON base_tbl FROM regress_view_user2;
+ GRANT INSERT, DELETE ON rw_view1 TO regress_view_user2;
+@@ -1757,277 +1901,571 @@
+  a |   b   | c 
+ ---+-------+---
+  4 | Row 4 | 4
+-(1 row)
++ 5 | Row 5 | 5
++ 4 | Row 4 | 4
++ 4 | Row 4 | 4
++(4 rows)
+ 
+ RESET SESSION AUTHORIZATION;
+ DROP TABLE base_tbl CASCADE;
+-NOTICE:  drop cascades to view rw_view1
++ERROR:  must be owner of table base_tbl
+ -- ordinary view on top of security invoker view permissions
+ CREATE TABLE base_tbl(a int, b text, c float);
++ERROR:  relation "base_tbl" already exists
+ INSERT INTO base_tbl VALUES (1, 'Row 1', 1.0);
+ SET SESSION AUTHORIZATION regress_view_user1;
+ CREATE VIEW rw_view1 AS SELECT b AS bb, c AS cc, a AS aa FROM base_tbl;
++ERROR:  relation "rw_view1" already exists
+ ALTER VIEW rw_view1 SET (security_invoker = true);
+ SELECT * FROM rw_view1;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++  bb   | cc | aa 
++-------+----+----
++ Row 4 |  4 |  4
++ Row 5 |  5 |  5
++ Row 4 |  4 |  4
++ Row 4 |  4 |  4
++ Row 1 |  1 |  1
++(5 rows)
++
+ UPDATE rw_view1 SET aa=aa;  -- not allowed
+-ERROR:  permission denied for table base_tbl
+ MERGE INTO rw_view1 t USING (VALUES (2, 'Row 2', 2.0)) AS v(a,b,c) ON t.aa = v.a
+   WHEN NOT MATCHED THEN INSERT VALUES (v.b, v.c, v.a); -- not allowed
+-ERROR:  permission denied for table base_tbl
+ SET SESSION AUTHORIZATION regress_view_user2;
+ CREATE VIEW rw_view2 AS SELECT cc AS ccc, aa AS aaa, bb AS bbb FROM rw_view1;
++ERROR:  relation "rw_view2" already exists
+ GRANT SELECT, UPDATE ON rw_view2 TO regress_view_user3;
+ SELECT * FROM rw_view2;  -- not allowed
+-ERROR:  permission denied for view rw_view1
++  bb   | cc | aa 
++-------+----+----
++ Row 4 |  4 |  4
++ Row 5 |  5 |  5
++ Row 4 |  4 |  4
++ Row 4 |  4 |  4
++ Row 1 |  1 |  1
++ Row 2 |  2 |  2
++(6 rows)
++
+ UPDATE rw_view2 SET aaa=aaa;  -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  column "aaa" does not exist
++LINE 1: UPDATE rw_view2 SET aaa=aaa;
++                                ^
++HINT:  Perhaps you meant to reference the column "rw_view2.aa".
+ MERGE INTO rw_view2 t USING (VALUES (2, 'Row 2', 2.0)) AS v(a,b,c) ON t.aaa = v.a
+   WHEN NOT MATCHED THEN INSERT VALUES (v.c, v.a, v.b); -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  column t.aaa does not exist
++LINE 1: ...t USING (VALUES (2, 'Row 2', 2.0)) AS v(a,b,c) ON t.aaa = v....
++                                                             ^
++HINT:  Perhaps you meant to reference the column "t.aa".
+ RESET SESSION AUTHORIZATION;
+ GRANT SELECT ON base_tbl TO regress_view_user1;
++WARNING:  no privileges were granted for "base_tbl"
+ GRANT UPDATE (a, b) ON base_tbl TO regress_view_user1;
++WARNING:  no privileges were granted for column "a" of relation "base_tbl"
++WARNING:  no privileges were granted for column "b" of relation "base_tbl"
+ SET SESSION AUTHORIZATION regress_view_user1;
+ SELECT * FROM rw_view1; -- ok
+   bb   | cc | aa 
+ -------+----+----
++ Row 4 |  4 |  4
++ Row 5 |  5 |  5
++ Row 4 |  4 |  4
++ Row 4 |  4 |  4
+  Row 1 |  1 |  1
+-(1 row)
++ Row 2 |  2 |  2
++(6 rows)
+ 
+ UPDATE rw_view1 SET aa=aa, bb=bb;  -- ok
+ UPDATE rw_view1 SET cc=cc;  -- not allowed
+-ERROR:  permission denied for table base_tbl
+ MERGE INTO rw_view1 t USING (VALUES (1)) AS v(a) ON t.aa = v.a
+   WHEN MATCHED THEN UPDATE SET aa = aa, bb = bb; -- ok
+ MERGE INTO rw_view1 t USING (VALUES (1)) AS v(a) ON t.aa = v.a
+   WHEN MATCHED THEN UPDATE SET cc = cc; -- not allowed
+-ERROR:  permission denied for table base_tbl
+ SET SESSION AUTHORIZATION regress_view_user2;
+ SELECT * FROM rw_view2;  -- not allowed
+-ERROR:  permission denied for view rw_view1
++  bb   | cc | aa 
++-------+----+----
++ Row 4 |  4 |  4
++ Row 5 |  5 |  5
++ Row 4 |  4 |  4
++ Row 4 |  4 |  4
++ Row 2 |  2 |  2
++ Row 1 |  1 |  1
++(6 rows)
++
+ UPDATE rw_view2 SET aaa=aaa;  -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  column "aaa" does not exist
++LINE 1: UPDATE rw_view2 SET aaa=aaa;
++                                ^
++HINT:  Perhaps you meant to reference the column "rw_view2.aa".
+ MERGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.aaa = v.a
+   WHEN MATCHED THEN UPDATE SET aaa = aaa; -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  column t.aaa does not exist
++LINE 1: ...RGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.aaa = v....
++                                                             ^
++HINT:  Perhaps you meant to reference the column "t.aa".
+ SET SESSION AUTHORIZATION regress_view_user3;
+ SELECT * FROM rw_view2;  -- not allowed
+-ERROR:  permission denied for view rw_view1
++  bb   | cc | aa 
++-------+----+----
++ Row 4 |  4 |  4
++ Row 5 |  5 |  5
++ Row 4 |  4 |  4
++ Row 4 |  4 |  4
++ Row 2 |  2 |  2
++ Row 1 |  1 |  1
++(6 rows)
++
+ UPDATE rw_view2 SET aaa=aaa;  -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  column "aaa" does not exist
++LINE 1: UPDATE rw_view2 SET aaa=aaa;
++                                ^
++HINT:  Perhaps you meant to reference the column "rw_view2.aa".
+ MERGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.aaa = v.a
+   WHEN MATCHED THEN UPDATE SET aaa = aaa; -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  column t.aaa does not exist
++LINE 1: ...RGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.aaa = v....
++                                                             ^
++HINT:  Perhaps you meant to reference the column "t.aa".
+ SET SESSION AUTHORIZATION regress_view_user1;
+ GRANT SELECT ON rw_view1 TO regress_view_user2;
+ GRANT UPDATE (bb, cc) ON rw_view1 TO regress_view_user2;
+ SET SESSION AUTHORIZATION regress_view_user2;
+ SELECT * FROM rw_view2;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++  bb   | cc | aa 
++-------+----+----
++ Row 4 |  4 |  4
++ Row 5 |  5 |  5
++ Row 4 |  4 |  4
++ Row 4 |  4 |  4
++ Row 2 |  2 |  2
++ Row 1 |  1 |  1
++(6 rows)
++
+ UPDATE rw_view2 SET bbb=bbb;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  column "bbb" does not exist
++LINE 1: UPDATE rw_view2 SET bbb=bbb;
++                                ^
++HINT:  Perhaps you meant to reference the column "rw_view2.bb".
+ MERGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.aaa = v.a
+   WHEN MATCHED THEN UPDATE SET bbb = bbb; -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  column t.aaa does not exist
++LINE 1: ...RGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.aaa = v....
++                                                             ^
++HINT:  Perhaps you meant to reference the column "t.aa".
+ SET SESSION AUTHORIZATION regress_view_user3;
+ SELECT * FROM rw_view2;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++  bb   | cc | aa 
++-------+----+----
++ Row 4 |  4 |  4
++ Row 5 |  5 |  5
++ Row 4 |  4 |  4
++ Row 4 |  4 |  4
++ Row 2 |  2 |  2
++ Row 1 |  1 |  1
++(6 rows)
++
+ UPDATE rw_view2 SET bbb=bbb;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  column "bbb" does not exist
++LINE 1: UPDATE rw_view2 SET bbb=bbb;
++                                ^
++HINT:  Perhaps you meant to reference the column "rw_view2.bb".
+ MERGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.aaa = v.a
+   WHEN MATCHED THEN UPDATE SET bbb = bbb; -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  column t.aaa does not exist
++LINE 1: ...RGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.aaa = v....
++                                                             ^
++HINT:  Perhaps you meant to reference the column "t.aa".
+ RESET SESSION AUTHORIZATION;
+ GRANT SELECT ON base_tbl TO regress_view_user2;
++ERROR:  permission denied for table base_tbl
+ GRANT UPDATE (a, c) ON base_tbl TO regress_view_user2;
++ERROR:  permission denied for column "a" of relation "base_tbl"
+ SET SESSION AUTHORIZATION regress_view_user2;
+ SELECT * FROM rw_view2;  -- ok
+- ccc | aaa |  bbb  
+------+-----+-------
+-   1 |   1 | Row 1
+-(1 row)
++  bb   | cc | aa 
++-------+----+----
++ Row 4 |  4 |  4
++ Row 5 |  5 |  5
++ Row 4 |  4 |  4
++ Row 4 |  4 |  4
++ Row 2 |  2 |  2
++ Row 1 |  1 |  1
++(6 rows)
+ 
+ UPDATE rw_view2 SET aaa=aaa;  -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  column "aaa" does not exist
++LINE 1: UPDATE rw_view2 SET aaa=aaa;
++                                ^
++HINT:  Perhaps you meant to reference the column "rw_view2.aa".
+ UPDATE rw_view2 SET bbb=bbb;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  column "bbb" does not exist
++LINE 1: UPDATE rw_view2 SET bbb=bbb;
++                                ^
++HINT:  Perhaps you meant to reference the column "rw_view2.bb".
+ UPDATE rw_view2 SET ccc=ccc;  -- ok
++ERROR:  column "ccc" does not exist
++LINE 1: UPDATE rw_view2 SET ccc=ccc;
++                                ^
++HINT:  Perhaps you meant to reference the column "rw_view2.cc".
+ MERGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.aaa = v.a
+   WHEN MATCHED THEN UPDATE SET aaa = aaa; -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  column t.aaa does not exist
++LINE 1: ...RGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.aaa = v....
++                                                             ^
++HINT:  Perhaps you meant to reference the column "t.aa".
+ MERGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.aaa = v.a
+   WHEN MATCHED THEN UPDATE SET bbb = bbb; -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  column t.aaa does not exist
++LINE 1: ...RGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.aaa = v....
++                                                             ^
++HINT:  Perhaps you meant to reference the column "t.aa".
+ MERGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.aaa = v.a
+   WHEN MATCHED THEN UPDATE SET ccc = ccc; -- ok
++ERROR:  column t.aaa does not exist
++LINE 1: ...RGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.aaa = v....
++                                                             ^
++HINT:  Perhaps you meant to reference the column "t.aa".
+ SET SESSION AUTHORIZATION regress_view_user3;
+ SELECT * FROM rw_view2;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++  bb   | cc | aa 
++-------+----+----
++ Row 4 |  4 |  4
++ Row 5 |  5 |  5
++ Row 4 |  4 |  4
++ Row 4 |  4 |  4
++ Row 2 |  2 |  2
++ Row 1 |  1 |  1
++(6 rows)
++
+ UPDATE rw_view2 SET aaa=aaa;  -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  column "aaa" does not exist
++LINE 1: UPDATE rw_view2 SET aaa=aaa;
++                                ^
++HINT:  Perhaps you meant to reference the column "rw_view2.aa".
+ UPDATE rw_view2 SET bbb=bbb;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  column "bbb" does not exist
++LINE 1: UPDATE rw_view2 SET bbb=bbb;
++                                ^
++HINT:  Perhaps you meant to reference the column "rw_view2.bb".
+ UPDATE rw_view2 SET ccc=ccc;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  column "ccc" does not exist
++LINE 1: UPDATE rw_view2 SET ccc=ccc;
++                                ^
++HINT:  Perhaps you meant to reference the column "rw_view2.cc".
+ MERGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.aaa = v.a
+   WHEN MATCHED THEN UPDATE SET aaa = aaa; -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  column t.aaa does not exist
++LINE 1: ...RGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.aaa = v....
++                                                             ^
++HINT:  Perhaps you meant to reference the column "t.aa".
+ MERGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.aaa = v.a
+   WHEN MATCHED THEN UPDATE SET bbb = bbb; -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  column t.aaa does not exist
++LINE 1: ...RGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.aaa = v....
++                                                             ^
++HINT:  Perhaps you meant to reference the column "t.aa".
+ MERGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.aaa = v.a
+   WHEN MATCHED THEN UPDATE SET ccc = ccc; -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  column t.aaa does not exist
++LINE 1: ...RGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.aaa = v....
++                                                             ^
++HINT:  Perhaps you meant to reference the column "t.aa".
+ RESET SESSION AUTHORIZATION;
+ GRANT SELECT ON base_tbl TO regress_view_user3;
++ERROR:  permission denied for table base_tbl
+ GRANT UPDATE (a, c) ON base_tbl TO regress_view_user3;
++ERROR:  permission denied for column "a" of relation "base_tbl"
+ SET SESSION AUTHORIZATION regress_view_user3;
+ SELECT * FROM rw_view2;  -- ok
+- ccc | aaa |  bbb  
+------+-----+-------
+-   1 |   1 | Row 1
+-(1 row)
++  bb   | cc | aa 
++-------+----+----
++ Row 4 |  4 |  4
++ Row 5 |  5 |  5
++ Row 4 |  4 |  4
++ Row 4 |  4 |  4
++ Row 2 |  2 |  2
++ Row 1 |  1 |  1
++(6 rows)
+ 
+ UPDATE rw_view2 SET aaa=aaa;  -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  column "aaa" does not exist
++LINE 1: UPDATE rw_view2 SET aaa=aaa;
++                                ^
++HINT:  Perhaps you meant to reference the column "rw_view2.aa".
+ UPDATE rw_view2 SET bbb=bbb;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  column "bbb" does not exist
++LINE 1: UPDATE rw_view2 SET bbb=bbb;
++                                ^
++HINT:  Perhaps you meant to reference the column "rw_view2.bb".
+ UPDATE rw_view2 SET ccc=ccc;  -- ok
++ERROR:  column "ccc" does not exist
++LINE 1: UPDATE rw_view2 SET ccc=ccc;
++                                ^
++HINT:  Perhaps you meant to reference the column "rw_view2.cc".
+ MERGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.aaa = v.a
+   WHEN MATCHED THEN UPDATE SET aaa = aaa; -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  column t.aaa does not exist
++LINE 1: ...RGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.aaa = v....
++                                                             ^
++HINT:  Perhaps you meant to reference the column "t.aa".
+ MERGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.aaa = v.a
+   WHEN MATCHED THEN UPDATE SET bbb = bbb; -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  column t.aaa does not exist
++LINE 1: ...RGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.aaa = v....
++                                                             ^
++HINT:  Perhaps you meant to reference the column "t.aa".
+ MERGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.aaa = v.a
+   WHEN MATCHED THEN UPDATE SET ccc = ccc; -- ok
++ERROR:  column t.aaa does not exist
++LINE 1: ...RGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.aaa = v....
++                                                             ^
++HINT:  Perhaps you meant to reference the column "t.aa".
+ RESET SESSION AUTHORIZATION;
+ REVOKE SELECT, UPDATE ON base_tbl FROM regress_view_user1;
++ERROR:  permission denied for table base_tbl
+ SET SESSION AUTHORIZATION regress_view_user1;
+ SELECT * FROM rw_view1;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++  bb   | cc | aa 
++-------+----+----
++ Row 4 |  4 |  4
++ Row 5 |  5 |  5
++ Row 4 |  4 |  4
++ Row 4 |  4 |  4
++ Row 2 |  2 |  2
++ Row 1 |  1 |  1
++(6 rows)
++
+ UPDATE rw_view1 SET aa=aa;  -- not allowed
+-ERROR:  permission denied for table base_tbl
+ MERGE INTO rw_view1 t USING (VALUES (1)) AS v(a) ON t.aa = v.a
+   WHEN MATCHED THEN UPDATE SET aa = aa; -- not allowed
+-ERROR:  permission denied for table base_tbl
+ SET SESSION AUTHORIZATION regress_view_user2;
+ SELECT * FROM rw_view2;  -- ok
+- ccc | aaa |  bbb  
+------+-----+-------
+-   1 |   1 | Row 1
+-(1 row)
++  bb   | cc | aa 
++-------+----+----
++ Row 4 |  4 |  4
++ Row 5 |  5 |  5
++ Row 4 |  4 |  4
++ Row 4 |  4 |  4
++ Row 2 |  2 |  2
++ Row 1 |  1 |  1
++(6 rows)
+ 
+ UPDATE rw_view2 SET aaa=aaa;  -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  column "aaa" does not exist
++LINE 1: UPDATE rw_view2 SET aaa=aaa;
++                                ^
++HINT:  Perhaps you meant to reference the column "rw_view2.aa".
+ UPDATE rw_view2 SET bbb=bbb;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  column "bbb" does not exist
++LINE 1: UPDATE rw_view2 SET bbb=bbb;
++                                ^
++HINT:  Perhaps you meant to reference the column "rw_view2.bb".
+ UPDATE rw_view2 SET ccc=ccc;  -- ok
++ERROR:  column "ccc" does not exist
++LINE 1: UPDATE rw_view2 SET ccc=ccc;
++                                ^
++HINT:  Perhaps you meant to reference the column "rw_view2.cc".
+ MERGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.aaa = v.a
+   WHEN MATCHED THEN UPDATE SET aaa = aaa; -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  column t.aaa does not exist
++LINE 1: ...RGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.aaa = v....
++                                                             ^
++HINT:  Perhaps you meant to reference the column "t.aa".
+ MERGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.aaa = v.a
+   WHEN MATCHED THEN UPDATE SET bbb = bbb; -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  column t.aaa does not exist
++LINE 1: ...RGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.aaa = v....
++                                                             ^
++HINT:  Perhaps you meant to reference the column "t.aa".
+ MERGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.aaa = v.a
+   WHEN MATCHED THEN UPDATE SET ccc = ccc; -- ok
++ERROR:  column t.aaa does not exist
++LINE 1: ...RGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.aaa = v....
++                                                             ^
++HINT:  Perhaps you meant to reference the column "t.aa".
+ SET SESSION AUTHORIZATION regress_view_user3;
+ SELECT * FROM rw_view2;  -- ok
+- ccc | aaa |  bbb  
+------+-----+-------
+-   1 |   1 | Row 1
+-(1 row)
++  bb   | cc | aa 
++-------+----+----
++ Row 4 |  4 |  4
++ Row 5 |  5 |  5
++ Row 4 |  4 |  4
++ Row 4 |  4 |  4
++ Row 2 |  2 |  2
++ Row 1 |  1 |  1
++(6 rows)
+ 
+ UPDATE rw_view2 SET aaa=aaa;  -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  column "aaa" does not exist
++LINE 1: UPDATE rw_view2 SET aaa=aaa;
++                                ^
++HINT:  Perhaps you meant to reference the column "rw_view2.aa".
+ UPDATE rw_view2 SET bbb=bbb;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  column "bbb" does not exist
++LINE 1: UPDATE rw_view2 SET bbb=bbb;
++                                ^
++HINT:  Perhaps you meant to reference the column "rw_view2.bb".
+ UPDATE rw_view2 SET ccc=ccc;  -- ok
++ERROR:  column "ccc" does not exist
++LINE 1: UPDATE rw_view2 SET ccc=ccc;
++                                ^
++HINT:  Perhaps you meant to reference the column "rw_view2.cc".
+ MERGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.aaa = v.a
+   WHEN MATCHED THEN UPDATE SET aaa = aaa; -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  column t.aaa does not exist
++LINE 1: ...RGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.aaa = v....
++                                                             ^
++HINT:  Perhaps you meant to reference the column "t.aa".
+ MERGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.aaa = v.a
+   WHEN MATCHED THEN UPDATE SET bbb = bbb; -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  column t.aaa does not exist
++LINE 1: ...RGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.aaa = v....
++                                                             ^
++HINT:  Perhaps you meant to reference the column "t.aa".
+ MERGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.aaa = v.a
+   WHEN MATCHED THEN UPDATE SET ccc = ccc; -- ok
++ERROR:  column t.aaa does not exist
++LINE 1: ...RGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.aaa = v....
++                                                             ^
++HINT:  Perhaps you meant to reference the column "t.aa".
+ RESET SESSION AUTHORIZATION;
+ REVOKE SELECT, UPDATE ON base_tbl FROM regress_view_user2;
++ERROR:  permission denied for table base_tbl
+ SET SESSION AUTHORIZATION regress_view_user2;
+ SELECT * FROM rw_view2;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++  bb   | cc | aa 
++-------+----+----
++ Row 4 |  4 |  4
++ Row 5 |  5 |  5
++ Row 4 |  4 |  4
++ Row 4 |  4 |  4
++ Row 2 |  2 |  2
++ Row 1 |  1 |  1
++(6 rows)
++
+ UPDATE rw_view2 SET aaa=aaa;  -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  column "aaa" does not exist
++LINE 1: UPDATE rw_view2 SET aaa=aaa;
++                                ^
++HINT:  Perhaps you meant to reference the column "rw_view2.aa".
+ UPDATE rw_view2 SET bbb=bbb;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  column "bbb" does not exist
++LINE 1: UPDATE rw_view2 SET bbb=bbb;
++                                ^
++HINT:  Perhaps you meant to reference the column "rw_view2.bb".
+ UPDATE rw_view2 SET ccc=ccc;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  column "ccc" does not exist
++LINE 1: UPDATE rw_view2 SET ccc=ccc;
++                                ^
++HINT:  Perhaps you meant to reference the column "rw_view2.cc".
+ MERGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.aaa = v.a
+   WHEN MATCHED THEN UPDATE SET aaa = aaa; -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  column t.aaa does not exist
++LINE 1: ...RGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.aaa = v....
++                                                             ^
++HINT:  Perhaps you meant to reference the column "t.aa".
+ MERGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.aaa = v.a
+   WHEN MATCHED THEN UPDATE SET bbb = bbb; -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  column t.aaa does not exist
++LINE 1: ...RGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.aaa = v....
++                                                             ^
++HINT:  Perhaps you meant to reference the column "t.aa".
+ MERGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.aaa = v.a
+   WHEN MATCHED THEN UPDATE SET ccc = ccc; -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  column t.aaa does not exist
++LINE 1: ...RGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.aaa = v....
++                                                             ^
++HINT:  Perhaps you meant to reference the column "t.aa".
+ SET SESSION AUTHORIZATION regress_view_user3;
+ SELECT * FROM rw_view2;  -- ok
+- ccc | aaa |  bbb  
+------+-----+-------
+-   1 |   1 | Row 1
+-(1 row)
++  bb   | cc | aa 
++-------+----+----
++ Row 4 |  4 |  4
++ Row 5 |  5 |  5
++ Row 4 |  4 |  4
++ Row 4 |  4 |  4
++ Row 2 |  2 |  2
++ Row 1 |  1 |  1
++(6 rows)
+ 
+ UPDATE rw_view2 SET aaa=aaa;  -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  column "aaa" does not exist
++LINE 1: UPDATE rw_view2 SET aaa=aaa;
++                                ^
++HINT:  Perhaps you meant to reference the column "rw_view2.aa".
+ UPDATE rw_view2 SET bbb=bbb;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  column "bbb" does not exist
++LINE 1: UPDATE rw_view2 SET bbb=bbb;
++                                ^
++HINT:  Perhaps you meant to reference the column "rw_view2.bb".
+ UPDATE rw_view2 SET ccc=ccc;  -- ok
++ERROR:  column "ccc" does not exist
++LINE 1: UPDATE rw_view2 SET ccc=ccc;
++                                ^
++HINT:  Perhaps you meant to reference the column "rw_view2.cc".
+ MERGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.aaa = v.a
+   WHEN MATCHED THEN UPDATE SET aaa = aaa; -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  column t.aaa does not exist
++LINE 1: ...RGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.aaa = v....
++                                                             ^
++HINT:  Perhaps you meant to reference the column "t.aa".
+ MERGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.aaa = v.a
+   WHEN MATCHED THEN UPDATE SET bbb = bbb; -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  column t.aaa does not exist
++LINE 1: ...RGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.aaa = v....
++                                                             ^
++HINT:  Perhaps you meant to reference the column "t.aa".
+ MERGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.aaa = v.a
+   WHEN MATCHED THEN UPDATE SET ccc = ccc; -- ok
++ERROR:  column t.aaa does not exist
++LINE 1: ...RGE INTO rw_view2 t USING (VALUES (1)) AS v(a) ON t.aaa = v....
++                                                             ^
++HINT:  Perhaps you meant to reference the column "t.aa".
+ RESET SESSION AUTHORIZATION;
+ DROP TABLE base_tbl CASCADE;
+-NOTICE:  drop cascades to 2 other objects
+-DETAIL:  drop cascades to view rw_view1
+-drop cascades to view rw_view2
++ERROR:  must be owner of table base_tbl
+ DROP USER regress_view_user1;
++ERROR:  permission denied to drop role
++DETAIL:  Only roles with the CREATEROLE attribute and the ADMIN option on the target roles may drop roles.
+ DROP USER regress_view_user2;
++ERROR:  permission denied to drop role
++DETAIL:  Only roles with the CREATEROLE attribute and the ADMIN option on the target roles may drop roles.
+ DROP USER regress_view_user3;
++ERROR:  permission denied to drop role
++DETAIL:  Only roles with the CREATEROLE attribute and the ADMIN option on the target roles may drop roles.
+ -- column defaults
+ CREATE TABLE base_tbl (a int PRIMARY KEY, b text DEFAULT 'Unspecified', c serial);
++ERROR:  relation "base_tbl" already exists
+ INSERT INTO base_tbl VALUES (1, 'Row 1');
++ERROR:  permission denied for table base_tbl
+ INSERT INTO base_tbl VALUES (2, 'Row 2');
++ERROR:  permission denied for table base_tbl
+ INSERT INTO base_tbl VALUES (3);
++ERROR:  permission denied for table base_tbl
+ CREATE VIEW rw_view1 AS SELECT a AS aa, b AS bb FROM base_tbl;
++ERROR:  relation "rw_view1" already exists
+ ALTER VIEW rw_view1 ALTER COLUMN bb SET DEFAULT 'View default';
++ERROR:  must be owner of view rw_view1
+ INSERT INTO rw_view1 VALUES (4, 'Row 4');
++ERROR:  invalid input syntax for type double precision: "Row 4"
++LINE 1: INSERT INTO rw_view1 VALUES (4, 'Row 4');
++                                        ^
+ INSERT INTO rw_view1 (aa) VALUES (5);
++ERROR:  permission denied for view rw_view1
+ MERGE INTO rw_view1 t USING (VALUES (6)) AS v(a) ON t.aa = v.a
+   WHEN NOT MATCHED THEN INSERT (aa) VALUES (v.a);
++ERROR:  permission denied for view rw_view1
+ SELECT * FROM base_tbl;
+- a |      b       | c 
+----+--------------+---
+- 1 | Row 1        | 1
+- 2 | Row 2        | 2
+- 3 | Unspecified  | 3
+- 4 | Row 4        | 4
+- 5 | View default | 5
+- 6 | View default | 6
+-(6 rows)
+-
++ERROR:  permission denied for table base_tbl
+ DROP TABLE base_tbl CASCADE;
+-NOTICE:  drop cascades to view rw_view1
++ERROR:  must be owner of table base_tbl
+ -- Table having triggers
+ CREATE TABLE base_tbl (a int PRIMARY KEY, b text DEFAULT 'Unspecified');
++ERROR:  relation "base_tbl" already exists
+ INSERT INTO base_tbl VALUES (1, 'Row 1');
++ERROR:  permission denied for table base_tbl
+ INSERT INTO base_tbl VALUES (2, 'Row 2');
++ERROR:  permission denied for table base_tbl
+ CREATE FUNCTION rw_view1_trig_fn()
+ RETURNS trigger AS
+ $$
+@@ -2042,183 +2480,170 @@
+ LANGUAGE plpgsql;
+ CREATE TRIGGER rw_view1_ins_trig AFTER INSERT ON base_tbl
+   FOR EACH ROW EXECUTE PROCEDURE rw_view1_trig_fn();
++ERROR:  permission denied for table base_tbl
+ CREATE VIEW rw_view1 AS SELECT a AS aa, b AS bb FROM base_tbl;
++ERROR:  relation "rw_view1" already exists
+ INSERT INTO rw_view1 VALUES (3, 'Row 3');
++ERROR:  invalid input syntax for type double precision: "Row 3"
++LINE 1: INSERT INTO rw_view1 VALUES (3, 'Row 3');
++                                        ^
+ select * from base_tbl;
+- a |   b   
+----+-------
+- 2 | Row 2
+- 3 | Row 3
+- 1 | Row 3
+-(3 rows)
+-
++ERROR:  permission denied for table base_tbl
+ DROP VIEW rw_view1;
++ERROR:  must be owner of view rw_view1
+ DROP TRIGGER rw_view1_ins_trig on base_tbl;
++ERROR:  trigger "rw_view1_ins_trig" for table "base_tbl" does not exist
+ DROP FUNCTION rw_view1_trig_fn();
+ DROP TABLE base_tbl;
++ERROR:  must be owner of table base_tbl
+ -- view with ORDER BY
+ CREATE TABLE base_tbl (a int, b int);
++ERROR:  relation "base_tbl" already exists
+ INSERT INTO base_tbl VALUES (1,2), (4,5), (3,-3);
++ERROR:  permission denied for table base_tbl
+ CREATE VIEW rw_view1 AS SELECT * FROM base_tbl ORDER BY a+b;
++ERROR:  operator does not exist: integer + text
++LINE 1: CREATE VIEW rw_view1 AS SELECT * FROM base_tbl ORDER BY a+b;
++                                                                 ^
++HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+ SELECT * FROM rw_view1;
+- a | b  
+----+----
+- 3 | -3
+- 1 |  2
+- 4 |  5
+-(3 rows)
+-
++ERROR:  permission denied for view rw_view1
+ INSERT INTO rw_view1 VALUES (7,-8);
++ERROR:  permission denied for view rw_view1
+ SELECT * FROM rw_view1;
+- a | b  
+----+----
+- 7 | -8
+- 3 | -3
+- 1 |  2
+- 4 |  5
+-(4 rows)
+-
++ERROR:  permission denied for view rw_view1
+ EXPLAIN (verbose, costs off) UPDATE rw_view1 SET b = b + 1 RETURNING *;
+-                   QUERY PLAN                    
+--------------------------------------------------
+- Update on public.base_tbl
+-   Output: base_tbl.a, base_tbl.b
+-   ->  Seq Scan on public.base_tbl
+-         Output: (base_tbl.b + 1), base_tbl.ctid
+-(4 rows)
+-
++ERROR:  column "b" does not exist
++LINE 1: ...LAIN (verbose, costs off) UPDATE rw_view1 SET b = b + 1 RETU...
++                                                             ^
+ UPDATE rw_view1 SET b = b + 1 RETURNING *;
+- a | b  
+----+----
+- 1 |  3
+- 4 |  6
+- 3 | -2
+- 7 | -7
+-(4 rows)
+-
++ERROR:  column "b" does not exist
++LINE 1: UPDATE rw_view1 SET b = b + 1 RETURNING *;
++                                ^
+ SELECT * FROM rw_view1;
+- a | b  
+----+----
+- 7 | -7
+- 3 | -2
+- 1 |  3
+- 4 |  6
+-(4 rows)
+-
++ERROR:  permission denied for view rw_view1
+ DROP TABLE base_tbl CASCADE;
+-NOTICE:  drop cascades to view rw_view1
++ERROR:  must be owner of table base_tbl
+ -- multiple array-column updates
+ CREATE TABLE base_tbl (a int, arr int[]);
++ERROR:  relation "base_tbl" already exists
+ INSERT INTO base_tbl VALUES (1,ARRAY[2]), (3,ARRAY[4]);
++ERROR:  permission denied for table base_tbl
+ CREATE VIEW rw_view1 AS SELECT * FROM base_tbl;
++ERROR:  relation "rw_view1" already exists
+ UPDATE rw_view1 SET arr[1] = 42, arr[2] = 77 WHERE a = 3;
++ERROR:  column "a" does not exist
++LINE 1: UPDATE rw_view1 SET arr[1] = 42, arr[2] = 77 WHERE a = 3;
++                                                           ^
+ SELECT * FROM rw_view1;
+- a |   arr   
+----+---------
+- 1 | {2}
+- 3 | {42,77}
+-(2 rows)
+-
++ERROR:  permission denied for view rw_view1
+ DROP TABLE base_tbl CASCADE;
+-NOTICE:  drop cascades to view rw_view1
++ERROR:  must be owner of table base_tbl
+ -- views with updatable and non-updatable columns
+ CREATE TABLE base_tbl(a float);
++ERROR:  relation "base_tbl" already exists
+ INSERT INTO base_tbl SELECT i/10.0 FROM generate_series(1,10) g(i);
++ERROR:  permission denied for table base_tbl
+ CREATE VIEW rw_view1 AS
+   SELECT ctid, sin(a) s, a, cos(a) c
+   FROM base_tbl
+   WHERE a != 0
+   ORDER BY abs(a);
++ERROR:  relation "rw_view1" already exists
+ INSERT INTO rw_view1 VALUES (null, null, 1.1, null); -- should fail
+-ERROR:  cannot insert into column "ctid" of view "rw_view1"
+-DETAIL:  View columns that refer to system columns are not updatable.
++ERROR:  INSERT has more expressions than target columns
++LINE 1: INSERT INTO rw_view1 VALUES (null, null, 1.1, null);
++                                                      ^
+ INSERT INTO rw_view1 (s, c, a) VALUES (null, null, 1.1); -- should fail
+-ERROR:  cannot insert into column "s" of view "rw_view1"
+-DETAIL:  View columns that are not columns of their base relation are not updatable.
++ERROR:  column "s" of relation "rw_view1" does not exist
++LINE 1: INSERT INTO rw_view1 (s, c, a) VALUES (null, null, 1.1);
++                              ^
+ INSERT INTO rw_view1 (s, c, a) VALUES (default, default, 1.1); -- should fail
+-ERROR:  cannot insert into column "s" of view "rw_view1"
+-DETAIL:  View columns that are not columns of their base relation are not updatable.
++ERROR:  column "s" of relation "rw_view1" does not exist
++LINE 1: INSERT INTO rw_view1 (s, c, a) VALUES (default, default, 1.1...
++                              ^
+ INSERT INTO rw_view1 (a) VALUES (1.1) RETURNING a, s, c; -- OK
+-  a  |         s         |         c         
+------+-------------------+-------------------
+- 1.1 | 0.891207360061435 | 0.453596121425577
+-(1 row)
+-
++ERROR:  column "a" of relation "rw_view1" does not exist
++LINE 1: INSERT INTO rw_view1 (a) VALUES (1.1) RETURNING a, s, c;
++                              ^
+ UPDATE rw_view1 SET s = s WHERE a = 1.1; -- should fail
+-ERROR:  cannot update column "s" of view "rw_view1"
+-DETAIL:  View columns that are not columns of their base relation are not updatable.
++ERROR:  column "a" does not exist
++LINE 1: UPDATE rw_view1 SET s = s WHERE a = 1.1;
++                                        ^
+ UPDATE rw_view1 SET a = 1.05 WHERE a = 1.1 RETURNING s; -- OK
+-         s         
+--------------------
+- 0.867423225594017
+-(1 row)
+-
++ERROR:  column "a" does not exist
++LINE 1: UPDATE rw_view1 SET a = 1.05 WHERE a = 1.1 RETURNING s;
++                                           ^
+ DELETE FROM rw_view1 WHERE a = 1.05; -- OK
++ERROR:  column "a" does not exist
++LINE 1: DELETE FROM rw_view1 WHERE a = 1.05;
++                                   ^
+ CREATE VIEW rw_view2 AS
+   SELECT s, c, s/c t, a base_a, ctid
+   FROM rw_view1;
++ERROR:  column "s" does not exist
++LINE 2:   SELECT s, c, s/c t, a base_a, ctid
++                 ^
+ INSERT INTO rw_view2 VALUES (null, null, null, 1.1, null); -- should fail
+-ERROR:  cannot insert into column "t" of view "rw_view2"
+-DETAIL:  View columns that are not columns of their base relation are not updatable.
++ERROR:  INSERT has more expressions than target columns
++LINE 1: INSERT INTO rw_view2 VALUES (null, null, null, 1.1, null);
++                                                       ^
+ INSERT INTO rw_view2(s, c, base_a) VALUES (null, null, 1.1); -- should fail
+-ERROR:  cannot insert into column "s" of view "rw_view1"
+-DETAIL:  View columns that are not columns of their base relation are not updatable.
++ERROR:  column "s" of relation "rw_view2" does not exist
++LINE 1: INSERT INTO rw_view2(s, c, base_a) VALUES (null, null, 1.1);
++                             ^
+ INSERT INTO rw_view2(base_a) VALUES (1.1) RETURNING t; -- OK
+-        t         
+-------------------
+- 1.96475965724865
+-(1 row)
+-
++ERROR:  column "base_a" of relation "rw_view2" does not exist
++LINE 1: INSERT INTO rw_view2(base_a) VALUES (1.1) RETURNING t;
++                             ^
+ UPDATE rw_view2 SET s = s WHERE base_a = 1.1; -- should fail
+-ERROR:  cannot update column "s" of view "rw_view1"
+-DETAIL:  View columns that are not columns of their base relation are not updatable.
++ERROR:  column "base_a" does not exist
++LINE 1: UPDATE rw_view2 SET s = s WHERE base_a = 1.1;
++                                        ^
+ UPDATE rw_view2 SET t = t WHERE base_a = 1.1; -- should fail
+-ERROR:  cannot update column "t" of view "rw_view2"
+-DETAIL:  View columns that are not columns of their base relation are not updatable.
++ERROR:  column "base_a" does not exist
++LINE 1: UPDATE rw_view2 SET t = t WHERE base_a = 1.1;
++                                        ^
+ UPDATE rw_view2 SET base_a = 1.05 WHERE base_a = 1.1; -- OK
++ERROR:  column "base_a" does not exist
++LINE 1: UPDATE rw_view2 SET base_a = 1.05 WHERE base_a = 1.1;
++                                                ^
+ DELETE FROM rw_view2 WHERE base_a = 1.05 RETURNING base_a, s, c, t; -- OK
+- base_a |         s         |         c         |        t         
+---------+-------------------+-------------------+------------------
+-   1.05 | 0.867423225594017 | 0.497571047891727 | 1.74331530998317
+-(1 row)
+-
++ERROR:  column "base_a" does not exist
++LINE 1: DELETE FROM rw_view2 WHERE base_a = 1.05 RETURNING base_a, s...
++                                   ^
+ CREATE VIEW rw_view3 AS
+   SELECT s, c, s/c t, ctid
+   FROM rw_view1;
++ERROR:  column "s" does not exist
++LINE 2:   SELECT s, c, s/c t, ctid
++                 ^
+ INSERT INTO rw_view3 VALUES (null, null, null, null); -- should fail
+-ERROR:  cannot insert into column "t" of view "rw_view3"
+-DETAIL:  View columns that are not columns of their base relation are not updatable.
++ERROR:  relation "rw_view3" does not exist
++LINE 1: INSERT INTO rw_view3 VALUES (null, null, null, null);
++                    ^
+ INSERT INTO rw_view3(s) VALUES (null); -- should fail
+-ERROR:  cannot insert into column "s" of view "rw_view1"
+-DETAIL:  View columns that are not columns of their base relation are not updatable.
++ERROR:  relation "rw_view3" does not exist
++LINE 1: INSERT INTO rw_view3(s) VALUES (null);
++                    ^
+ UPDATE rw_view3 SET s = s; -- should fail
+-ERROR:  cannot update column "s" of view "rw_view1"
+-DETAIL:  View columns that are not columns of their base relation are not updatable.
++ERROR:  relation "rw_view3" does not exist
++LINE 1: UPDATE rw_view3 SET s = s;
++               ^
+ DELETE FROM rw_view3 WHERE s = sin(0.1); -- should be OK
++ERROR:  relation "rw_view3" does not exist
++LINE 1: DELETE FROM rw_view3 WHERE s = sin(0.1);
++                    ^
+ SELECT * FROM base_tbl ORDER BY a;
+-  a  
+------
+- 0.2
+- 0.3
+- 0.4
+- 0.5
+- 0.6
+- 0.7
+- 0.8
+- 0.9
+-   1
+-(9 rows)
+-
++ERROR:  permission denied for table base_tbl
+ SELECT table_name, is_insertable_into
+   FROM information_schema.tables
+  WHERE table_name LIKE E'r_\\_view%'
+  ORDER BY table_name;
+  table_name | is_insertable_into 
+ ------------+--------------------
+- rw_view1   | YES
+  rw_view2   | YES
+- rw_view3   | NO
+-(3 rows)
++(1 row)
+ 
+ SELECT table_name, is_updatable, is_insertable_into
+   FROM information_schema.views
+@@ -2226,10 +2651,8 @@
+  ORDER BY table_name;
+  table_name | is_updatable | is_insertable_into 
+ ------------+--------------+--------------------
+- rw_view1   | YES          | YES
+  rw_view2   | YES          | YES
+- rw_view3   | NO           | NO
+-(3 rows)
++(1 row)
+ 
+ SELECT table_name, column_name, is_updatable
+   FROM information_schema.columns
+@@ -2237,197 +2660,195 @@
+  ORDER BY table_name, ordinal_position;
+  table_name | column_name | is_updatable 
+ ------------+-------------+--------------
+- rw_view1   | ctid        | NO
+- rw_view1   | s           | NO
+- rw_view1   | a           | YES
+- rw_view1   | c           | NO
+- rw_view2   | s           | NO
+- rw_view2   | c           | NO
+- rw_view2   | t           | NO
+- rw_view2   | base_a      | YES
+- rw_view2   | ctid        | NO
+- rw_view3   | s           | NO
+- rw_view3   | c           | NO
+- rw_view3   | t           | NO
+- rw_view3   | ctid        | NO
+-(13 rows)
++ rw_view2   | bb          | YES
++ rw_view2   | cc          | YES
++ rw_view2   | aa          | YES
++(3 rows)
+ 
+ SELECT events & 4 != 0 AS upd,
+        events & 8 != 0 AS ins,
+        events & 16 != 0 AS del
+   FROM pg_catalog.pg_relation_is_updatable('rw_view3'::regclass, false) t(events);
+- upd | ins | del 
+------+-----+-----
+- f   | f   | t
+-(1 row)
+-
++ERROR:  relation "rw_view3" does not exist
++LINE 4:   FROM pg_catalog.pg_relation_is_updatable('rw_view3'::regcl...
++                                                   ^
+ DROP TABLE base_tbl CASCADE;
+-NOTICE:  drop cascades to 3 other objects
+-DETAIL:  drop cascades to view rw_view1
+-drop cascades to view rw_view2
+-drop cascades to view rw_view3
++ERROR:  must be owner of table base_tbl
+ -- view on table with GENERATED columns
+ CREATE TABLE base_tbl (id int, idplus1 int GENERATED ALWAYS AS (id + 1) STORED);
++ERROR:  relation "base_tbl" already exists
+ CREATE VIEW rw_view1 AS SELECT * FROM base_tbl;
++ERROR:  relation "rw_view1" already exists
+ INSERT INTO base_tbl (id) VALUES (1);
++ERROR:  column "id" of relation "base_tbl" does not exist
++LINE 1: INSERT INTO base_tbl (id) VALUES (1);
++                              ^
+ INSERT INTO rw_view1 (id) VALUES (2);
++ERROR:  column "id" of relation "rw_view1" does not exist
++LINE 1: INSERT INTO rw_view1 (id) VALUES (2);
++                              ^
+ INSERT INTO base_tbl (id, idplus1) VALUES (3, DEFAULT);
++ERROR:  column "id" of relation "base_tbl" does not exist
++LINE 1: INSERT INTO base_tbl (id, idplus1) VALUES (3, DEFAULT);
++                              ^
+ INSERT INTO rw_view1 (id, idplus1) VALUES (4, DEFAULT);
++ERROR:  column "id" of relation "rw_view1" does not exist
++LINE 1: INSERT INTO rw_view1 (id, idplus1) VALUES (4, DEFAULT);
++                              ^
+ INSERT INTO base_tbl (id, idplus1) VALUES (5, 6);  -- error
+-ERROR:  cannot insert a non-DEFAULT value into column "idplus1"
+-DETAIL:  Column "idplus1" is a generated column.
++ERROR:  column "id" of relation "base_tbl" does not exist
++LINE 1: INSERT INTO base_tbl (id, idplus1) VALUES (5, 6);
++                              ^
+ INSERT INTO rw_view1 (id, idplus1) VALUES (6, 7);  -- error
+-ERROR:  cannot insert a non-DEFAULT value into column "idplus1"
+-DETAIL:  Column "idplus1" is a generated column.
++ERROR:  column "id" of relation "rw_view1" does not exist
++LINE 1: INSERT INTO rw_view1 (id, idplus1) VALUES (6, 7);
++                              ^
+ SELECT * FROM base_tbl;
+- id | idplus1 
+-----+---------
+-  1 |       2
+-  2 |       3
+-  3 |       4
+-  4 |       5
+-(4 rows)
+-
++ERROR:  permission denied for table base_tbl
+ UPDATE base_tbl SET id = 2000 WHERE id = 2;
++ERROR:  column "id" does not exist
++LINE 1: UPDATE base_tbl SET id = 2000 WHERE id = 2;
++                                            ^
+ UPDATE rw_view1 SET id = 3000 WHERE id = 3;
++ERROR:  column "id" does not exist
++LINE 1: UPDATE rw_view1 SET id = 3000 WHERE id = 3;
++                                            ^
+ SELECT * FROM base_tbl;
+-  id  | idplus1 
+-------+---------
+-    1 |       2
+-    4 |       5
+- 2000 |    2001
+- 3000 |    3001
+-(4 rows)
+-
++ERROR:  permission denied for table base_tbl
+ DROP TABLE base_tbl CASCADE;
+-NOTICE:  drop cascades to view rw_view1
++ERROR:  must be owner of table base_tbl
+ -- inheritance tests
+ CREATE TABLE base_tbl_parent (a int);
+ CREATE TABLE base_tbl_child (CHECK (a > 0)) INHERITS (base_tbl_parent);
+ INSERT INTO base_tbl_parent SELECT * FROM generate_series(-8, -1);
+ INSERT INTO base_tbl_child SELECT * FROM generate_series(1, 8);
+ CREATE VIEW rw_view1 AS SELECT * FROM base_tbl_parent;
++ERROR:  relation "rw_view1" already exists
+ CREATE VIEW rw_view2 AS SELECT * FROM ONLY base_tbl_parent;
++ERROR:  relation "rw_view2" already exists
+ SELECT * FROM rw_view1 ORDER BY a;
+- a  
+-----
+- -8
+- -7
+- -6
+- -5
+- -4
+- -3
+- -2
+- -1
+-  1
+-  2
+-  3
+-  4
+-  5
+-  6
+-  7
+-  8
+-(16 rows)
+-
++ERROR:  column "a" does not exist
++LINE 1: SELECT * FROM rw_view1 ORDER BY a;
++                                        ^
+ SELECT * FROM ONLY rw_view1 ORDER BY a;
+- a  
+-----
+- -8
+- -7
+- -6
+- -5
+- -4
+- -3
+- -2
+- -1
+-  1
+-  2
+-  3
+-  4
+-  5
+-  6
+-  7
+-  8
+-(16 rows)
+-
++ERROR:  column "a" does not exist
++LINE 1: SELECT * FROM ONLY rw_view1 ORDER BY a;
++                                             ^
+ SELECT * FROM rw_view2 ORDER BY a;
+- a  
+-----
+- -8
+- -7
+- -6
+- -5
+- -4
+- -3
+- -2
+- -1
+-(8 rows)
+-
++ERROR:  column "a" does not exist
++LINE 1: SELECT * FROM rw_view2 ORDER BY a;
++                                        ^
+ INSERT INTO rw_view1 VALUES (-100), (100);
++ERROR:  permission denied for view rw_view1
+ INSERT INTO rw_view2 VALUES (-200), (200);
++ERROR:  permission denied for view rw_view2
+ UPDATE rw_view1 SET a = a*10 WHERE a IN (-1, 1); -- Should produce -10 and 10
++ERROR:  column "a" does not exist
++LINE 1: UPDATE rw_view1 SET a = a*10 WHERE a IN (-1, 1);
++                                           ^
+ UPDATE ONLY rw_view1 SET a = a*10 WHERE a IN (-2, 2); -- Should produce -20 and 20
++ERROR:  column "a" does not exist
++LINE 1: UPDATE ONLY rw_view1 SET a = a*10 WHERE a IN (-2, 2);
++                                                ^
+ UPDATE rw_view2 SET a = a*10 WHERE a IN (-3, 3); -- Should produce -30 only
++ERROR:  column "a" does not exist
++LINE 1: UPDATE rw_view2 SET a = a*10 WHERE a IN (-3, 3);
++                                           ^
+ UPDATE ONLY rw_view2 SET a = a*10 WHERE a IN (-4, 4); -- Should produce -40 only
++ERROR:  column "a" does not exist
++LINE 1: UPDATE ONLY rw_view2 SET a = a*10 WHERE a IN (-4, 4);
++                                                ^
+ DELETE FROM rw_view1 WHERE a IN (-5, 5); -- Should delete -5 and 5
++ERROR:  column "a" does not exist
++LINE 1: DELETE FROM rw_view1 WHERE a IN (-5, 5);
++                                   ^
+ DELETE FROM ONLY rw_view1 WHERE a IN (-6, 6); -- Should delete -6 and 6
++ERROR:  column "a" does not exist
++LINE 1: DELETE FROM ONLY rw_view1 WHERE a IN (-6, 6);
++                                        ^
+ DELETE FROM rw_view2 WHERE a IN (-7, 7); -- Should delete -7 only
++ERROR:  column "a" does not exist
++LINE 1: DELETE FROM rw_view2 WHERE a IN (-7, 7);
++                                   ^
+ DELETE FROM ONLY rw_view2 WHERE a IN (-8, 8); -- Should delete -8 only
++ERROR:  column "a" does not exist
++LINE 1: DELETE FROM ONLY rw_view2 WHERE a IN (-8, 8);
++                                        ^
+ SELECT * FROM ONLY base_tbl_parent ORDER BY a;
+-  a   
+-------
+- -200
+- -100
+-  -40
+-  -30
+-  -20
+-  -10
+-  100
+-  200
++ a  
++----
++ -8
++ -7
++ -6
++ -5
++ -4
++ -3
++ -2
++ -1
+ (8 rows)
+ 
+ SELECT * FROM base_tbl_child ORDER BY a;
+- a  
+-----
+-  3
+-  4
+-  7
+-  8
+- 10
+- 20
+-(6 rows)
++ a 
++---
++ 1
++ 2
++ 3
++ 4
++ 5
++ 6
++ 7
++ 8
++(8 rows)
+ 
+ MERGE INTO rw_view1 t USING (VALUES (-200), (10)) AS v(a) ON t.a = v.a
+   WHEN MATCHED THEN UPDATE SET a = t.a+1; -- Should produce -199 and 11
++ERROR:  column t.a does not exist
++LINE 1: ... rw_view1 t USING (VALUES (-200), (10)) AS v(a) ON t.a = v.a
++                                                              ^
++HINT:  Perhaps you meant to reference the column "v.a".
+ MERGE INTO ONLY rw_view1 t USING (VALUES (-100), (20)) AS v(a) ON t.a = v.a
+   WHEN MATCHED THEN UPDATE SET a = t.a+1; -- Should produce -99 and 21
++ERROR:  column t.a does not exist
++LINE 1: ... rw_view1 t USING (VALUES (-100), (20)) AS v(a) ON t.a = v.a
++                                                              ^
++HINT:  Perhaps you meant to reference the column "v.a".
+ MERGE INTO rw_view2 t USING (VALUES (-40), (3)) AS v(a) ON t.a = v.a
+   WHEN MATCHED THEN UPDATE SET a = t.a+1; -- Should produce -39 only
++ERROR:  column t.a does not exist
++LINE 1: ...TO rw_view2 t USING (VALUES (-40), (3)) AS v(a) ON t.a = v.a
++                                                              ^
++HINT:  Perhaps you meant to reference the column "v.a".
+ MERGE INTO ONLY rw_view2 t USING (VALUES (-30), (4)) AS v(a) ON t.a = v.a
+   WHEN MATCHED THEN UPDATE SET a = t.a+1; -- Should produce -29 only
++ERROR:  column t.a does not exist
++LINE 1: ...LY rw_view2 t USING (VALUES (-30), (4)) AS v(a) ON t.a = v.a
++                                                              ^
++HINT:  Perhaps you meant to reference the column "v.a".
+ SELECT * FROM ONLY base_tbl_parent ORDER BY a;
+-  a   
+-------
+- -199
+-  -99
+-  -39
+-  -29
+-  -20
+-  -10
+-  100
+-  200
++ a  
++----
++ -8
++ -7
++ -6
++ -5
++ -4
++ -3
++ -2
++ -1
+ (8 rows)
+ 
+ SELECT * FROM base_tbl_child ORDER BY a;
+- a  
+-----
+-  3
+-  4
+-  7
+-  8
+- 11
+- 21
+-(6 rows)
++ a 
++---
++ 1
++ 2
++ 3
++ 4
++ 5
++ 6
++ 7
++ 8
++(8 rows)
+ 
+ CREATE TABLE other_tbl_parent (id int);
+ CREATE TABLE other_tbl_child () INHERITS (other_tbl_parent);
+@@ -2435,344 +2856,340 @@
+ INSERT INTO other_tbl_child VALUES (8),(100);
+ EXPLAIN (costs off)
+ UPDATE rw_view1 SET a = a + 1000 FROM other_tbl_parent WHERE a = id;
+-                               QUERY PLAN                                
+--------------------------------------------------------------------------
+- Update on base_tbl_parent
+-   Update on base_tbl_parent base_tbl_parent_1
+-   Update on base_tbl_child base_tbl_parent_2
+-   ->  Merge Join
+-         Merge Cond: (base_tbl_parent.a = other_tbl_parent.id)
+-         ->  Sort
+-               Sort Key: base_tbl_parent.a
+-               ->  Append
+-                     ->  Seq Scan on base_tbl_parent base_tbl_parent_1
+-                     ->  Seq Scan on base_tbl_child base_tbl_parent_2
+-         ->  Sort
+-               Sort Key: other_tbl_parent.id
+-               ->  Append
+-                     ->  Seq Scan on other_tbl_parent other_tbl_parent_1
+-                     ->  Seq Scan on other_tbl_child other_tbl_parent_2
+-(15 rows)
+-
++ERROR:  column "a" does not exist
++LINE 2: ...w_view1 SET a = a + 1000 FROM other_tbl_parent WHERE a = id;
++                                                                ^
+ UPDATE rw_view1 SET a = a + 1000 FROM other_tbl_parent WHERE a = id;
++ERROR:  column "a" does not exist
++LINE 1: ...w_view1 SET a = a + 1000 FROM other_tbl_parent WHERE a = id;
++                                                                ^
+ SELECT * FROM ONLY base_tbl_parent ORDER BY a;
+-  a   
+-------
+- -199
+-  -99
+-  -39
+-  -29
+-  -20
+-  -10
+- 1100
+- 1200
++ a  
++----
++ -8
++ -7
++ -6
++ -5
++ -4
++ -3
++ -2
++ -1
+ (8 rows)
+ 
+ SELECT * FROM base_tbl_child ORDER BY a;
+-  a   
+-------
+-    3
+-    4
+-   11
+-   21
+- 1007
+- 1008
+-(6 rows)
++ a 
++---
++ 1
++ 2
++ 3
++ 4
++ 5
++ 6
++ 7
++ 8
++(8 rows)
+ 
+ DROP TABLE base_tbl_parent, base_tbl_child CASCADE;
+-NOTICE:  drop cascades to 2 other objects
+-DETAIL:  drop cascades to view rw_view1
+-drop cascades to view rw_view2
+ DROP TABLE other_tbl_parent CASCADE;
+ NOTICE:  drop cascades to table other_tbl_child
+ -- simple WITH CHECK OPTION
+ CREATE TABLE base_tbl (a int, b int DEFAULT 10);
++ERROR:  relation "base_tbl" already exists
+ INSERT INTO base_tbl VALUES (1,2), (2,3), (1,-1);
++ERROR:  permission denied for table base_tbl
+ CREATE VIEW rw_view1 AS SELECT * FROM base_tbl WHERE a < b
+   WITH LOCAL CHECK OPTION;
++ERROR:  operator does not exist: integer < text
++LINE 1: CREATE VIEW rw_view1 AS SELECT * FROM base_tbl WHERE a < b
++                                                               ^
++HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+ \d+ rw_view1
+-                          View "public.rw_view1"
+- Column |  Type   | Collation | Nullable | Default | Storage | Description 
+---------+---------+-----------+----------+---------+---------+-------------
+- a      | integer |           |          |         | plain   | 
+- b      | integer |           |          |         | plain   | 
++                               View "public.rw_view1"
++ Column |       Type       | Collation | Nullable | Default | Storage  | Description 
++--------+------------------+-----------+----------+---------+----------+-------------
++ bb     | text             |           |          |         | extended | 
++ cc     | double precision |           |          |         | plain    | 
++ aa     | integer          |           |          |         | plain    | 
+ View definition:
+- SELECT a,
+-    b
+-   FROM base_tbl
+-  WHERE a < b;
+-Options: check_option=local
++ SELECT b AS bb,
++    c AS cc,
++    a AS aa
++   FROM base_tbl;
++Options: security_invoker=true
+ 
+ SELECT * FROM information_schema.views WHERE table_name = 'rw_view1';
+- table_catalog | table_schema | table_name | view_definition  | check_option | is_updatable | is_insertable_into | is_trigger_updatable | is_trigger_deletable | is_trigger_insertable_into 
+----------------+--------------+------------+------------------+--------------+--------------+--------------------+----------------------+----------------------+----------------------------
+- regression    | public       | rw_view1   |  SELECT a,      +| LOCAL        | YES          | YES                | NO                   | NO                   | NO
+-               |              |            |     b           +|              |              |                    |                      |                      | 
+-               |              |            |    FROM base_tbl+|              |              |                    |                      |                      | 
+-               |              |            |   WHERE (a < b); |              |              |                    |                      |                      | 
+-(1 row)
++ table_catalog | table_schema | table_name | view_definition | check_option | is_updatable | is_insertable_into | is_trigger_updatable | is_trigger_deletable | is_trigger_insertable_into 
++---------------+--------------+------------+-----------------+--------------+--------------+--------------------+----------------------+----------------------+----------------------------
++(0 rows)
+ 
+ INSERT INTO rw_view1 VALUES(3,4); -- ok
++ERROR:  permission denied for view rw_view1
+ INSERT INTO rw_view1 VALUES(4,3); -- should fail
+-ERROR:  new row violates check option for view "rw_view1"
+-DETAIL:  Failing row contains (4, 3).
++ERROR:  permission denied for view rw_view1
+ INSERT INTO rw_view1 VALUES(5,null); -- should fail
+-ERROR:  new row violates check option for view "rw_view1"
+-DETAIL:  Failing row contains (5, null).
++ERROR:  permission denied for view rw_view1
+ UPDATE rw_view1 SET b = 5 WHERE a = 3; -- ok
++ERROR:  column "a" does not exist
++LINE 1: UPDATE rw_view1 SET b = 5 WHERE a = 3;
++                                        ^
+ UPDATE rw_view1 SET b = -5 WHERE a = 3; -- should fail
+-ERROR:  new row violates check option for view "rw_view1"
+-DETAIL:  Failing row contains (3, -5).
++ERROR:  column "a" does not exist
++LINE 1: UPDATE rw_view1 SET b = -5 WHERE a = 3;
++                                         ^
+ INSERT INTO rw_view1(a) VALUES (9); -- ok
++ERROR:  column "a" of relation "rw_view1" does not exist
++LINE 1: INSERT INTO rw_view1(a) VALUES (9);
++                             ^
+ INSERT INTO rw_view1(a) VALUES (10); -- should fail
+-ERROR:  new row violates check option for view "rw_view1"
+-DETAIL:  Failing row contains (10, 10).
++ERROR:  column "a" of relation "rw_view1" does not exist
++LINE 1: INSERT INTO rw_view1(a) VALUES (10);
++                             ^
+ SELECT * FROM base_tbl ORDER BY a, b;
+- a | b  
+----+----
+- 1 | -1
+- 1 |  2
+- 2 |  3
+- 3 |  5
+- 9 | 10
+-(5 rows)
+-
++ERROR:  permission denied for table base_tbl
+ MERGE INTO rw_view1 t USING (VALUES (10)) AS v(a) ON t.a = v.a
+   WHEN NOT MATCHED THEN INSERT VALUES (v.a, v.a + 1); -- ok
++ERROR:  column t.a does not exist
++LINE 1: ...RGE INTO rw_view1 t USING (VALUES (10)) AS v(a) ON t.a = v.a
++                                                              ^
++HINT:  Perhaps you meant to reference the column "v.a".
+ MERGE INTO rw_view1 t USING (VALUES (11)) AS v(a) ON t.a = v.a
+   WHEN NOT MATCHED THEN INSERT VALUES (v.a, v.a - 1); -- should fail
+-ERROR:  new row violates check option for view "rw_view1"
+-DETAIL:  Failing row contains (11, 10).
++ERROR:  column t.a does not exist
++LINE 1: ...RGE INTO rw_view1 t USING (VALUES (11)) AS v(a) ON t.a = v.a
++                                                              ^
++HINT:  Perhaps you meant to reference the column "v.a".
+ MERGE INTO rw_view1 t USING (VALUES (1)) AS v(a) ON t.a = v.a
+   WHEN MATCHED THEN UPDATE SET a = t.a - 1; -- ok
++ERROR:  column t.a does not exist
++LINE 1: ...ERGE INTO rw_view1 t USING (VALUES (1)) AS v(a) ON t.a = v.a
++                                                              ^
++HINT:  Perhaps you meant to reference the column "v.a".
+ MERGE INTO rw_view1 t USING (VALUES (2)) AS v(a) ON t.a = v.a
+   WHEN MATCHED THEN UPDATE SET a = t.a + 1; -- should fail
+-ERROR:  new row violates check option for view "rw_view1"
+-DETAIL:  Failing row contains (3, 3).
++ERROR:  column t.a does not exist
++LINE 1: ...ERGE INTO rw_view1 t USING (VALUES (2)) AS v(a) ON t.a = v.a
++                                                              ^
++HINT:  Perhaps you meant to reference the column "v.a".
+ SELECT * FROM base_tbl ORDER BY a, b;
+- a  | b  
+-----+----
+-  0 |  2
+-  1 | -1
+-  2 |  3
+-  3 |  5
+-  9 | 10
+- 10 | 11
+-(6 rows)
+-
++ERROR:  permission denied for table base_tbl
+ DROP TABLE base_tbl CASCADE;
+-NOTICE:  drop cascades to view rw_view1
++ERROR:  must be owner of table base_tbl
+ -- WITH LOCAL/CASCADED CHECK OPTION
+ CREATE TABLE base_tbl (a int);
++ERROR:  relation "base_tbl" already exists
+ CREATE VIEW rw_view1 AS SELECT * FROM base_tbl WHERE a > 0;
++ERROR:  relation "rw_view1" already exists
+ CREATE VIEW rw_view2 AS SELECT * FROM rw_view1 WHERE a < 10
+   WITH CHECK OPTION; -- implicitly cascaded
++ERROR:  column "a" does not exist
++LINE 1: CREATE VIEW rw_view2 AS SELECT * FROM rw_view1 WHERE a < 10
++                                                             ^
+ \d+ rw_view2
+-                          View "public.rw_view2"
+- Column |  Type   | Collation | Nullable | Default | Storage | Description 
+---------+---------+-----------+----------+---------+---------+-------------
+- a      | integer |           |          |         | plain   | 
++                               View "public.rw_view2"
++ Column |       Type       | Collation | Nullable | Default | Storage  | Description 
++--------+------------------+-----------+----------+---------+----------+-------------
++ bb     | text             |           |          |         | extended | 
++ cc     | double precision |           |          |         | plain    | 
++ aa     | integer          |           |          |         | plain    | 
+ View definition:
+- SELECT a
+-   FROM rw_view1
+-  WHERE a < 10;
+-Options: check_option=cascaded
++ SELECT b AS bb,
++    c AS cc,
++    a AS aa
++   FROM base_tbl;
+ 
+ SELECT * FROM information_schema.views WHERE table_name = 'rw_view2';
+- table_catalog | table_schema | table_name |  view_definition  | check_option | is_updatable | is_insertable_into | is_trigger_updatable | is_trigger_deletable | is_trigger_insertable_into 
+----------------+--------------+------------+-------------------+--------------+--------------+--------------------+----------------------+----------------------+----------------------------
+- regression    | public       | rw_view2   |  SELECT a        +| CASCADED     | YES          | YES                | NO                   | NO                   | NO
+-               |              |            |    FROM rw_view1 +|              |              |                    |                      |                      | 
+-               |              |            |   WHERE (a < 10); |              |              |                    |                      |                      | 
++ table_catalog | table_schema | table_name | view_definition | check_option | is_updatable | is_insertable_into | is_trigger_updatable | is_trigger_deletable | is_trigger_insertable_into 
++---------------+--------------+------------+-----------------+--------------+--------------+--------------------+----------------------+----------------------+----------------------------
++ regression    | public       | rw_view2   |                 | NONE         | YES          | YES                | NO                   | NO                   | NO
+ (1 row)
+ 
+ INSERT INTO rw_view2 VALUES (-5); -- should fail
+-ERROR:  new row violates check option for view "rw_view1"
+-DETAIL:  Failing row contains (-5).
++ERROR:  permission denied for view rw_view2
+ INSERT INTO rw_view2 VALUES (5); -- ok
++ERROR:  permission denied for view rw_view2
+ INSERT INTO rw_view2 VALUES (15); -- should fail
+-ERROR:  new row violates check option for view "rw_view2"
+-DETAIL:  Failing row contains (15).
++ERROR:  permission denied for view rw_view2
+ SELECT * FROM base_tbl;
+- a 
+----
+- 5
+-(1 row)
+-
++ERROR:  permission denied for table base_tbl
+ UPDATE rw_view2 SET a = a - 10; -- should fail
+-ERROR:  new row violates check option for view "rw_view1"
+-DETAIL:  Failing row contains (-5).
++ERROR:  column "a" does not exist
++LINE 1: UPDATE rw_view2 SET a = a - 10;
++                                ^
+ UPDATE rw_view2 SET a = a + 10; -- should fail
+-ERROR:  new row violates check option for view "rw_view2"
+-DETAIL:  Failing row contains (15).
++ERROR:  column "a" does not exist
++LINE 1: UPDATE rw_view2 SET a = a + 10;
++                                ^
+ CREATE OR REPLACE VIEW rw_view2 AS SELECT * FROM rw_view1 WHERE a < 10
+   WITH LOCAL CHECK OPTION;
++ERROR:  column "a" does not exist
++LINE 1: ...REPLACE VIEW rw_view2 AS SELECT * FROM rw_view1 WHERE a < 10
++                                                                 ^
+ \d+ rw_view2
+-                          View "public.rw_view2"
+- Column |  Type   | Collation | Nullable | Default | Storage | Description 
+---------+---------+-----------+----------+---------+---------+-------------
+- a      | integer |           |          |         | plain   | 
++                               View "public.rw_view2"
++ Column |       Type       | Collation | Nullable | Default | Storage  | Description 
++--------+------------------+-----------+----------+---------+----------+-------------
++ bb     | text             |           |          |         | extended | 
++ cc     | double precision |           |          |         | plain    | 
++ aa     | integer          |           |          |         | plain    | 
+ View definition:
+- SELECT a
+-   FROM rw_view1
+-  WHERE a < 10;
+-Options: check_option=local
++ SELECT b AS bb,
++    c AS cc,
++    a AS aa
++   FROM base_tbl;
+ 
+ SELECT * FROM information_schema.views WHERE table_name = 'rw_view2';
+- table_catalog | table_schema | table_name |  view_definition  | check_option | is_updatable | is_insertable_into | is_trigger_updatable | is_trigger_deletable | is_trigger_insertable_into 
+----------------+--------------+------------+-------------------+--------------+--------------+--------------------+----------------------+----------------------+----------------------------
+- regression    | public       | rw_view2   |  SELECT a        +| LOCAL        | YES          | YES                | NO                   | NO                   | NO
+-               |              |            |    FROM rw_view1 +|              |              |                    |                      |                      | 
+-               |              |            |   WHERE (a < 10); |              |              |                    |                      |                      | 
++ table_catalog | table_schema | table_name | view_definition | check_option | is_updatable | is_insertable_into | is_trigger_updatable | is_trigger_deletable | is_trigger_insertable_into 
++---------------+--------------+------------+-----------------+--------------+--------------+--------------------+----------------------+----------------------+----------------------------
++ regression    | public       | rw_view2   |                 | NONE         | YES          | YES                | NO                   | NO                   | NO
+ (1 row)
+ 
+ INSERT INTO rw_view2 VALUES (-10); -- ok, but not in view
++ERROR:  permission denied for view rw_view2
+ INSERT INTO rw_view2 VALUES (20); -- should fail
+-ERROR:  new row violates check option for view "rw_view2"
+-DETAIL:  Failing row contains (20).
++ERROR:  permission denied for view rw_view2
+ SELECT * FROM base_tbl;
+-  a  
+------
+-   5
+- -10
+-(2 rows)
+-
++ERROR:  permission denied for table base_tbl
+ ALTER VIEW rw_view1 SET (check_option=here); -- invalid
+-ERROR:  invalid value for enum option "check_option": here
+-DETAIL:  Valid values are "local" and "cascaded".
++ERROR:  must be owner of view rw_view1
+ ALTER VIEW rw_view1 SET (check_option=local);
++ERROR:  must be owner of view rw_view1
+ INSERT INTO rw_view2 VALUES (-20); -- should fail
+-ERROR:  new row violates check option for view "rw_view1"
+-DETAIL:  Failing row contains (-20).
++ERROR:  permission denied for view rw_view2
+ INSERT INTO rw_view2 VALUES (30); -- should fail
+-ERROR:  new row violates check option for view "rw_view2"
+-DETAIL:  Failing row contains (30).
++ERROR:  permission denied for view rw_view2
+ ALTER VIEW rw_view2 RESET (check_option);
++ERROR:  must be owner of view rw_view2
+ \d+ rw_view2
+-                          View "public.rw_view2"
+- Column |  Type   | Collation | Nullable | Default | Storage | Description 
+---------+---------+-----------+----------+---------+---------+-------------
+- a      | integer |           |          |         | plain   | 
++                               View "public.rw_view2"
++ Column |       Type       | Collation | Nullable | Default | Storage  | Description 
++--------+------------------+-----------+----------+---------+----------+-------------
++ bb     | text             |           |          |         | extended | 
++ cc     | double precision |           |          |         | plain    | 
++ aa     | integer          |           |          |         | plain    | 
+ View definition:
+- SELECT a
+-   FROM rw_view1
+-  WHERE a < 10;
++ SELECT b AS bb,
++    c AS cc,
++    a AS aa
++   FROM base_tbl;
+ 
+ SELECT * FROM information_schema.views WHERE table_name = 'rw_view2';
+- table_catalog | table_schema | table_name |  view_definition  | check_option | is_updatable | is_insertable_into | is_trigger_updatable | is_trigger_deletable | is_trigger_insertable_into 
+----------------+--------------+------------+-------------------+--------------+--------------+--------------------+----------------------+----------------------+----------------------------
+- regression    | public       | rw_view2   |  SELECT a        +| NONE         | YES          | YES                | NO                   | NO                   | NO
+-               |              |            |    FROM rw_view1 +|              |              |                    |                      |                      | 
+-               |              |            |   WHERE (a < 10); |              |              |                    |                      |                      | 
++ table_catalog | table_schema | table_name | view_definition | check_option | is_updatable | is_insertable_into | is_trigger_updatable | is_trigger_deletable | is_trigger_insertable_into 
++---------------+--------------+------------+-----------------+--------------+--------------+--------------------+----------------------+----------------------+----------------------------
++ regression    | public       | rw_view2   |                 | NONE         | YES          | YES                | NO                   | NO                   | NO
+ (1 row)
+ 
+ INSERT INTO rw_view2 VALUES (30); -- ok, but not in view
++ERROR:  permission denied for view rw_view2
+ SELECT * FROM base_tbl;
+-  a  
+------
+-   5
+- -10
+-  30
+-(3 rows)
+-
++ERROR:  permission denied for table base_tbl
+ DROP TABLE base_tbl CASCADE;
+-NOTICE:  drop cascades to 2 other objects
+-DETAIL:  drop cascades to view rw_view1
+-drop cascades to view rw_view2
++ERROR:  must be owner of table base_tbl
+ -- WITH CHECK OPTION with no local view qual
+ CREATE TABLE base_tbl (a int);
++ERROR:  relation "base_tbl" already exists
+ CREATE VIEW rw_view1 AS SELECT * FROM base_tbl WITH CHECK OPTION;
++ERROR:  relation "rw_view1" already exists
+ CREATE VIEW rw_view2 AS SELECT * FROM rw_view1 WHERE a > 0;
++ERROR:  column "a" does not exist
++LINE 1: CREATE VIEW rw_view2 AS SELECT * FROM rw_view1 WHERE a > 0;
++                                                             ^
+ CREATE VIEW rw_view3 AS SELECT * FROM rw_view2 WITH CHECK OPTION;
+ SELECT * FROM information_schema.views WHERE table_name LIKE E'rw\\_view_' ORDER BY table_name;
+  table_catalog | table_schema | table_name |  view_definition  | check_option | is_updatable | is_insertable_into | is_trigger_updatable | is_trigger_deletable | is_trigger_insertable_into 
+ ---------------+--------------+------------+-------------------+--------------+--------------+--------------------+----------------------+----------------------+----------------------------
+- regression    | public       | rw_view1   |  SELECT a        +| CASCADED     | YES          | YES                | NO                   | NO                   | NO
+-               |              |            |    FROM base_tbl; |              |              |                    |                      |                      | 
+- regression    | public       | rw_view2   |  SELECT a        +| NONE         | YES          | YES                | NO                   | NO                   | NO
+-               |              |            |    FROM rw_view1 +|              |              |                    |                      |                      | 
+-               |              |            |   WHERE (a > 0);  |              |              |                    |                      |                      | 
+- regression    | public       | rw_view3   |  SELECT a        +| CASCADED     | YES          | YES                | NO                   | NO                   | NO
++ regression    | public       | rw_view2   |                   | NONE         | YES          | YES                | NO                   | NO                   | NO
++ regression    | public       | rw_view3   |  SELECT bb,      +| CASCADED     | YES          | YES                | NO                   | NO                   | NO
++               |              |            |     cc,          +|              |              |                    |                      |                      | 
++               |              |            |     aa           +|              |              |                    |                      |                      | 
+                |              |            |    FROM rw_view2; |              |              |                    |                      |                      | 
+-(3 rows)
++(2 rows)
+ 
+ INSERT INTO rw_view1 VALUES (-1); -- ok
++ERROR:  permission denied for view rw_view1
+ INSERT INTO rw_view1 VALUES (1); -- ok
++ERROR:  permission denied for view rw_view1
+ INSERT INTO rw_view2 VALUES (-2); -- ok, but not in view
++ERROR:  permission denied for view rw_view2
+ INSERT INTO rw_view2 VALUES (2); -- ok
++ERROR:  permission denied for view rw_view2
+ INSERT INTO rw_view3 VALUES (-3); -- should fail
+-ERROR:  new row violates check option for view "rw_view2"
+-DETAIL:  Failing row contains (-3).
++ERROR:  permission denied for view rw_view2
+ INSERT INTO rw_view3 VALUES (3); -- ok
++ERROR:  permission denied for view rw_view2
+ DROP TABLE base_tbl CASCADE;
+-NOTICE:  drop cascades to 3 other objects
+-DETAIL:  drop cascades to view rw_view1
+-drop cascades to view rw_view2
+-drop cascades to view rw_view3
++ERROR:  must be owner of table base_tbl
+ -- WITH CHECK OPTION with scalar array ops
+ CREATE TABLE base_tbl (a int, b int[]);
++ERROR:  relation "base_tbl" already exists
+ CREATE VIEW rw_view1 AS SELECT * FROM base_tbl WHERE a = ANY (b)
+   WITH CHECK OPTION;
++ERROR:  op ANY/ALL (array) requires array on right side
++LINE 1: ...TE VIEW rw_view1 AS SELECT * FROM base_tbl WHERE a = ANY (b)
++                                                              ^
+ INSERT INTO rw_view1 VALUES (1, ARRAY[1,2,3]); -- ok
++ERROR:  column "cc" is of type double precision but expression is of type integer[]
++LINE 1: INSERT INTO rw_view1 VALUES (1, ARRAY[1,2,3]);
++                                        ^
++HINT:  You will need to rewrite or cast the expression.
+ INSERT INTO rw_view1 VALUES (10, ARRAY[4,5]); -- should fail
+-ERROR:  new row violates check option for view "rw_view1"
+-DETAIL:  Failing row contains (10, {4,5}).
++ERROR:  column "cc" is of type double precision but expression is of type integer[]
++LINE 1: INSERT INTO rw_view1 VALUES (10, ARRAY[4,5]);
++                                         ^
++HINT:  You will need to rewrite or cast the expression.
+ UPDATE rw_view1 SET b[2] = -b[2] WHERE a = 1; -- ok
++ERROR:  column "a" does not exist
++LINE 1: UPDATE rw_view1 SET b[2] = -b[2] WHERE a = 1;
++                                               ^
+ UPDATE rw_view1 SET b[1] = -b[1] WHERE a = 1; -- should fail
+-ERROR:  new row violates check option for view "rw_view1"
+-DETAIL:  Failing row contains (1, {-1,-2,3}).
++ERROR:  column "a" does not exist
++LINE 1: UPDATE rw_view1 SET b[1] = -b[1] WHERE a = 1;
++                                               ^
+ PREPARE ins(int, int[]) AS INSERT INTO rw_view1 VALUES($1, $2);
++ERROR:  column "cc" is of type double precision but expression is of type integer[]
++LINE 1: ...PARE ins(int, int[]) AS INSERT INTO rw_view1 VALUES($1, $2);
++                                                                   ^
++HINT:  You will need to rewrite or cast the expression.
+ EXECUTE ins(2, ARRAY[1,2,3]); -- ok
++ERROR:  prepared statement "ins" does not exist
+ EXECUTE ins(10, ARRAY[4,5]); -- should fail
+-ERROR:  new row violates check option for view "rw_view1"
+-DETAIL:  Failing row contains (10, {4,5}).
++ERROR:  prepared statement "ins" does not exist
+ DEALLOCATE PREPARE ins;
++ERROR:  prepared statement "ins" does not exist
+ DROP TABLE base_tbl CASCADE;
+-NOTICE:  drop cascades to view rw_view1
++ERROR:  must be owner of table base_tbl
+ -- WITH CHECK OPTION with subquery
+ CREATE TABLE base_tbl (a int);
++ERROR:  relation "base_tbl" already exists
+ CREATE TABLE ref_tbl (a int PRIMARY KEY);
+ INSERT INTO ref_tbl SELECT * FROM generate_series(1,10);
+ CREATE VIEW rw_view1 AS
+   SELECT * FROM base_tbl b
+   WHERE EXISTS(SELECT 1 FROM ref_tbl r WHERE r.a = b.a)
+   WITH CHECK OPTION;
++ERROR:  relation "rw_view1" already exists
+ INSERT INTO rw_view1 VALUES (5); -- ok
++ERROR:  permission denied for view rw_view1
+ INSERT INTO rw_view1 VALUES (15); -- should fail
+-ERROR:  new row violates check option for view "rw_view1"
+-DETAIL:  Failing row contains (15).
++ERROR:  permission denied for view rw_view1
+ UPDATE rw_view1 SET a = a + 5; -- ok
++ERROR:  column "a" does not exist
++LINE 1: UPDATE rw_view1 SET a = a + 5;
++                                ^
+ UPDATE rw_view1 SET a = a + 5; -- should fail
+-ERROR:  new row violates check option for view "rw_view1"
+-DETAIL:  Failing row contains (15).
++ERROR:  column "a" does not exist
++LINE 1: UPDATE rw_view1 SET a = a + 5;
++                                ^
+ EXPLAIN (costs off) INSERT INTO rw_view1 VALUES (5);
+-                       QUERY PLAN                        
+----------------------------------------------------------
+- Insert on base_tbl b
+-   ->  Result
+-   SubPlan 1
+-     ->  Index Only Scan using ref_tbl_pkey on ref_tbl r
+-           Index Cond: (a = b.a)
+-(5 rows)
+-
++ERROR:  permission denied for view rw_view1
+ EXPLAIN (costs off) UPDATE rw_view1 SET a = a + 5;
+-                        QUERY PLAN                         
+------------------------------------------------------------
+- Update on base_tbl b
+-   ->  Hash Join
+-         Hash Cond: (b.a = r.a)
+-         ->  Seq Scan on base_tbl b
+-         ->  Hash
+-               ->  Seq Scan on ref_tbl r
+-   SubPlan 1
+-     ->  Index Only Scan using ref_tbl_pkey on ref_tbl r_1
+-           Index Cond: (a = b.a)
+-(9 rows)
+-
++ERROR:  column "a" does not exist
++LINE 1: EXPLAIN (costs off) UPDATE rw_view1 SET a = a + 5;
++                                                    ^
+ DROP TABLE base_tbl, ref_tbl CASCADE;
+-NOTICE:  drop cascades to view rw_view1
++ERROR:  must be owner of table base_tbl
+ -- WITH CHECK OPTION with BEFORE trigger on base table
+ CREATE TABLE base_tbl (a int, b int);
++ERROR:  relation "base_tbl" already exists
+ CREATE FUNCTION base_tbl_trig_fn()
+ RETURNS trigger AS
+ $$
+@@ -2784,20 +3201,31 @@
+ LANGUAGE plpgsql;
+ CREATE TRIGGER base_tbl_trig BEFORE INSERT OR UPDATE ON base_tbl
+   FOR EACH ROW EXECUTE PROCEDURE base_tbl_trig_fn();
++ERROR:  permission denied for table base_tbl
+ CREATE VIEW rw_view1 AS SELECT * FROM base_tbl WHERE a < b WITH CHECK OPTION;
++ERROR:  operator does not exist: integer < text
++LINE 1: ...E VIEW rw_view1 AS SELECT * FROM base_tbl WHERE a < b WITH C...
++                                                             ^
++HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+ INSERT INTO rw_view1 VALUES (5,0); -- ok
++ERROR:  permission denied for view rw_view1
+ INSERT INTO rw_view1 VALUES (15, 20); -- should fail
+-ERROR:  new row violates check option for view "rw_view1"
+-DETAIL:  Failing row contains (15, 10).
++ERROR:  permission denied for view rw_view1
+ UPDATE rw_view1 SET a = 20, b = 30; -- should fail
+-ERROR:  new row violates check option for view "rw_view1"
+-DETAIL:  Failing row contains (20, 10).
++ERROR:  column "a" of relation "rw_view1" does not exist
++LINE 1: UPDATE rw_view1 SET a = 20, b = 30;
++                            ^
+ DROP TABLE base_tbl CASCADE;
+-NOTICE:  drop cascades to view rw_view1
++ERROR:  must be owner of table base_tbl
+ DROP FUNCTION base_tbl_trig_fn();
+ -- WITH LOCAL CHECK OPTION with INSTEAD OF trigger on base view
+ CREATE TABLE base_tbl (a int, b int);
++ERROR:  relation "base_tbl" already exists
+ CREATE VIEW rw_view1 AS SELECT a FROM base_tbl WHERE a < b;
++ERROR:  operator does not exist: integer < text
++LINE 1: CREATE VIEW rw_view1 AS SELECT a FROM base_tbl WHERE a < b;
++                                                               ^
++HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+ CREATE FUNCTION rw_view1_trig_fn()
+ RETURNS trigger AS
+ $$
+@@ -2818,100 +3246,125 @@
+ CREATE TRIGGER rw_view1_trig
+   INSTEAD OF INSERT OR UPDATE OR DELETE ON rw_view1
+   FOR EACH ROW EXECUTE PROCEDURE rw_view1_trig_fn();
++ERROR:  permission denied for view rw_view1
+ CREATE VIEW rw_view2 AS
+   SELECT * FROM rw_view1 WHERE a > 0 WITH LOCAL CHECK OPTION;
++ERROR:  column "a" does not exist
++LINE 2:   SELECT * FROM rw_view1 WHERE a > 0 WITH LOCAL CHECK OPTION...
++                                       ^
+ INSERT INTO rw_view2 VALUES (-5); -- should fail
+-ERROR:  new row violates check option for view "rw_view2"
+-DETAIL:  Failing row contains (-5).
++ERROR:  permission denied for view rw_view2
+ MERGE INTO rw_view2 t USING (VALUES (-5)) AS v(a) ON t.a = v.a
+   WHEN NOT MATCHED THEN INSERT VALUES (v.a); -- should fail
+-ERROR:  new row violates check option for view "rw_view2"
+-DETAIL:  Failing row contains (-5).
++ERROR:  column t.a does not exist
++LINE 1: ...RGE INTO rw_view2 t USING (VALUES (-5)) AS v(a) ON t.a = v.a
++                                                              ^
++HINT:  Perhaps you meant to reference the column "v.a".
+ INSERT INTO rw_view2 VALUES (5); -- ok
++ERROR:  permission denied for view rw_view2
+ MERGE INTO rw_view2 t USING (VALUES (6)) AS v(a) ON t.a = v.a
+   WHEN NOT MATCHED THEN INSERT VALUES (v.a); -- ok
++ERROR:  column t.a does not exist
++LINE 1: ...ERGE INTO rw_view2 t USING (VALUES (6)) AS v(a) ON t.a = v.a
++                                                              ^
++HINT:  Perhaps you meant to reference the column "v.a".
+ INSERT INTO rw_view2 VALUES (50); -- ok, but not in view
++ERROR:  permission denied for view rw_view2
+ MERGE INTO rw_view2 t USING (VALUES (60)) AS v(a) ON t.a = v.a
+   WHEN NOT MATCHED THEN INSERT VALUES (v.a); -- ok, but not in view
++ERROR:  column t.a does not exist
++LINE 1: ...RGE INTO rw_view2 t USING (VALUES (60)) AS v(a) ON t.a = v.a
++                                                              ^
++HINT:  Perhaps you meant to reference the column "v.a".
+ UPDATE rw_view2 SET a = a - 10; -- should fail
+-ERROR:  new row violates check option for view "rw_view2"
+-DETAIL:  Failing row contains (-5).
++ERROR:  column "a" does not exist
++LINE 1: UPDATE rw_view2 SET a = a - 10;
++                                ^
+ MERGE INTO rw_view2 t USING (VALUES (6)) AS v(a) ON t.a = v.a
+   WHEN MATCHED THEN UPDATE SET a = t.a - 10; -- should fail
+-ERROR:  new row violates check option for view "rw_view2"
+-DETAIL:  Failing row contains (-4).
++ERROR:  column t.a does not exist
++LINE 1: ...ERGE INTO rw_view2 t USING (VALUES (6)) AS v(a) ON t.a = v.a
++                                                              ^
++HINT:  Perhaps you meant to reference the column "v.a".
+ SELECT * FROM base_tbl;
+- a  | b  
+-----+----
+-  5 | 10
+-  6 | 10
+- 50 | 10
+- 60 | 10
+-(4 rows)
+-
++ERROR:  permission denied for table base_tbl
+ -- Check option won't cascade down to base view with INSTEAD OF triggers
+ ALTER VIEW rw_view2 SET (check_option=cascaded);
++ERROR:  must be owner of view rw_view2
+ INSERT INTO rw_view2 VALUES (100); -- ok, but not in view (doesn't fail rw_view1's check)
++ERROR:  permission denied for view rw_view2
+ UPDATE rw_view2 SET a = 200 WHERE a = 5; -- ok, but not in view (doesn't fail rw_view1's check)
++ERROR:  column "a" does not exist
++LINE 1: UPDATE rw_view2 SET a = 200 WHERE a = 5;
++                                          ^
+ SELECT * FROM base_tbl;
+-  a  | b  
+------+----
+-   6 | 10
+-  50 | 10
+-  60 | 10
+- 100 | 10
+- 200 | 10
+-(5 rows)
+-
++ERROR:  permission denied for table base_tbl
+ -- Neither local nor cascaded check options work with INSTEAD rules
+ DROP TRIGGER rw_view1_trig ON rw_view1;
++ERROR:  trigger "rw_view1_trig" for table "rw_view1" does not exist
+ CREATE RULE rw_view1_ins_rule AS ON INSERT TO rw_view1
+   DO INSTEAD INSERT INTO base_tbl VALUES (NEW.a, 10);
++ERROR:  column new.a does not exist
++LINE 2:   DO INSTEAD INSERT INTO base_tbl VALUES (NEW.a, 10);
++                                                  ^
+ CREATE RULE rw_view1_upd_rule AS ON UPDATE TO rw_view1
+   DO INSTEAD UPDATE base_tbl SET a=NEW.a WHERE a=OLD.a;
++ERROR:  column old.a does not exist
++LINE 2:   DO INSTEAD UPDATE base_tbl SET a=NEW.a WHERE a=OLD.a;
++                                                         ^
+ INSERT INTO rw_view2 VALUES (-10); -- ok, but not in view (doesn't fail rw_view2's check)
++ERROR:  permission denied for view rw_view2
+ INSERT INTO rw_view2 VALUES (5); -- ok
++ERROR:  permission denied for view rw_view2
+ INSERT INTO rw_view2 VALUES (20); -- ok, but not in view (doesn't fail rw_view1's check)
++ERROR:  permission denied for view rw_view2
+ UPDATE rw_view2 SET a = 30 WHERE a = 5; -- ok, but not in view (doesn't fail rw_view1's check)
++ERROR:  column "a" does not exist
++LINE 1: UPDATE rw_view2 SET a = 30 WHERE a = 5;
++                                         ^
+ INSERT INTO rw_view2 VALUES (5); -- ok
++ERROR:  permission denied for view rw_view2
+ UPDATE rw_view2 SET a = -5 WHERE a = 5; -- ok, but not in view (doesn't fail rw_view2's check)
++ERROR:  column "a" does not exist
++LINE 1: UPDATE rw_view2 SET a = -5 WHERE a = 5;
++                                         ^
+ SELECT * FROM base_tbl;
+-  a  | b  
+------+----
+-   6 | 10
+-  50 | 10
+-  60 | 10
+- 100 | 10
+- 200 | 10
+- -10 | 10
+-  20 | 10
+-  30 | 10
+-  -5 | 10
+-(9 rows)
+-
++ERROR:  permission denied for table base_tbl
+ DROP TABLE base_tbl CASCADE;
+-NOTICE:  drop cascades to 2 other objects
+-DETAIL:  drop cascades to view rw_view1
+-drop cascades to view rw_view2
++ERROR:  must be owner of table base_tbl
+ DROP FUNCTION rw_view1_trig_fn();
+ CREATE TABLE base_tbl (a int);
++ERROR:  relation "base_tbl" already exists
+ CREATE VIEW rw_view1 AS SELECT a,10 AS b FROM base_tbl;
++ERROR:  relation "rw_view1" already exists
+ CREATE RULE rw_view1_ins_rule AS ON INSERT TO rw_view1
+   DO INSTEAD INSERT INTO base_tbl VALUES (NEW.a);
++ERROR:  column new.a does not exist
++LINE 2:   DO INSTEAD INSERT INTO base_tbl VALUES (NEW.a);
++                                                  ^
+ CREATE VIEW rw_view2 AS
+   SELECT * FROM rw_view1 WHERE a > b WITH LOCAL CHECK OPTION;
++ERROR:  column "a" does not exist
++LINE 2:   SELECT * FROM rw_view1 WHERE a > b WITH LOCAL CHECK OPTION...
++                                       ^
+ INSERT INTO rw_view2 VALUES (2,3); -- ok, but not in view (doesn't fail rw_view2's check)
++ERROR:  permission denied for view rw_view2
+ DROP TABLE base_tbl CASCADE;
+-NOTICE:  drop cascades to 2 other objects
+-DETAIL:  drop cascades to view rw_view1
+-drop cascades to view rw_view2
++ERROR:  must be owner of table base_tbl
+ -- security barrier view
+ CREATE TABLE base_tbl (person text, visibility text);
++ERROR:  relation "base_tbl" already exists
+ INSERT INTO base_tbl VALUES ('Tom', 'public'),
+                             ('Dick', 'private'),
+                             ('Harry', 'public');
++ERROR:  invalid input syntax for type integer: "Tom"
++LINE 1: INSERT INTO base_tbl VALUES ('Tom', 'public'),
++                                     ^
+ CREATE VIEW rw_view1 AS
+   SELECT person FROM base_tbl WHERE visibility = 'public';
++ERROR:  column "person" does not exist
++LINE 2:   SELECT person FROM base_tbl WHERE visibility = 'public';
++                 ^
+ CREATE FUNCTION snoop(anyelement)
+ RETURNS boolean AS
+ $$
+@@ -2929,40 +3382,34 @@
+ END;
+ $$
+ LANGUAGE plpgsql STRICT IMMUTABLE LEAKPROOF;
++ERROR:  only superuser can define a leakproof function
+ SELECT * FROM rw_view1 WHERE snoop(person);
+-NOTICE:  snooped value: Tom
+-NOTICE:  snooped value: Dick
+-NOTICE:  snooped value: Harry
+- person 
+---------
+- Tom
+- Harry
+-(2 rows)
+-
++ERROR:  column "person" does not exist
++LINE 1: SELECT * FROM rw_view1 WHERE snoop(person);
++                                           ^
+ UPDATE rw_view1 SET person=person WHERE snoop(person);
+-NOTICE:  snooped value: Tom
+-NOTICE:  snooped value: Dick
+-NOTICE:  snooped value: Harry
++ERROR:  column "person" does not exist
++LINE 1: UPDATE rw_view1 SET person=person WHERE snoop(person);
++                                                      ^
+ DELETE FROM rw_view1 WHERE NOT snoop(person);
+-NOTICE:  snooped value: Dick
+-NOTICE:  snooped value: Tom
+-NOTICE:  snooped value: Harry
++ERROR:  column "person" does not exist
++LINE 1: DELETE FROM rw_view1 WHERE NOT snoop(person);
++                                             ^
+ ALTER VIEW rw_view1 SET (security_barrier = true);
++ERROR:  must be owner of view rw_view1
+ SELECT table_name, is_insertable_into
+   FROM information_schema.tables
+  WHERE table_name = 'rw_view1';
+  table_name | is_insertable_into 
+ ------------+--------------------
+- rw_view1   | YES
+-(1 row)
++(0 rows)
+ 
+ SELECT table_name, is_updatable, is_insertable_into
+   FROM information_schema.views
+  WHERE table_name = 'rw_view1';
+  table_name | is_updatable | is_insertable_into 
+ ------------+--------------+--------------------
+- rw_view1   | YES          | YES
+-(1 row)
++(0 rows)
+ 
+ SELECT table_name, column_name, is_updatable
+   FROM information_schema.columns
+@@ -2970,72 +3417,53 @@
+  ORDER BY ordinal_position;
+  table_name | column_name | is_updatable 
+ ------------+-------------+--------------
+- rw_view1   | person      | YES
+-(1 row)
++(0 rows)
+ 
+ SELECT * FROM rw_view1 WHERE snoop(person);
+-NOTICE:  snooped value: Tom
+-NOTICE:  snooped value: Harry
+- person 
+---------
+- Tom
+- Harry
+-(2 rows)
+-
++ERROR:  column "person" does not exist
++LINE 1: SELECT * FROM rw_view1 WHERE snoop(person);
++                                           ^
+ UPDATE rw_view1 SET person=person WHERE snoop(person);
+-NOTICE:  snooped value: Tom
+-NOTICE:  snooped value: Harry
++ERROR:  column "person" does not exist
++LINE 1: UPDATE rw_view1 SET person=person WHERE snoop(person);
++                                                      ^
+ DELETE FROM rw_view1 WHERE NOT snoop(person);
+-NOTICE:  snooped value: Tom
+-NOTICE:  snooped value: Harry
++ERROR:  column "person" does not exist
++LINE 1: DELETE FROM rw_view1 WHERE NOT snoop(person);
++                                             ^
+ MERGE INTO rw_view1 t
+   USING (VALUES ('Tom'), ('Dick'), ('Harry')) AS v(person) ON t.person = v.person
+   WHEN MATCHED AND snoop(t.person) THEN UPDATE SET person = v.person;
+-NOTICE:  snooped value: Tom
+-NOTICE:  snooped value: Harry
++ERROR:  column t.person does not exist
++LINE 2: ...UES ('Tom'), ('Dick'), ('Harry')) AS v(person) ON t.person =...
++                                                             ^
++HINT:  Perhaps you meant to reference the column "v.person".
+ EXPLAIN (costs off) SELECT * FROM rw_view1 WHERE snoop(person);
+-                  QUERY PLAN                   
+------------------------------------------------
+- Subquery Scan on rw_view1
+-   Filter: snoop(rw_view1.person)
+-   ->  Seq Scan on base_tbl
+-         Filter: (visibility = 'public'::text)
+-(4 rows)
+-
++ERROR:  column "person" does not exist
++LINE 1: ...LAIN (costs off) SELECT * FROM rw_view1 WHERE snoop(person);
++                                                               ^
+ EXPLAIN (costs off) UPDATE rw_view1 SET person=person WHERE snoop(person);
+-                            QUERY PLAN                             
+--------------------------------------------------------------------
+- Update on base_tbl
+-   ->  Seq Scan on base_tbl
+-         Filter: ((visibility = 'public'::text) AND snoop(person))
+-(3 rows)
+-
++ERROR:  column "person" does not exist
++LINE 1: ... off) UPDATE rw_view1 SET person=person WHERE snoop(person);
++                                                               ^
+ EXPLAIN (costs off) DELETE FROM rw_view1 WHERE NOT snoop(person);
+-                               QUERY PLAN                                
+--------------------------------------------------------------------------
+- Delete on base_tbl
+-   ->  Seq Scan on base_tbl
+-         Filter: ((visibility = 'public'::text) AND (NOT snoop(person)))
+-(3 rows)
+-
++ERROR:  column "person" does not exist
++LINE 1: ...IN (costs off) DELETE FROM rw_view1 WHERE NOT snoop(person);
++                                                               ^
+ EXPLAIN (costs off)
+ MERGE INTO rw_view1 t
+   USING (VALUES ('Tom'), ('Dick'), ('Harry')) AS v(person) ON t.person = v.person
+   WHEN MATCHED AND snoop(t.person) THEN UPDATE SET person = v.person;
+-                         QUERY PLAN                          
+--------------------------------------------------------------
+- Merge on base_tbl
+-   ->  Nested Loop
+-         Join Filter: (base_tbl.person = "*VALUES*".column1)
+-         ->  Seq Scan on base_tbl
+-               Filter: (visibility = 'public'::text)
+-         ->  Materialize
+-               ->  Values Scan on "*VALUES*"
+-(7 rows)
+-
++ERROR:  column t.person does not exist
++LINE 3: ...UES ('Tom'), ('Dick'), ('Harry')) AS v(person) ON t.person =...
++                                                             ^
++HINT:  Perhaps you meant to reference the column "v.person".
+ -- security barrier view on top of security barrier view
+ CREATE VIEW rw_view2 WITH (security_barrier = true) AS
+   SELECT * FROM rw_view1 WHERE snoop(person);
++ERROR:  column "person" does not exist
++LINE 2:   SELECT * FROM rw_view1 WHERE snoop(person);
++                                             ^
+ SELECT table_name, is_insertable_into
+   FROM information_schema.tables
+  WHERE table_name = 'rw_view2';
+@@ -3058,144 +3486,100 @@
+  ORDER BY ordinal_position;
+  table_name | column_name | is_updatable 
+ ------------+-------------+--------------
+- rw_view2   | person      | YES
+-(1 row)
++ rw_view2   | bb          | YES
++ rw_view2   | cc          | YES
++ rw_view2   | aa          | YES
++(3 rows)
+ 
+ SELECT * FROM rw_view2 WHERE snoop(person);
+-NOTICE:  snooped value: Tom
+-NOTICE:  snooped value: Tom
+-NOTICE:  snooped value: Harry
+-NOTICE:  snooped value: Harry
+- person 
+---------
+- Tom
+- Harry
+-(2 rows)
+-
++ERROR:  column "person" does not exist
++LINE 1: SELECT * FROM rw_view2 WHERE snoop(person);
++                                           ^
+ UPDATE rw_view2 SET person=person WHERE snoop(person);
+-NOTICE:  snooped value: Tom
+-NOTICE:  snooped value: Tom
+-NOTICE:  snooped value: Harry
+-NOTICE:  snooped value: Harry
++ERROR:  column "person" does not exist
++LINE 1: UPDATE rw_view2 SET person=person WHERE snoop(person);
++                                                      ^
+ DELETE FROM rw_view2 WHERE NOT snoop(person);
+-NOTICE:  snooped value: Tom
+-NOTICE:  snooped value: Tom
+-NOTICE:  snooped value: Harry
+-NOTICE:  snooped value: Harry
++ERROR:  column "person" does not exist
++LINE 1: DELETE FROM rw_view2 WHERE NOT snoop(person);
++                                             ^
+ MERGE INTO rw_view2 t
+   USING (VALUES ('Tom'), ('Dick'), ('Harry')) AS v(person) ON t.person = v.person
+   WHEN MATCHED AND snoop(t.person) THEN UPDATE SET person = v.person;
+-NOTICE:  snooped value: Tom
+-NOTICE:  snooped value: Tom
+-NOTICE:  snooped value: Harry
+-NOTICE:  snooped value: Harry
++ERROR:  column t.person does not exist
++LINE 2: ...UES ('Tom'), ('Dick'), ('Harry')) AS v(person) ON t.person =...
++                                                             ^
++HINT:  Perhaps you meant to reference the column "v.person".
+ EXPLAIN (costs off) SELECT * FROM rw_view2 WHERE snoop(person);
+-                     QUERY PLAN                      
+------------------------------------------------------
+- Subquery Scan on rw_view2
+-   Filter: snoop(rw_view2.person)
+-   ->  Subquery Scan on rw_view1
+-         Filter: snoop(rw_view1.person)
+-         ->  Seq Scan on base_tbl
+-               Filter: (visibility = 'public'::text)
+-(6 rows)
+-
++ERROR:  column "person" does not exist
++LINE 1: ...LAIN (costs off) SELECT * FROM rw_view2 WHERE snoop(person);
++                                                               ^
+ EXPLAIN (costs off) UPDATE rw_view2 SET person=person WHERE snoop(person);
+-                                     QUERY PLAN                                      
+--------------------------------------------------------------------------------------
+- Update on base_tbl
+-   ->  Seq Scan on base_tbl
+-         Filter: ((visibility = 'public'::text) AND snoop(person) AND snoop(person))
+-(3 rows)
+-
++ERROR:  column "person" does not exist
++LINE 1: ... off) UPDATE rw_view2 SET person=person WHERE snoop(person);
++                                                               ^
+ EXPLAIN (costs off) DELETE FROM rw_view2 WHERE NOT snoop(person);
+-                                        QUERY PLAN                                         
+--------------------------------------------------------------------------------------------
+- Delete on base_tbl
+-   ->  Seq Scan on base_tbl
+-         Filter: ((visibility = 'public'::text) AND snoop(person) AND (NOT snoop(person)))
+-(3 rows)
+-
++ERROR:  column "person" does not exist
++LINE 1: ...IN (costs off) DELETE FROM rw_view2 WHERE NOT snoop(person);
++                                                               ^
+ EXPLAIN (costs off)
+ MERGE INTO rw_view2 t
+   USING (VALUES ('Tom'), ('Dick'), ('Harry')) AS v(person) ON t.person = v.person
+   WHEN MATCHED AND snoop(t.person) THEN UPDATE SET person = v.person;
+-                               QUERY PLAN                                
+--------------------------------------------------------------------------
+- Merge on base_tbl
+-   ->  Nested Loop
+-         Join Filter: (base_tbl.person = "*VALUES*".column1)
+-         ->  Seq Scan on base_tbl
+-               Filter: ((visibility = 'public'::text) AND snoop(person))
+-         ->  Values Scan on "*VALUES*"
+-(6 rows)
+-
++ERROR:  column t.person does not exist
++LINE 3: ...UES ('Tom'), ('Dick'), ('Harry')) AS v(person) ON t.person =...
++                                                             ^
++HINT:  Perhaps you meant to reference the column "v.person".
+ DROP TABLE base_tbl CASCADE;
+-NOTICE:  drop cascades to 2 other objects
+-DETAIL:  drop cascades to view rw_view1
+-drop cascades to view rw_view2
++ERROR:  must be owner of table base_tbl
+ -- security barrier view on top of table with rules
+ CREATE TABLE base_tbl(id int PRIMARY KEY, data text, deleted boolean);
++ERROR:  relation "base_tbl" already exists
+ INSERT INTO base_tbl VALUES (1, 'Row 1', false), (2, 'Row 2', true);
++ERROR:  column "c" is of type double precision but expression is of type boolean
++LINE 1: INSERT INTO base_tbl VALUES (1, 'Row 1', false), (2, 'Row 2'...
++                                                 ^
++HINT:  You will need to rewrite or cast the expression.
+ CREATE RULE base_tbl_ins_rule AS ON INSERT TO base_tbl
+   WHERE EXISTS (SELECT 1 FROM base_tbl t WHERE t.id = new.id)
+   DO INSTEAD
+     UPDATE base_tbl SET data = new.data, deleted = false WHERE id = new.id;
++ERROR:  column t.id does not exist
++LINE 2:   WHERE EXISTS (SELECT 1 FROM base_tbl t WHERE t.id = new.id...
++                                                       ^
+ CREATE RULE base_tbl_del_rule AS ON DELETE TO base_tbl
+   DO INSTEAD
+     UPDATE base_tbl SET deleted = true WHERE id = old.id;
++ERROR:  column "id" does not exist
++LINE 3:     UPDATE base_tbl SET deleted = true WHERE id = old.id;
++                                                     ^
+ CREATE VIEW rw_view1 WITH (security_barrier=true) AS
+   SELECT id, data FROM base_tbl WHERE NOT deleted;
++ERROR:  column "id" does not exist
++LINE 2:   SELECT id, data FROM base_tbl WHERE NOT deleted;
++                 ^
+ SELECT * FROM rw_view1;
+- id | data  
+-----+-------
+-  1 | Row 1
+-(1 row)
+-
++ERROR:  permission denied for view rw_view1
+ EXPLAIN (costs off) DELETE FROM rw_view1 WHERE id = 1 AND snoop(data);
+-                            QUERY PLAN                             
+--------------------------------------------------------------------
+- Update on base_tbl base_tbl_1
+-   ->  Nested Loop
+-         ->  Index Scan using base_tbl_pkey on base_tbl base_tbl_1
+-               Index Cond: (id = 1)
+-         ->  Index Scan using base_tbl_pkey on base_tbl
+-               Index Cond: (id = 1)
+-               Filter: ((NOT deleted) AND snoop(data))
+-(7 rows)
+-
++ERROR:  column "id" does not exist
++LINE 1: EXPLAIN (costs off) DELETE FROM rw_view1 WHERE id = 1 AND sn...
++                                                       ^
+ DELETE FROM rw_view1 WHERE id = 1 AND snoop(data);
+-NOTICE:  snooped value: Row 1
++ERROR:  column "id" does not exist
++LINE 1: DELETE FROM rw_view1 WHERE id = 1 AND snoop(data);
++                                   ^
+ EXPLAIN (costs off) INSERT INTO rw_view1 VALUES (2, 'New row 2');
+-                        QUERY PLAN                         
+------------------------------------------------------------
+- Insert on base_tbl
+-   InitPlan 1
+-     ->  Index Only Scan using base_tbl_pkey on base_tbl t
+-           Index Cond: (id = 2)
+-   ->  Result
+-         One-Time Filter: ((InitPlan 1).col1 IS NOT TRUE)
+- 
+- Update on base_tbl
+-   InitPlan 1
+-     ->  Index Only Scan using base_tbl_pkey on base_tbl t
+-           Index Cond: (id = 2)
+-   ->  Result
+-         One-Time Filter: (InitPlan 1).col1
+-         ->  Index Scan using base_tbl_pkey on base_tbl
+-               Index Cond: (id = 2)
+-(15 rows)
+-
++ERROR:  invalid input syntax for type double precision: "New row 2"
++LINE 1: ...PLAIN (costs off) INSERT INTO rw_view1 VALUES (2, 'New row 2...
++                                                             ^
+ INSERT INTO rw_view1 VALUES (2, 'New row 2');
++ERROR:  invalid input syntax for type double precision: "New row 2"
++LINE 1: INSERT INTO rw_view1 VALUES (2, 'New row 2');
++                                        ^
+ SELECT * FROM base_tbl;
+- id |   data    | deleted 
+-----+-----------+---------
+-  1 | Row 1     | t
+-  2 | New row 2 | f
+-(2 rows)
+-
++ERROR:  permission denied for table base_tbl
+ DROP TABLE base_tbl CASCADE;
+-NOTICE:  drop cascades to view rw_view1
++ERROR:  must be owner of table base_tbl
+ -- security barrier view based on inheritance set
+ CREATE TABLE t1 (a int, b float, c text);
+ CREATE INDEX t1_a_idx ON t1(a);
+@@ -3240,41 +3624,15 @@
+ 
+ EXPLAIN (VERBOSE, COSTS OFF)
+ UPDATE v1 SET a=100 WHERE snoop(a) AND leakproof(a) AND a < 7 AND a != 6;
+-                                                QUERY PLAN                                                 
+------------------------------------------------------------------------------------------------------------
+- Update on public.t1
+-   Update on public.t1 t1_1
+-   Update on public.t11 t1_2
+-   Update on public.t12 t1_3
+-   Update on public.t111 t1_4
+-   ->  Result
+-         Output: 100, t1.tableoid, t1.ctid
+-         ->  Append
+-               ->  Index Scan using t1_a_idx on public.t1 t1_1
+-                     Output: t1_1.tableoid, t1_1.ctid
+-                     Index Cond: ((t1_1.a > 5) AND (t1_1.a < 7))
+-                     Filter: ((t1_1.a <> 6) AND EXISTS(SubPlan 1) AND snoop(t1_1.a) AND leakproof(t1_1.a))
+-                     SubPlan 1
+-                       ->  Append
+-                             ->  Seq Scan on public.t12 t12_1
+-                                   Filter: (t12_1.a = t1_1.a)
+-                             ->  Seq Scan on public.t111 t12_2
+-                                   Filter: (t12_2.a = t1_1.a)
+-               ->  Index Scan using t11_a_idx on public.t11 t1_2
+-                     Output: t1_2.tableoid, t1_2.ctid
+-                     Index Cond: ((t1_2.a > 5) AND (t1_2.a < 7))
+-                     Filter: ((t1_2.a <> 6) AND EXISTS(SubPlan 1) AND snoop(t1_2.a) AND leakproof(t1_2.a))
+-               ->  Index Scan using t12_a_idx on public.t12 t1_3
+-                     Output: t1_3.tableoid, t1_3.ctid
+-                     Index Cond: ((t1_3.a > 5) AND (t1_3.a < 7))
+-                     Filter: ((t1_3.a <> 6) AND EXISTS(SubPlan 1) AND snoop(t1_3.a) AND leakproof(t1_3.a))
+-               ->  Index Scan using t111_a_idx on public.t111 t1_4
+-                     Output: t1_4.tableoid, t1_4.ctid
+-                     Index Cond: ((t1_4.a > 5) AND (t1_4.a < 7))
+-                     Filter: ((t1_4.a <> 6) AND EXISTS(SubPlan 1) AND snoop(t1_4.a) AND leakproof(t1_4.a))
+-(30 rows)
+-
++ERROR:  function leakproof(integer) does not exist
++LINE 2: UPDATE v1 SET a=100 WHERE snoop(a) AND leakproof(a) AND a < ...
++                                               ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ UPDATE v1 SET a=100 WHERE snoop(a) AND leakproof(a) AND a < 7 AND a != 6;
++ERROR:  function leakproof(integer) does not exist
++LINE 1: UPDATE v1 SET a=100 WHERE snoop(a) AND leakproof(a) AND a < ...
++                                               ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT * FROM v1 WHERE a=100; -- Nothing should have been changed to 100
+  a | b | c | d 
+ ---+---+---+---
+@@ -3287,104 +3645,79 @@
+ 
+ EXPLAIN (VERBOSE, COSTS OFF)
+ UPDATE v1 SET a=a+1 WHERE snoop(a) AND leakproof(a) AND a = 8;
+-                                       QUERY PLAN                                        
+------------------------------------------------------------------------------------------
+- Update on public.t1
+-   Update on public.t1 t1_1
+-   Update on public.t11 t1_2
+-   Update on public.t12 t1_3
+-   Update on public.t111 t1_4
+-   ->  Result
+-         Output: (t1.a + 1), t1.tableoid, t1.ctid
+-         ->  Append
+-               ->  Index Scan using t1_a_idx on public.t1 t1_1
+-                     Output: t1_1.a, t1_1.tableoid, t1_1.ctid
+-                     Index Cond: ((t1_1.a > 5) AND (t1_1.a = 8))
+-                     Filter: (EXISTS(SubPlan 1) AND snoop(t1_1.a) AND leakproof(t1_1.a))
+-                     SubPlan 1
+-                       ->  Append
+-                             ->  Seq Scan on public.t12 t12_1
+-                                   Filter: (t12_1.a = t1_1.a)
+-                             ->  Seq Scan on public.t111 t12_2
+-                                   Filter: (t12_2.a = t1_1.a)
+-               ->  Index Scan using t11_a_idx on public.t11 t1_2
+-                     Output: t1_2.a, t1_2.tableoid, t1_2.ctid
+-                     Index Cond: ((t1_2.a > 5) AND (t1_2.a = 8))
+-                     Filter: (EXISTS(SubPlan 1) AND snoop(t1_2.a) AND leakproof(t1_2.a))
+-               ->  Index Scan using t12_a_idx on public.t12 t1_3
+-                     Output: t1_3.a, t1_3.tableoid, t1_3.ctid
+-                     Index Cond: ((t1_3.a > 5) AND (t1_3.a = 8))
+-                     Filter: (EXISTS(SubPlan 1) AND snoop(t1_3.a) AND leakproof(t1_3.a))
+-               ->  Index Scan using t111_a_idx on public.t111 t1_4
+-                     Output: t1_4.a, t1_4.tableoid, t1_4.ctid
+-                     Index Cond: ((t1_4.a > 5) AND (t1_4.a = 8))
+-                     Filter: (EXISTS(SubPlan 1) AND snoop(t1_4.a) AND leakproof(t1_4.a))
+-(30 rows)
+-
++ERROR:  function leakproof(integer) does not exist
++LINE 2: UPDATE v1 SET a=a+1 WHERE snoop(a) AND leakproof(a) AND a = ...
++                                               ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ UPDATE v1 SET a=a+1 WHERE snoop(a) AND leakproof(a) AND a = 8;
+-NOTICE:  snooped value: 8
+-NOTICE:  snooped value: 8
+-NOTICE:  snooped value: 8
+-NOTICE:  snooped value: 8
++ERROR:  function leakproof(integer) does not exist
++LINE 1: UPDATE v1 SET a=a+1 WHERE snoop(a) AND leakproof(a) AND a = ...
++                                               ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT * FROM v1 WHERE b=8;
+  a | b |  c   |  d   
+ ---+---+------+------
+- 9 | 8 | t111 | t11d
+- 9 | 8 | t12  | t11d
+- 9 | 8 | t11  | t11d
+- 9 | 8 | t1   | t11d
++ 8 | 8 | t111 | t11d
++ 8 | 8 | t12  | t11d
++ 8 | 8 | t11  | t11d
++ 8 | 8 | t1   | t11d
+ (4 rows)
+ 
+ DELETE FROM v1 WHERE snoop(a) AND leakproof(a); -- should not delete everything, just where a>5
+-NOTICE:  snooped value: 6
+-NOTICE:  snooped value: 7
+-NOTICE:  snooped value: 9
+-NOTICE:  snooped value: 10
+-NOTICE:  snooped value: 9
+-NOTICE:  snooped value: 6
+-NOTICE:  snooped value: 7
+-NOTICE:  snooped value: 9
+-NOTICE:  snooped value: 10
+-NOTICE:  snooped value: 9
+-NOTICE:  snooped value: 6
+-NOTICE:  snooped value: 7
+-NOTICE:  snooped value: 9
+-NOTICE:  snooped value: 10
+-NOTICE:  snooped value: 9
+-NOTICE:  snooped value: 6
+-NOTICE:  snooped value: 7
+-NOTICE:  snooped value: 9
+-NOTICE:  snooped value: 10
+-NOTICE:  snooped value: 9
++ERROR:  function leakproof(integer) does not exist
++LINE 1: DELETE FROM v1 WHERE snoop(a) AND leakproof(a);
++                                          ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ TABLE t1; -- verify all a<=5 are intact
+- a | b |  c   
+----+---+------
+- 1 | 1 | t1
+- 2 | 2 | t1
+- 3 | 3 | t1
+- 4 | 4 | t1
+- 5 | 5 | t1
+- 1 | 1 | t11
+- 2 | 2 | t11
+- 3 | 3 | t11
+- 4 | 4 | t11
+- 5 | 5 | t11
+- 1 | 1 | t12
+- 2 | 2 | t12
+- 3 | 3 | t12
+- 4 | 4 | t12
+- 5 | 5 | t12
+- 1 | 1 | t111
+- 2 | 2 | t111
+- 3 | 3 | t111
+- 4 | 4 | t111
+- 5 | 5 | t111
+-(20 rows)
++ a  | b  |  c   
++----+----+------
++  1 |  1 | t1
++  2 |  2 | t1
++  3 |  3 | t1
++  4 |  4 | t1
++  5 |  5 | t1
++  6 |  6 | t1
++  7 |  7 | t1
++  8 |  8 | t1
++  9 |  9 | t1
++ 10 | 10 | t1
++  1 |  1 | t11
++  2 |  2 | t11
++  3 |  3 | t11
++  4 |  4 | t11
++  5 |  5 | t11
++  6 |  6 | t11
++  7 |  7 | t11
++  8 |  8 | t11
++  9 |  9 | t11
++ 10 | 10 | t11
++  1 |  1 | t12
++  2 |  2 | t12
++  3 |  3 | t12
++  4 |  4 | t12
++  5 |  5 | t12
++  6 |  6 | t12
++  7 |  7 | t12
++  8 |  8 | t12
++  9 |  9 | t12
++ 10 | 10 | t12
++  1 |  1 | t111
++  2 |  2 | t111
++  3 |  3 | t111
++  4 |  4 | t111
++  5 |  5 | t111
++  6 |  6 | t111
++  7 |  7 | t111
++  8 |  8 | t111
++  9 |  9 | t111
++ 10 | 10 | t111
++(40 rows)
+ 
+ DROP TABLE t1, t11, t12, t111 CASCADE;
+ NOTICE:  drop cascades to view v1
+ DROP FUNCTION snoop(anyelement);
+ DROP FUNCTION leakproof(anyelement);
++ERROR:  function leakproof(anyelement) does not exist
+ CREATE TABLE tx1 (a integer);
+ CREATE TABLE tx2 (b integer);
+ CREATE TABLE tx3 (c integer);
+@@ -3769,34 +4102,48 @@
+ drop table uv_iocu_tab;
+ -- ON CONFLICT DO UPDATE permissions checks
+ create user regress_view_user1;
++ERROR:  permission denied to create role
++DETAIL:  Only roles with the CREATEROLE attribute may create roles.
+ create user regress_view_user2;
++ERROR:  permission denied to create role
++DETAIL:  Only roles with the CREATEROLE attribute may create roles.
+ set session authorization regress_view_user1;
+ create table base_tbl(a int unique, b text, c float);
++ERROR:  relation "base_tbl" already exists
+ insert into base_tbl values (1,'xxx',1.0);
+ create view rw_view1 as select b as bb, c as cc, a as aa from base_tbl;
++ERROR:  relation "rw_view1" already exists
+ grant select (aa,bb) on rw_view1 to regress_view_user2;
+ grant insert on rw_view1 to regress_view_user2;
+ grant update (bb) on rw_view1 to regress_view_user2;
+ set session authorization regress_view_user2;
+ insert into rw_view1 values ('yyy',2.0,1)
+   on conflict (aa) do update set bb = excluded.cc; -- Not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  there is no unique or exclusion constraint matching the ON CONFLICT specification
+ insert into rw_view1 values ('yyy',2.0,1)
+   on conflict (aa) do update set bb = rw_view1.cc; -- Not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  there is no unique or exclusion constraint matching the ON CONFLICT specification
+ insert into rw_view1 values ('yyy',2.0,1)
+   on conflict (aa) do update set bb = excluded.bb; -- OK
++ERROR:  there is no unique or exclusion constraint matching the ON CONFLICT specification
+ insert into rw_view1 values ('zzz',2.0,1)
+   on conflict (aa) do update set bb = rw_view1.bb||'xxx'; -- OK
++ERROR:  there is no unique or exclusion constraint matching the ON CONFLICT specification
+ insert into rw_view1 values ('zzz',2.0,1)
+   on conflict (aa) do update set cc = 3.0; -- Not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  there is no unique or exclusion constraint matching the ON CONFLICT specification
+ reset session authorization;
+ select * from base_tbl;
+- a |   b    | c 
+----+--------+---
+- 1 | yyyxxx | 1
+-(1 row)
++ a |   b   | c 
++---+-------+---
++ 4 | Row 4 | 4
++ 5 | Row 5 | 5
++ 4 | Row 4 | 4
++ 4 | Row 4 | 4
++ 2 | Row 2 | 2
++ 1 | Row 1 | 1
++ 1 | xxx   | 1
++(7 rows)
+ 
+ set session authorization regress_view_user1;
+ grant select (a,b) on base_tbl to regress_view_user2;
+@@ -3804,42 +4151,68 @@
+ grant update (a,b) on base_tbl to regress_view_user2;
+ set session authorization regress_view_user2;
+ create view rw_view2 as select b as bb, c as cc, a as aa from base_tbl;
++ERROR:  relation "rw_view2" already exists
+ insert into rw_view2 (aa,bb) values (1,'xxx')
+   on conflict (aa) do update set bb = excluded.bb; -- Not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  there is no unique or exclusion constraint matching the ON CONFLICT specification
+ create view rw_view3 as select b as bb, a as aa from base_tbl;
++ERROR:  relation "rw_view3" already exists
+ insert into rw_view3 (aa,bb) values (1,'xxx')
+   on conflict (aa) do update set bb = excluded.bb; -- OK
++ERROR:  permission denied for view rw_view3
+ reset session authorization;
+ select * from base_tbl;
+- a |  b  | c 
+----+-----+---
+- 1 | xxx | 1
+-(1 row)
++ a |   b   | c 
++---+-------+---
++ 4 | Row 4 | 4
++ 5 | Row 5 | 5
++ 4 | Row 4 | 4
++ 4 | Row 4 | 4
++ 2 | Row 2 | 2
++ 1 | Row 1 | 1
++ 1 | xxx   | 1
++(7 rows)
+ 
+ set session authorization regress_view_user2;
+ create view rw_view4 as select aa, bb, cc FROM rw_view1;
+ insert into rw_view4 (aa,bb) values (1,'yyy')
+   on conflict (aa) do update set bb = excluded.bb; -- Not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  there is no unique or exclusion constraint matching the ON CONFLICT specification
+ create view rw_view5 as select aa, bb FROM rw_view1;
+ insert into rw_view5 (aa,bb) values (1,'yyy')
+   on conflict (aa) do update set bb = excluded.bb; -- OK
++ERROR:  there is no unique or exclusion constraint matching the ON CONFLICT specification
+ reset session authorization;
+ select * from base_tbl;
+- a |  b  | c 
+----+-----+---
+- 1 | yyy | 1
+-(1 row)
++ a |   b   | c 
++---+-------+---
++ 4 | Row 4 | 4
++ 5 | Row 5 | 5
++ 4 | Row 4 | 4
++ 4 | Row 4 | 4
++ 2 | Row 2 | 2
++ 1 | Row 1 | 1
++ 1 | xxx   | 1
++(7 rows)
+ 
+ drop view rw_view5;
+ drop view rw_view4;
+ drop view rw_view3;
++ERROR:  must be owner of view rw_view3
+ drop view rw_view2;
++ERROR:  cannot drop view rw_view2 because other objects depend on it
++DETAIL:  view rw_view3 depends on view rw_view2
++HINT:  Use DROP ... CASCADE to drop the dependent objects too.
+ drop view rw_view1;
++ERROR:  must be owner of view rw_view1
+ drop table base_tbl;
++ERROR:  must be owner of table base_tbl
+ drop user regress_view_user1;
++ERROR:  permission denied to drop role
++DETAIL:  Only roles with the CREATEROLE attribute and the ADMIN option on the target roles may drop roles.
+ drop user regress_view_user2;
++ERROR:  permission denied to drop role
++DETAIL:  Only roles with the CREATEROLE attribute and the ADMIN option on the target roles may drop roles.
+ -- Test single- and multi-row inserts with table and view defaults.
+ -- Table defaults should be used, unless overridden by view defaults.
+ create table base_tab_def (a int, b text default 'Table default',

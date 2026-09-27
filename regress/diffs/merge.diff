@@ -1,0 +1,54 @@
+diff -U3 expected/merge.out results/merge.out
+--- expected/merge.out
++++ results/merge.out
+@@ -2837,11 +2837,7 @@
+ WHEN MATCHED THEN
+ 	UPDATE SET reltuples = reltuples + 1
+ RETURNING j.oid;
+-    oid    
+------------
+- pg_depend
+-(1 row)
+-
++ERROR:  permission denied for table pg_class
+ CREATE VIEW classv AS SELECT * FROM pg_class;
+ MERGE INTO classv c
+ USING pg_namespace n
+@@ -2849,14 +2845,32 @@
+ WHEN MATCHED AND c.oid = 'pg_depend'::regclass THEN
+ 	UPDATE SET reltuples = reltuples - 1
+ RETURNING c.oid;
+- oid  
+-------
+- 2608
+-(1 row)
+-
++ERROR:  permission denied for table pg_class
+ DROP TABLE target, target2;
++ERROR:  must be owner of table target2
+ DROP TABLE source, source2;
++ERROR:  must be owner of table source2
+ DROP FUNCTION merge_trigfunc();
++ERROR:  cannot drop function merge_trigfunc() because other objects depend on it
++DETAIL:  trigger merge_bsi on table target depends on function merge_trigfunc()
++trigger merge_bsu on table target depends on function merge_trigfunc()
++trigger merge_bsd on table target depends on function merge_trigfunc()
++trigger merge_asi on table target depends on function merge_trigfunc()
++trigger merge_asu on table target depends on function merge_trigfunc()
++trigger merge_asd on table target depends on function merge_trigfunc()
++trigger merge_bri on table target depends on function merge_trigfunc()
++trigger merge_bru on table target depends on function merge_trigfunc()
++trigger merge_brd on table target depends on function merge_trigfunc()
++trigger merge_ari on table target depends on function merge_trigfunc()
++trigger merge_aru on table target depends on function merge_trigfunc()
++trigger merge_ard on table target depends on function merge_trigfunc()
++HINT:  Use DROP ... CASCADE to drop the dependent objects too.
+ DROP USER regress_merge_privs;
++ERROR:  permission denied to drop role
++DETAIL:  Only roles with the CREATEROLE attribute and the ADMIN option on the target roles may drop roles.
+ DROP USER regress_merge_no_privs;
++ERROR:  permission denied to drop role
++DETAIL:  Only roles with the CREATEROLE attribute and the ADMIN option on the target roles may drop roles.
+ DROP USER regress_merge_none;
++ERROR:  permission denied to drop role
++DETAIL:  Only roles with the CREATEROLE attribute and the ADMIN option on the target roles may drop roles.

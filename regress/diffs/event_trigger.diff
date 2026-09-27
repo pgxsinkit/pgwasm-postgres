@@ -1,0 +1,28 @@
+diff -U3 expected/event_trigger.out results/event_trigger.out
+--- expected/event_trigger.out
++++ results/event_trigger.out
+@@ -366,18 +366,16 @@
+ (23 rows)
+ 
+ DROP OWNED BY regress_evt_user;
+-NOTICE:  schema "audit_tbls" does not exist, skipping
+ SELECT * FROM dropped_objects WHERE object_type = 'schema';
+- object_type | schema_name | object_name | object_identity | address_names | address_args | is_temporary | original | normal 
+--------------+-------------+-------------+-----------------+---------------+--------------+--------------+----------+--------
+- schema      |             | schema_two  | schema_two      | {schema_two}  | {}           | f            | t        | f
+- schema      |             | schema_one  | schema_one      | {schema_one}  | {}           | f            | t        | f
+- schema      |             | audit_tbls  | audit_tbls      | {audit_tbls}  | {}           | f            | t        | f
+-(3 rows)
+-
++ERROR:  relation "dropped_objects" does not exist
++LINE 1: SELECT * FROM dropped_objects WHERE object_type = 'schema';
++                      ^
+ DROP ROLE regress_evt_user;
++ERROR:  current user cannot be dropped
+ DROP EVENT TRIGGER regress_event_trigger_drop_objects;
++ERROR:  event trigger "regress_event_trigger_drop_objects" does not exist
+ DROP EVENT TRIGGER undroppable;
++ERROR:  event trigger "undroppable" does not exist
+ -- Event triggers on relations.
+ CREATE OR REPLACE FUNCTION event_trigger_report_dropped()
+  RETURNS event_trigger
