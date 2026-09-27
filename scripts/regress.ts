@@ -9,7 +9,10 @@
  * - a new failure, a changed diff or a newly unstable test fails the gate;
  * - a vanished failure (failed in the baseline, passes in every run) is reported, so the baseline can be
  *   tightened with --record;
- * - a test the baseline records as unstable is reported apart, whatever it did.
+ * - a test the baseline records as unstable is reported apart, whatever it did;
+ * - a baseline recorded on another upstream tag than the pinned one (a bump's: the tests and their expected output
+ *   come from the new tag) is compared with all the same, for the bump's report, and never passes: the gate fails
+ *   until the baseline is recorded for the pinned tag.
  *
  * `--record` (at least 2 runs, the default then) rewrites the baseline's results and diffs from the runs: a test
  * whose outcome or diff differs between them is recorded as unstable. It keeps the hand-written groups; a new
@@ -112,8 +115,8 @@ await runCliAsync(async () => {
     const problems = validateBaseline(previous.baseline, [...previous.diffs.keys()]);
     if (problems.length > 0) throw new UserError(["regress: the baseline is inconsistent:", ...problems].join("\n  "));
     if (previous.baseline.upstream.tag !== pin.tag) {
-      throw new UserError(
-        `regress: the baseline is for ${previous.baseline.upstream.tag}, the pin is ${pin.tag}; record a new one with --record.`,
+      info(
+        `regress: the baseline is for ${previous.baseline.upstream.tag}, the pin is ${pin.tag}: comparing with it all the same (a bump's report); the gate fails until it is recorded for ${pin.tag} with --record.`,
       );
     }
   }
@@ -217,21 +220,31 @@ await runCliAsync(async () => {
   report("VANISHED (passes now; tighten the baseline with --record)", comparison.vanished);
   for (const test of comparison.unstable)
     info(`regress: unstable (baseline): ${test.name}: ${test.outcomes.join(", ")}`);
-  const { summary } = previous.baseline;
+  const { summary, upstream } = previous.baseline;
   info(
-    `regress: baseline ${summary.tests} tests: ${summary.passed} passed, ${summary.failed} failed, ${summary.unstable} unstable`,
+    `regress: baseline (${upstream.tag}) ${summary.tests} tests: ${summary.passed} passed, ${summary.failed} failed, ${summary.unstable} unstable`,
   );
+  const sameTag = upstream.tag === pin.tag;
   writeOutcome(layout, {
     upstream: { tag: pin.tag, commit: pin.commit },
     schedule: SCHEDULE,
     image,
     ranWith: recordedWith,
-    baseline: { sha256: baselineDigest(layout), summary },
-    passed: passes(comparison),
+    baseline: { sha256: baselineDigest(layout), upstream, summary },
+    passed: sameTag && passes(comparison),
     comparison: { ...comparison, unstable: comparison.unstable.map((test) => test.name) },
     runs: runCounts,
   });
-  if (!passes(comparison)) throw new UserError("regress: FAILED: the results differ from the baseline.");
+  if (!passes(comparison)) {
+    throw new UserError(
+      `regress: FAILED: the results differ from the baseline${sameTag ? "" : ` (recorded on ${upstream.tag}, not the pinned ${pin.tag}: record it for ${pin.tag} with --record once each difference is explained)`}.`,
+    );
+  }
+  if (!sameTag) {
+    throw new UserError(
+      `regress: FAILED: the results match the baseline, but it is for ${upstream.tag}, not the pinned ${pin.tag}: record it for ${pin.tag} with --record.`,
+    );
+  }
   info(
     `regress: ok: no new failure, no changed diff${comparison.vanished.length > 0 ? `; ${comparison.vanished.length} vanished` : ""}.`,
   );

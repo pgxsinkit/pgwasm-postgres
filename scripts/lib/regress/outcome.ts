@@ -19,7 +19,12 @@ export interface RegressOutcome {
   readonly image: string;
   /** The sha256 of each file the runs used, by name (the artefacts, and a regress library if one was given). */
   readonly ranWith: Readonly<Record<string, string>>;
-  readonly baseline: { readonly sha256: string; readonly summary: Baseline["summary"] };
+  /** The baseline compared with: its digest, the upstream tag it was recorded on, and its summary. */
+  readonly baseline: {
+    readonly sha256: string;
+    readonly upstream: Baseline["upstream"];
+    readonly summary: Baseline["summary"];
+  };
   readonly passed: boolean;
   readonly comparison: Omit<Comparison, "unstable"> & { readonly unstable: readonly string[] };
   readonly runs: readonly {
