@@ -11,7 +11,9 @@
 # Proven 2026-09-27 by the reproduction this file comes from (pgxsinkit's C-build reproduction, phase C):
 # built from this file, build-pglite.sh at b133782 reproduces pglite.wasm/.data/.js, initdb.wasm/.js and
 # pg_dump.wasm/.js byte for byte; amcheck.tar.gz differs only in member mtimes and order. /install matches
-# Electric's image except libcrypto.a's build date.
+# Electric's image except libcrypto.a's build date. Here, `bun run build` builds REL_18_3 + patches/ + overlay/
+# + extensions.json with this image, and `bun run build:verify` checks the result against
+# identity/0.5.8-artefacts.json (ADR-0001 decision 2).
 #
 # PINNING POLICY. Every pin in this file is the documented exception to the always-latest rule. The image's
 # first job is to rebuild the published 0.5.8 artefacts byte for byte, and that needs Electric's exact

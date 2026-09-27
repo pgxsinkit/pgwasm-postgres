@@ -21,6 +21,8 @@ export interface Layout {
   readonly cacheDir: string;
   /** The bare, shallow clone holding only the upstream tags fetched so far. */
   readonly cacheRepo: string;
+  /** The bare, shallow clone holding the extension commits `extensions.json` pins. */
+  readonly extensionsCache: string;
   /** Where `bun run build` works: the source, the log and `build.json`. Replaced by every build. */
   readonly buildDir: string;
   /** The materialised source the build runs in. */
@@ -47,6 +49,7 @@ export function layoutFor(root: string): Layout {
     builderDir: join(root, "builder"),
     cacheDir,
     cacheRepo: join(cacheDir, "upstream.git"),
+    extensionsCache: join(cacheDir, "extensions.git"),
     buildDir,
     buildSource: join(buildDir, "postgres-pglite"),
     buildDist: join(buildDir, "postgres-pglite", "dist"),

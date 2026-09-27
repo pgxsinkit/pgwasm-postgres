@@ -2,6 +2,8 @@
  * podman, and only podman: the builder image and the build run in it, locally and (later) in CI. Every
  * container this repository starts is named `pgwasm-postgres-*`, so a leftover one is found by name.
  */
+import { rmSync } from "node:fs";
+
 import { CommandError, UserError, type RunResult } from "./git.ts";
 
 /** The name prefix of every container this repository starts. */
@@ -67,4 +69,17 @@ export function refuseOtherContainers(): void {
 /** Stops and removes a container if it exists; never fails. */
 export function removeContainer(name: string): void {
   podman(["rm", "--force", "--ignore", "--time", "5", name], { allowFailure: true });
+}
+
+/**
+ * Deletes a directory a container wrote into. Rootless podman maps the container's root to the calling user, so
+ * a plain delete normally works; anything the build wrote as another in-container user belongs to a subordinate
+ * uid, which only `podman unshare` can delete.
+ */
+export function removeBuildOutput(path: string): void {
+  try {
+    rmSync(path, { recursive: true, force: true });
+  } catch {
+    podman(["unshare", "rm", "-rf", "--", path]);
+  }
 }
