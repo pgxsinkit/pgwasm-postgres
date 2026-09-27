@@ -30,10 +30,10 @@ Derived from electric-sql/postgres-pglite b133782cd759f08b3aeb263b80a963b39c7b7a
  1 file changed, 795 insertions(+), 562 deletions(-)
 
 diff --git a/src/backend/tcop/postgres.c b/src/backend/tcop/postgres.c
-index 2f8c3d5f91822f4e7adbd9e861741fcf0a1e2bd1..09a273c6d73a5fddbfa001558c187210791f7490 100644
+index 115a634c64191e3bb78d2194456646103d0c3391..e45ec0df38bce1e6fff7c7273ad4acfb21ca67f1 100644
 --- a/src/backend/tcop/postgres.c
 +++ b/src/backend/tcop/postgres.c
-@@ -140,7 +140,11 @@ static bool DoingCommandRead = false;
+@@ -141,7 +141,11 @@ static bool DoingCommandRead = false;
   * the extended query protocol.
   */
  static bool doing_extended_query_message = false;
@@ -45,7 +45,7 @@ index 2f8c3d5f91822f4e7adbd9e861741fcf0a1e2bd1..09a273c6d73a5fddbfa001558c187210
  
  /*
   * If an unnamed prepared statement exists, it's stored here.
-@@ -186,6 +190,109 @@ static void log_disconnections(int code, Datum arg);
+@@ -187,6 +191,109 @@ static void log_disconnections(int code, Datum arg);
  static void enable_statement_timeout(void);
  static void disable_statement_timeout(void);
  
@@ -155,7 +155,7 @@ index 2f8c3d5f91822f4e7adbd9e861741fcf0a1e2bd1..09a273c6d73a5fddbfa001558c187210
  
  /* ----------------------------------------------------------------
   *		infrastructure for valgrind debugging
-@@ -4168,383 +4275,146 @@ PostgresSingleUserMain(int argc, char *argv[],
+@@ -4172,383 +4279,146 @@ PostgresSingleUserMain(int argc, char *argv[],
  	PostgresMain(dbname, username);
  }
  
@@ -663,7 +663,7 @@ index 2f8c3d5f91822f4e7adbd9e861741fcf0a1e2bd1..09a273c6d73a5fddbfa001558c187210
  
  		/*
  		 * (1) If we've reached idle state, tell the frontend we're ready for
-@@ -4743,7 +4613,7 @@ PostgresMain(const char *dbname, const char *username)
+@@ -4747,7 +4617,7 @@ PostgresMain(const char *dbname, const char *username)
  		 * Sync.
  		 */
  		if (ignore_till_sync && firstchar != EOF)
@@ -672,7 +672,7 @@ index 2f8c3d5f91822f4e7adbd9e861741fcf0a1e2bd1..09a273c6d73a5fddbfa001558c187210
  
  		switch (firstchar)
  		{
-@@ -4765,259 +4635,622 @@ PostgresMain(const char *dbname, const char *username)
+@@ -4769,259 +4639,622 @@ PostgresMain(const char *dbname, const char *username)
  					else
  						exec_simple_query(query_string);
  

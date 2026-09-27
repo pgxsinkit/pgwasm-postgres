@@ -15,7 +15,7 @@ Derived from electric-sql/postgres-pglite b133782cd759f08b3aeb263b80a963b39c7b7a
  1 file changed, 12 insertions(+)
 
 diff --git a/src/backend/tcop/backend_startup.c b/src/backend/tcop/backend_startup.c
-index ad0af5edc1f2183a9e29d2b43b8e0fec1f243a4c..294adf30eac3f87b83b4cf09e0b3de3175c43869 100644
+index 8ad4808e53748c6c78344dcf7847ddf31702e74c..2f8c9e64e108300916803bb14e0e4bb975029635 100644
 --- a/src/backend/tcop/backend_startup.c
 +++ b/src/backend/tcop/backend_startup.c
 @@ -42,6 +42,10 @@

@@ -19,10 +19,10 @@ Derived from electric-sql/postgres-pglite b133782cd759f08b3aeb263b80a963b39c7b7a
  3 files changed, 66 insertions(+)
 
 diff --git a/src/bin/pg_dump/pg_backup_archiver.c b/src/bin/pg_dump/pg_backup_archiver.c
-index 8456992c33c065f5643135e377434d12f045ee3e..f456d6bc0bef1a2f27fa2e17996353d71d68d4ba 100644
+index efcb592493572bce0421641f4dce9cdf510eccb2..a82e08e2a9ac321dbe67aaa0fe6fe7aab5c28d61 100644
 --- a/src/bin/pg_dump/pg_backup_archiver.c
 +++ b/src/bin/pg_dump/pg_backup_archiver.c
-@@ -50,6 +50,28 @@
+@@ -51,6 +51,28 @@
  #define TOC_PREFIX_DATA		"Data for "
  #define TOC_PREFIX_STATS	"Statistics for "
  
@@ -52,7 +52,7 @@ index 8456992c33c065f5643135e377434d12f045ee3e..f456d6bc0bef1a2f27fa2e17996353d7
  							   const pg_compress_specification compression_spec,
  							   bool dosync, ArchiveMode mode,
 diff --git a/src/bin/pg_dump/pg_dump.c b/src/bin/pg_dump/pg_dump.c
-index 583afc67d3f74330280c2cc39c35afbad3994d6b..3608cd6db7ba50b4e83a26fcb90af8796474d762 100644
+index 618b0ea28a15f43569686a63715673624f912350..c5dc4fe74c5e64726f1a1152bcf95e444b01c0c8 100644
 --- a/src/bin/pg_dump/pg_dump.c
 +++ b/src/bin/pg_dump/pg_dump.c
 @@ -71,6 +71,28 @@
@@ -85,10 +85,10 @@ index 583afc67d3f74330280c2cc39c35afbad3994d6b..3608cd6db7ba50b4e83a26fcb90af879
  {
  	Oid			roleoid;		/* role's OID */
 diff --git a/src/interfaces/libpq/fe-exec.c b/src/interfaces/libpq/fe-exec.c
-index dcc8a447d66f92847036546f2aba4e949f0b6318..168ebe2ec9a8fe96e6d9d4e8d48cac4d99c1368b 100644
+index 20e1a58a527d29ef8284c97598c03887b27aef7a..a8801d7abd32492ef7664fc4d24619de03fd5145 100644
 --- a/src/interfaces/libpq/fe-exec.c
 +++ b/src/interfaces/libpq/fe-exec.c
-@@ -28,6 +28,28 @@
+@@ -29,6 +29,28 @@
  #include "libpq-int.h"
  #include "mb/pg_wchar.h"
  

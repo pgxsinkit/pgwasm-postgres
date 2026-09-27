@@ -66,10 +66,10 @@ index 4e911395fe3bae8edf33e5a05257872060146f09..2a4b919c69291150e40d4119391228af
 +*.undef.txt
 \ No newline at end of file
 diff --git a/configure b/configure
-index 540f911863fb1153d8127cdbc602091997a70894..f9051b46da51bf046a4f0bb70becb05f21da7f09 100755
+index 6cef1a552e58f9cfeb65b46c2855c934cda11720..4077d8e26b3a4032c28c2d50319a91e0f9c01063 100755
 --- a/configure
 +++ b/configure
-@@ -19494,7 +19494,7 @@ fi
+@@ -19584,7 +19584,7 @@ fi
  
  
  cat >>confdefs.h <<_ACEOF

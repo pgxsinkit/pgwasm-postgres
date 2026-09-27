@@ -34,7 +34,7 @@ Derived from electric-sql/postgres-pglite b133782cd759f08b3aeb263b80a963b39c7b7a
  7 files changed, 35 insertions(+), 3 deletions(-)
 
 diff --git a/src/backend/access/transam/xlog.c b/src/backend/access/transam/xlog.c
-index d03db6b1f85cd474e29a889bf6ba331233a3dac0..41d1ec7ce905746999649941cc416d2d560735b1 100644
+index 2fd06e379996b4e0912361810777534b42a3cbb4..0993d8af1dd6fbdca05e828109082af1823382c8 100644
 --- a/src/backend/access/transam/xlog.c
 +++ b/src/backend/access/transam/xlog.c
 @@ -2496,12 +2496,14 @@ XLogWrite(XLogwrtRqst WriteRqst, TimeLineID tli, bool flexible)
@@ -90,7 +90,7 @@ index 3914ac8da2622f5b2301d666f7eb68d048f79837..57ace9913d9584e00fb786ec665be2e7
  		/*
  		 * There's no point in doing slow checkpoints in a standalone backend,
 diff --git a/src/backend/storage/file/fd.c b/src/backend/storage/file/fd.c
-index 73fa05278a3991d384094d77a9a3496ddeca28cd..b2d45cf76c7e228492a2495be642933734044ef4 100644
+index 378c078c7c7f347e4d3c5bf00477c6804a600364..36eb6c42fbb37e505f8676012d2348292b0e2290 100644
 --- a/src/backend/storage/file/fd.c
 +++ b/src/backend/storage/file/fd.c
 @@ -524,6 +524,10 @@ pg_file_exists(const char *name)
