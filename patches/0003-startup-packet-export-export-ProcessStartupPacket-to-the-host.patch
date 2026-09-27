@@ -1,0 +1,55 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Anton Melser <anton.melser@outlook.com>
+Date: Sun, 27 Sep 2026 12:42:23 +0800
+Subject: [PATCH] startup-packet-export: export ProcessStartupPacket to the
+ host
+
+Under __EMSCRIPTEN__, ProcessStartupPacket in backend_startup.c is no
+longer static and is marked EMSCRIPTEN_KEEPALIVE, so the host can run
+the startup-packet exchange for its connection itself. The file includes
+emscripten.h for the attribute.
+
+Derived from electric-sql/postgres-pglite b133782cd759f08b3aeb263b80a963b39c7b7af1 (PostgreSQL 18.3 fork, PostgreSQL License)
+---
+ src/backend/tcop/backend_startup.c | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+diff --git a/src/backend/tcop/backend_startup.c b/src/backend/tcop/backend_startup.c
+index ad0af5edc1f2183a9e29d2b43b8e0fec1f243a4c..294adf30eac3f87b83b4cf09e0b3de3175c43869 100644
+--- a/src/backend/tcop/backend_startup.c
++++ b/src/backend/tcop/backend_startup.c
+@@ -42,6 +42,10 @@
+ #include "utils/timeout.h"
+ #include "utils/varlena.h"
+ 
++#if defined(__EMSCRIPTEN__)
++#include "emscripten.h"
++#endif
++
+ /* GUCs */
+ bool		Trace_connection_negotiation = false;
+ uint32		log_connections = 0;
+@@ -59,7 +63,11 @@ ConnectionTiming conn_timing = {.ready_for_use = TIMESTAMP_MINUS_INFINITY};
+ 
+ static void BackendInitialize(ClientSocket *client_sock, CAC_state cac);
+ static int	ProcessSSLStartup(Port *port);
++#if defined(__EMSCRIPTEN__)
++int	ProcessStartupPacket(Port *port, bool ssl_done, bool gss_done);
++#else
+ static int	ProcessStartupPacket(Port *port, bool ssl_done, bool gss_done);
++#endif
+ static void ProcessCancelRequestPacket(Port *port, void *pkt, int pktlen);
+ static void SendNegotiateProtocolVersion(List *unrecognized_protocol_options);
+ static void process_startup_packet_die(SIGNAL_ARGS);
+@@ -488,7 +496,11 @@ reject:
+  * should make no assumption here about the order in which the client may make
+  * requests.
+  */
++#if defined(__EMSCRIPTEN__)
++int EMSCRIPTEN_KEEPALIVE
++#else
+ static int
++#endif
+ ProcessStartupPacket(Port *port, bool ssl_done, bool gss_done)
+ {
+ 	int32		len;

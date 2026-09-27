@@ -1,0 +1,49 @@
+pgwasm-postgres
+===============
+
+This repository carries changes to PostgreSQL as a patch series (`patches/`) and
+files copied into the PostgreSQL tree (`overlay/`). Both derive from third-party
+work, and these attributions are permanent. The licence text is in LICENSE.
+
+------------------------------------------------------------------------------
+PostgreSQL
+------------------------------------------------------------------------------
+
+The patches apply to PostgreSQL at the release `upstream.json` pins. PostgreSQL's
+own source is fetched when needed and is never stored in this repository.
+
+  Source:  https://www.postgresql.org (https://github.com/postgres/postgres)
+  License: PostgreSQL License
+  Copyright (c) 1996-2026, The PostgreSQL Global Development Group
+  Copyright (c) 1994, The Regents of the University of California
+
+------------------------------------------------------------------------------
+ElectricSQL: postgres-pglite
+------------------------------------------------------------------------------
+
+`patches/` and `overlay/` are derived from ElectricSQL's PostgreSQL 18.3 fork for
+PGlite:
+
+  Source:  https://github.com/electric-sql/postgres-pglite
+           commit b133782cd759f08b3aeb263b80a963b39c7b7af1
+  License: PostgreSQL License
+  Copyright (c) ElectricSQL and contributors
+
+The fork carries no licence file of its own: its COPYRIGHT file is PostgreSQL's,
+unchanged, and PGlite's README (https://github.com/electric-sql/pglite) states:
+"Changes to the Postgres source are licensed under the PostgreSQL License." The
+fork's 22 commits on top of REL_18_3 were recut into five topic patches, each of
+which names its source commit. The overlay files are copied unchanged.
+
+------------------------------------------------------------------------------
+Unicode: ICU collation data
+------------------------------------------------------------------------------
+
+`overlay/pglite/static/minimal-icu/76.1/icudt76l/coll/` holds two ICU 76.1 data
+files (root.res, ucadata.icu), part of the postgres-pglite overlay.
+
+  Source:  https://github.com/unicode-org/icu (release 76.1)
+  License: Unicode License V3 (SPDX: Unicode-3.0), with the third-party notices
+           ICU carries; the full text ships next to the files in
+           overlay/pglite/static/minimal-icu/76.1/LICENSE
+  Copyright (c) 2016-2024 Unicode, Inc.

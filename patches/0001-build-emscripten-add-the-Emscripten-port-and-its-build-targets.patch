@@ -1,0 +1,579 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Anton Melser <anton.melser@outlook.com>
+Date: Sun, 27 Sep 2026 12:42:22 +0800
+Subject: [PATCH] build-emscripten: add the Emscripten port and its build
+ targets
+
+Add an "emscripten" port and the build hooks the PGlite build scripts
+(build-pglite.sh and pglite/ in the overlay) rely on:
+
+- src/template/emscripten, src/include/port/emscripten.h and
+  src/makefiles/Makefile.emscripten define the port: unnamed POSIX
+  semaphores, poll-based waits, fdatasync as the default WAL sync
+  method, no inlining, unversioned shared libraries, and the install
+  directories for extension import lists.
+- src/backend/Makefile links the backend as pglite (with
+  POSTGRES_PGLITE_FLAGS), installs pglite.wasm/.js/.data, and computes
+  exported_functions.txt: every built extension's imports plus
+  pglite/static/included.pglite.exports, minus the symbols the linked
+  libraries provide.
+- src/makefiles/pgxs.mk and src/pl/plpgsql/src/Makefile write each
+  extension's undefined symbols to an .imports list, the input to that
+  export list; src/Makefile.shlib links shared libraries with the
+  compiler and without versioned names.
+- The initdb, pg_config, pg_ctl and pg_dump Makefiles install their
+  .wasm outputs; pg_config and pg_ctl are wrapped by
+  pglite/scripts/run_pg_cmd.mjs so other tools can run them.
+- contrib/Makefile builds pgcrypto when PGLITE_WITH_PGCRYPTO=1 and
+  includes the overlay's contrib/dist.mk; src/timezone/Makefile uses the
+  host's zic.
+- configure puts "(PGlite $PGLITE_VERSION)" into PG_VERSION_STR, so
+  version() names the build.
+- .gitignore ignores the build outputs.
+
+src/template/emscripten repeats its block four times and
+src/makefiles/Makefile.emscripten its first rules twice. They are
+carried as they are: the series has to reproduce the source tree exactly
+until its build is proven byte-identical.
+
+Derived from electric-sql/postgres-pglite b133782cd759f08b3aeb263b80a963b39c7b7af1 (PostgreSQL 18.3 fork, PostgreSQL License)
+---
+ .gitignore                        | 10 ++++++
+ configure                         |  2 +-
+ contrib/Makefile                  |  6 ++++
+ src/Makefile.shlib                | 14 ++++++++
+ src/backend/Makefile              | 48 +++++++++++++++++++++++++++
+ src/bin/initdb/Makefile           |  9 +++++
+ src/bin/pg_config/Makefile        | 21 ++++++++++++
+ src/bin/pg_ctl/Makefile           | 11 +++++++
+ src/bin/pg_dump/Makefile          | 11 +++++++
+ src/include/port/emscripten.h     | 16 +++++++++
+ src/makefiles/Makefile.emscripten | 22 +++++++++++++
+ src/makefiles/pgxs.mk             | 19 +++++++++++
+ src/pl/plpgsql/src/Makefile       | 12 +++++++
+ src/template/emscripten           | 55 +++++++++++++++++++++++++++++++
+ src/timezone/Makefile             |  7 ++++
+ 15 files changed, 262 insertions(+), 1 deletion(-)
+ create mode 100644 src/include/port/emscripten.h
+ create mode 100644 src/makefiles/Makefile.emscripten
+ create mode 100644 src/template/emscripten
+
+diff --git a/.gitignore b/.gitignore
+index 4e911395fe3bae8edf33e5a05257872060146f09..2a4b919c69291150e40d4119391228af580a0f11 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -43,3 +43,13 @@ lib*.pc
+ /Release/
+ /tmp_install/
+ /portlock/
++
++# emscripten build excludes
++*.js
++*.data
++*.cjs
++*.wasm
++*.map
++dist
++*.defs.txt
++*.undef.txt
+\ No newline at end of file
+diff --git a/configure b/configure
+index 540f911863fb1153d8127cdbc602091997a70894..09be7f11db46fef48c459b8b2bbd5046ac1aafcb 100755
+--- a/configure
++++ b/configure
+@@ -19494,7 +19494,7 @@ fi
+ 
+ 
+ cat >>confdefs.h <<_ACEOF
+-#define PG_VERSION_STR "PostgreSQL $PG_VERSION on $host, compiled by $cc_string, `expr $ac_cv_sizeof_void_p \* 8`-bit"
++#define PG_VERSION_STR "PostgreSQL $PG_VERSION (PGlite $PGLITE_VERSION) on $host, compiled by $cc_string, `expr $ac_cv_sizeof_void_p \* 8`-bit"
+ _ACEOF
+ 
+ 
+diff --git a/contrib/Makefile b/contrib/Makefile
+index 2f0a88d3f77448d3f6b9f1dda3de3690be747552..91aab329a7f6c4356657a4224c9bab11ce6844ee 100644
+--- a/contrib/Makefile
++++ b/contrib/Makefile
+@@ -59,6 +59,10 @@ else
+ ALWAYS_SUBDIRS += pgcrypto sslinfo
+ endif
+ 
++ifeq ($(PGLITE_WITH_PGCRYPTO), 1)
++SUBDIRS += pgcrypto
++endif
++
+ ifneq ($(with_uuid),no)
+ SUBDIRS += uuid-ossp
+ else
+@@ -92,6 +96,8 @@ endif
+ # Missing:
+ #		start-scripts	\ (does not have a makefile)
+ 
++include ./dist.mk
++
+ 
+ $(recurse)
+ $(recurse_always)
+diff --git a/src/Makefile.shlib b/src/Makefile.shlib
+index 3825af5b2287271fc5e3953f73879715d583fa6b..b282ced5e87eab2c7206d48692c2964bfd465b8e 100644
+--- a/src/Makefile.shlib
++++ b/src/Makefile.shlib
+@@ -224,6 +224,20 @@ ifeq ($(SHLIB_EXPORTS),)
+   override CXXFLAGS += $(CXXFLAGS_SL_MODULE)
+ endif
+ 
++ifeq ($(PORTNAME), emscripten)
++  LINK.shared       = $(COMPILER)
++  ifdef soname
++    # emscripten uses unversioned shared libraries
++    shlib     = $(shlib_bare)
++    soname    = $(shlib_bare)
++  endif
++  BUILD.exports     = ( $(AWK) '/^[^\#]/ {printf "%s\n",$$1}' $< ) | sort -u >$@
++#  BUILD.exports     = ( echo '{ global:'; $(AWK) '/^[^\#]/ {printf "%s;\n",$$1}' $<; echo ' local: *; };' ) >$@
++  exports_file      = $(SHLIB_EXPORTS:%.txt=%.list)
++#  ifneq (,$(exports_file))
++#    LINK.shared     += -Wl,--version-script=$(exports_file)
++#  endif
++endif
+ 
+ ##
+ ## BUILD
+diff --git a/src/backend/Makefile b/src/backend/Makefile
+index c0be9410383208c85e91d1f977e45f7fba2cd6d4..01f01bd7347246e53844237f59d49ca591f191ba 100644
+--- a/src/backend/Makefile
++++ b/src/backend/Makefile
+@@ -61,6 +61,7 @@ override LDFLAGS := $(LDFLAGS) $(LDFLAGS_EX) $(LDFLAGS_EX_BE)
+ 
+ all: submake-libpgport submake-catalog-headers submake-utils-headers postgres $(POSTGRES_IMP)
+ 
++ifneq ($(PORTNAME), emscripten)
+ ifneq ($(PORTNAME), cygwin)
+ ifneq ($(PORTNAME), win32)
+ 
+@@ -69,6 +70,45 @@ postgres: $(OBJS)
+ 
+ endif
+ endif
++endif
++
++ifeq ($(PORTNAME), emscripten)
++
++postgres: $(OBJS)
++	$(CC) $(CFLAGS) $(call expand_subsys,$^) $(LDFLAGS) $(LIBS) -o $@$(X)
++
++# Extensions use functions from the core PG. These need to be exported by the emscripten compiler.
++# The following target gathers all extension imports + the default ones (included.pglite.imports),
++# excludes the one in excluded.pglite.imports and adds a leading _ to each.
++pglite-exported-functions:
++	$(MKDIR_P) /install/pglite
++	cat $(top_builddir)/pglite/static/excluded.pglite.exports \
++	$(top_builddir)/src/interfaces/libpq/exports.list \
++	$(LIB_EXPORTS_DIR)/libossp-uuid.exports \
++	$(LIB_EXPORTS_DIR)/libssl.exports \
++	$(LIB_EXPORTS_DIR)/libcrypto.exports \
++	$(LIB_EXPORTS_DIR)/libjson-c.exports \
++	$(LIB_EXPORTS_DIR)/libdeflate.exports \
++	$(LIB_EXPORTS_DIR)/libtiff.exports \
++	$(LIB_EXPORTS_DIR)/libsqlite3.exports \
++	$(LIB_EXPORTS_DIR)/libproj.exports \
++	$(LIB_EXPORTS_DIR)/libgeos.exports \
++	| sort -u > '/install/pglite/excluded.imports.gen'
++	cat $(DESTDIR)$(emscripten_extension_imports_dir)/*.imports '$(top_builddir)/pglite/static/included.pglite.exports' | \
++	sort -u | \
++	grep -v -E '^(invoke_|__indirect_function_table)' | \
++	grep -Fvx -f '/install/pglite/excluded.imports.gen' | \
++	awk NF | \
++	sed 's/^/_/' \
++	> '/install/pglite/exported_functions.txt'
++
++pglite: $(OBJS)
++	$(CC) $(CFLAGS) $(call expand_subsys,$^) $(LDFLAGS) $(LIBS) $(POSTGRES_PGLITE_FLAGS) -o $@$(X)
++
++pglite-libc:
++	$(CC) $(CFLAGS) 
++
++endif
+ 
+ ifeq ($(PORTNAME), cygwin)
+ 
+@@ -214,6 +254,14 @@ ifeq ($(MAKE_EXPORTS), true)
+ 	$(MKDIR_P) '$(DESTDIR)$(pgxsdir)/$(MKLDEXPORT_DIR)'
+ endif
+ 
++ifeq ($(PORTNAME), emscripten)
++install-pglite:
++	$(INSTALL_PROGRAM) pglite.wasm '$(DESTDIR)$(bindir)/pglite.wasm'
++	$(INSTALL_PROGRAM) pglite.js '$(DESTDIR)$(bindir)/pglite.js'
++	$(INSTALL_PROGRAM) pglite.data '$(DESTDIR)$(bindir)/pglite.data'
++endif
++
++.PHONY: install-pglite
+ 
+ ##########################################################################
+ 
+diff --git a/src/bin/initdb/Makefile b/src/bin/initdb/Makefile
+index c0470efda92a34f9e3c7339d4fbeb44c3920f7e9..7d1f940d0e5c63e5d1c9d229c6f3cefa26c9cd48 100644
+--- a/src/bin/initdb/Makefile
++++ b/src/bin/initdb/Makefile
+@@ -47,16 +47,25 @@ localtime.c: % : $(top_srcdir)/src/timezone/%
+ 
+ install: all installdirs
+ 	$(INSTALL_PROGRAM) initdb$(X) '$(DESTDIR)$(bindir)/initdb$(X)'
++ifeq ($(PORTNAME), emscripten)
++	$(INSTALL_PROGRAM) initdb.wasm '$(DESTDIR)$(bindir)/initdb.wasm'
++endif
+ 
+ installdirs:
+ 	$(MKDIR_P) '$(DESTDIR)$(bindir)'
+ 
+ uninstall:
+ 	rm -f '$(DESTDIR)$(bindir)/initdb$(X)'
++ifeq ($(PORTNAME), emscripten)
++	rm -f $(addprefix '$(DESTDIR)$(bindir)'/, initdb.wasm)
++endif
+ 
+ clean distclean:
+ 	rm -f initdb$(X) $(OBJS) localtime.c
+ 	rm -rf tmp_check
++ifeq ($(PORTNAME), emscripten)
++	rm -f initdb.wasm
++endif
+ 
+ # ensure that changes in datadir propagate into object file
+ initdb.o: initdb.c $(top_builddir)/src/Makefile.global
+diff --git a/src/bin/pg_config/Makefile b/src/bin/pg_config/Makefile
+index 38169b0ded5b04e0d12e82cc39865e3d6703d5b6..df163ea5a007b319c6c4125526fecaa5462f2ad3 100644
+--- a/src/bin/pg_config/Makefile
++++ b/src/bin/pg_config/Makefile
+@@ -24,18 +24,39 @@ all: pg_config
+ pg_config: $(OBJS) | submake-libpgport
+ 	$(CC) $(CFLAGS) $(OBJS) $(LDFLAGS) $(LDFLAGS_EX) $(LIBS) -o $@$(X)
+ 
++# the emscripten build generates multiple "runnable" files (.cjs/.mjs + .wasm)
++# but other postgres tools expect exacly 'pg_config' as an executable 
++# we create a pg_config link to run_pg_cmd.mjs, which in turn calls pg_config.cjs/.mjs
++# pg_config.wasm is implicitly expected to be in the same folder
++
+ install: all installdirs
+ 	$(INSTALL_SCRIPT) pg_config$(X) '$(DESTDIR)$(bindir)/pg_config$(X)'
++ifeq ($(PORTNAME), emscripten)
++	$(INSTALL_PROGRAM) pg_config.wasm '$(DESTDIR)$(bindir)/pg_config.wasm'
++	$(INSTALL_PROGRAM) pg_config$(X) '$(DESTDIR)$(bindir)/pg_config.mjs'
++	$(INSTALL_PROGRAM) $(top_srcdir)/pglite/scripts/run_pg_cmd.mjs '$(DESTDIR)$(bindir)/run_pg_cmd.mjs'
++	(cd '$(DESTDIR)$(bindir)' && ln -sf 'run_pg_cmd.mjs' 'pg_config')
++endif
+ 
+ installdirs:
+ 	$(MKDIR_P) '$(DESTDIR)$(bindir)'
+ 
+ uninstall:
+ 	rm -f '$(DESTDIR)$(bindir)/pg_config$(X)'
++ifeq ($(PORTNAME), emscripten)
++	rm -f '$(DESTDIR)$(bindir)/pg_config.wasm'
++	rm -f '$(DESTDIR)$(bindir)/pg_config.mjs'
++	rm -f '$(DESTDIR)$(bindir)/run_pg_cmd.mjs'
++	rm -f '$(DESTDIR)$(bindir)/pg_config'
++endif
+ 
+ clean distclean:
+ 	rm -f pg_config$(X) $(OBJS)
+ 	rm -rf tmp_check
++ifeq ($(PORTNAME), emscripten)
++	rm -f pg_config.wasm
++	rm -f pg_config
++endif
+ 
+ check:
+ 	$(prove_check)
+diff --git a/src/bin/pg_ctl/Makefile b/src/bin/pg_ctl/Makefile
+index 1c4bb324714dd800ae2d983642741e2d8e3b49f0..47313769eda3d0727ed67faa95939f465b515685 100644
+--- a/src/bin/pg_ctl/Makefile
++++ b/src/bin/pg_ctl/Makefile
+@@ -35,12 +35,23 @@ pg_ctl: $(OBJS) | submake-libpgport $(SUBMAKE_LIBPQ)
+ 
+ install: all installdirs
+ 	$(INSTALL_PROGRAM) pg_ctl$(X) '$(DESTDIR)$(bindir)/pg_ctl$(X)'
++ifeq ($(PORTNAME), emscripten)
++	$(INSTALL_PROGRAM) pg_ctl.wasm '$(DESTDIR)$(bindir)/pg_ctl.wasm'
++	$(INSTALL_PROGRAM) pg_ctl$(X) '$(DESTDIR)$(bindir)/pg_ctl.mjs'
++	$(INSTALL_PROGRAM) $(top_srcdir)/pglite/scripts/run_pg_cmd.mjs '$(DESTDIR)$(bindir)/run_pg_cmd.mjs'
++	(cd '$(DESTDIR)$(bindir)' && ln -sf 'run_pg_cmd.mjs' 'pg_ctl')
++endif
+ 
+ installdirs:
+ 	$(MKDIR_P) '$(DESTDIR)$(bindir)'
+ 
+ uninstall:
+ 	rm -f '$(DESTDIR)$(bindir)/pg_ctl$(X)'
++ifeq ($(PORTNAME), emscripten)
++	rm -f '$(DESTDIR)$(bindir)/pg_ctl.wasm'
++	rm -f '$(DESTDIR)$(bindir)/pg_ctl.mjs'
++	rm -f '$(DESTDIR)$(bindir)/pg_ctl'
++endif
+ 
+ clean distclean:
+ 	rm -f pg_ctl$(X) $(OBJS)
+diff --git a/src/bin/pg_dump/Makefile b/src/bin/pg_dump/Makefile
+index fa795883e9f30a74f2f308cf4ff483995929c026..882d5f84abe99a7c05bbbcb8f8ac77ae4c6fcbaa 100644
+--- a/src/bin/pg_dump/Makefile
++++ b/src/bin/pg_dump/Makefile
+@@ -58,6 +58,11 @@ install: all installdirs
+ 	$(INSTALL_PROGRAM) pg_dump$(X) '$(DESTDIR)$(bindir)'/pg_dump$(X)
+ 	$(INSTALL_PROGRAM) pg_restore$(X) '$(DESTDIR)$(bindir)'/pg_restore$(X)
+ 	$(INSTALL_PROGRAM) pg_dumpall$(X) '$(DESTDIR)$(bindir)'/pg_dumpall$(X)
++ifeq ($(PORTNAME), emscripten)
++	$(INSTALL_PROGRAM) pg_dump.wasm '$(DESTDIR)$(bindir)/pg_dump.wasm'
++	$(INSTALL_PROGRAM) pg_restore.wasm '$(DESTDIR)$(bindir)/pg_restore.wasm'
++	$(INSTALL_PROGRAM) pg_dumpall.wasm '$(DESTDIR)$(bindir)/pg_dumpall.wasm'
++endif
+ 
+ installdirs:
+ 	$(MKDIR_P) '$(DESTDIR)$(bindir)'
+@@ -70,7 +75,13 @@ installcheck:
+ 
+ uninstall:
+ 	rm -f $(addprefix '$(DESTDIR)$(bindir)'/, pg_dump$(X) pg_restore$(X) pg_dumpall$(X))
++ifeq ($(PORTNAME), emscripten)
++	rm -f $(addprefix '$(DESTDIR)$(bindir)'/, pg_dump.wasm pg_restore.wasm pg_dumpall.wasm)
++endif
+ 
+ clean distclean:
+ 	rm -f pg_dump$(X) pg_restore$(X) pg_dumpall$(X) $(OBJS) pg_dump.o common.o pg_dump_sort.o pg_restore.o pg_dumpall.o
+ 	rm -rf tmp_check
++ifeq ($(PORTNAME), emscripten)
++	rm -f pg_dump.wasm pg_restore.wasm pg_dumpall.wasm
++endif
+\ No newline at end of file
+diff --git a/src/include/port/emscripten.h b/src/include/port/emscripten.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..369dea61a8c319453d3f3acda15842f5454fa5c7
+--- /dev/null
++++ b/src/include/port/emscripten.h
+@@ -0,0 +1,16 @@
++#ifndef I_WASM
++#define I_WASM
++
++// #include "port/wasm_common.h"
++
++#define WAIT_USE_POLL 1
++
++#define HAVE_LINUX_EIDRM_BUG
++
++#define PLATFORM_DEFAULT_WAL_SYNC_METHOD	WAL_SYNC_METHOD_FDATASYNC
++
++#define COPY_OFF
++#define PGDLLIMPORT
++#define PG_FORCE_DISABLE_INLINE
++
++#endif // I_WASM
+\ No newline at end of file
+diff --git a/src/makefiles/Makefile.emscripten b/src/makefiles/Makefile.emscripten
+new file mode 100644
+index 0000000000000000000000000000000000000000..a2b97d7c026c482a95cb5aa03846d5fe9177a321
+--- /dev/null
++++ b/src/makefiles/Makefile.emscripten
+@@ -0,0 +1,22 @@
++# Use --enable-new-dtags to generate DT_RUNPATH instead of DT_RPATH.
++# This allows LD_LIBRARY_PATH to still work when needed.
++rpath = 
++AROPT = crs
++
++# Rule for building a shared library from a single .o file
++%.so: %.o
++	$(CC) $(CFLAGS) $< $(LDFLAGS) $(LDFLAGS_SL) -shared -o $@
++# Use --enable-new-dtags to generate DT_RUNPATH instead of DT_RPATH.
++# This allows LD_LIBRARY_PATH to still work when needed.
++rpath = 
++AROPT = crs
++
++# Rule for building a shared library from a single .o file
++%.so: %.o
++	$(CC) $(CFLAGS) $< $(LDFLAGS) $(LDFLAGS_SL) -shared -o $@
++
++emscripten_include_dir := $(pkgincludedir)/emscripten
++emscripten_base_dir := $(emscripten_include_dir)/base
++emscripten_imports_dir := /install/pglite/imports
++emscripten_extension_dir := $(emscripten_include_dir)/extension
++emscripten_extension_imports_dir := $(emscripten_extension_dir)/imports
+\ No newline at end of file
+diff --git a/src/makefiles/pgxs.mk b/src/makefiles/pgxs.mk
+index 039cee3dfe5d97c08b51d24b917cc3a9de29ed52..d1e223213e0ab62aaa0e3e8c081acaf4eb713d2c 100644
+--- a/src/makefiles/pgxs.mk
++++ b/src/makefiles/pgxs.mk
+@@ -249,6 +249,11 @@ ifdef MODULES
+ ifeq ($(with_llvm), yes)
+ 	$(foreach mod, $(MODULES), $(call install_llvm_module,$(mod),$(mod).bc))
+ endif # with_llvm
++ifeq ($(PORTNAME), emscripten)
++	find . -name "*.o" -exec $(LLVM_NM) --undefined-only {} \; | awk '{print $$2}' | sed '/^$$/d' | sort -u > '$(MODULES).undef.txt'
++	find . -type f \( -name "*.o" -o -name "*.so" \) -exec $(LLVM_NM) --defined-only {} \;   | awk '$$2 ~ /^[TDB]$$/ {print $$3}' | sed '/^$$/d' | sort -u > '$(MODULES).defs.txt'
++	comm -23 '$(MODULES).undef.txt' '$(MODULES).defs.txt' > '$(emscripten_extension_imports_dir)/$(MODULES).imports'
++endif # PORTNAME=emscripten
+ endif # MODULES
+ ifdef DOCS
+ ifdef docdir
+@@ -271,6 +276,11 @@ ifdef MODULE_big
+ ifeq ($(with_llvm), yes)
+ 	$(call install_llvm_module,$(MODULE_big),$(OBJS))
+ endif # with_llvm
++ifeq ($(PORTNAME), emscripten)
++	find . -name "*.o" -exec $(LLVM_NM) --undefined-only {} \; | awk '{print $$2}' | sed '/^$$/d' | sort -u > '$(MODULE_big).undef.txt'
++	find . -type f \( -name "*.o" -o -name "*.so" \) -exec $(LLVM_NM) --defined-only   {} \; | awk '$$2 ~ /^[TDB]$$/ {print $$3}' | sed '/^$$/d' | sort -u > '$(MODULE_big).defs.txt'
++	comm -23 '$(MODULE_big).undef.txt' '$(MODULE_big).defs.txt' > '$(emscripten_extension_imports_dir)/$(MODULE_big).imports'
++endif # PORTNAME=emscripten
+ 
+ install: install-lib
+ endif # MODULE_big
+@@ -297,6 +307,9 @@ endif # DOCS
+ ifneq (,$(PROGRAM)$(SCRIPTS)$(SCRIPTS_built))
+ 	$(MKDIR_P) '$(DESTDIR)$(bindir)'
+ endif
++ifeq ($(PORTNAME), emscripten)
++	$(MKDIR_P) '$(DESTDIR)$(emscripten_extension_imports_dir)'
++endif
+ 
+ ifdef MODULE_big
+ installdirs: installdirs-lib
+@@ -318,6 +331,9 @@ ifdef MODULES
+ ifeq ($(with_llvm), yes)
+ 	$(foreach mod, $(MODULES), $(call uninstall_llvm_module,$(mod)))
+ endif # with_llvm
++ifeq ($(PORTNAME), emscripten)
++	rm -f '$(DESTDIR)$(emscripten_extension_imports_dir)/$(MODULES).imports'
++endif
+ endif # MODULES
+ ifdef DOCS
+ 	rm -f $(addprefix '$(DESTDIR)$(docdir)/$(docmoduledir)'/, $(DOCS))
+@@ -339,6 +355,9 @@ ifdef MODULE_big
+ ifeq ($(with_llvm), yes)
+ 	$(call uninstall_llvm_module,$(MODULE_big))
+ endif # with_llvm
++ifeq ($(PORTNAME), emscripten)
++	rm -f '$(DESTDIR)$(emscripten_extension_imports_dir)/$(MODULE_big).imports'
++endif
+ 
+ uninstall: uninstall-lib
+ endif # MODULE_big
+diff --git a/src/pl/plpgsql/src/Makefile b/src/pl/plpgsql/src/Makefile
+index 63cb96fae3efc9a2e2c546252819bed743a8b408..7bdf2cd3f1e5189553411ec8fee24a21e3cf38b5 100644
+--- a/src/pl/plpgsql/src/Makefile
++++ b/src/pl/plpgsql/src/Makefile
+@@ -53,11 +53,20 @@ install: all install-lib install-data install-headers
+ installdirs: installdirs-lib
+ 	$(MKDIR_P) '$(DESTDIR)$(datadir)/extension'
+ 	$(MKDIR_P) '$(DESTDIR)$(includedir_server)'
++ifeq ($(PORTNAME), emscripten)
++	$(MKDIR_P) '$(DESTDIR)$(emscripten_extension_imports_dir)'
++endif
+ 
+ uninstall: uninstall-lib uninstall-data uninstall-headers
+ 
+ install-data: installdirs
+ 	$(INSTALL_DATA) $(addprefix $(srcdir)/, $(DATA)) '$(DESTDIR)$(datadir)/extension/'
++ifeq ($(PORTNAME), emscripten)
++	$(LLVM_NM) -u $(OBJS)    | awk '{print $$2}'              | sed '/^$$/d' | sort -u > undef.txt
++	$(LLVM_NM)    $(OBJS)    | awk '$$2 ~ /^[TDB]$$/ {print $$3}' | sed '/^$$/d' | sort -u > defs.txt
++	comm -23 undef.txt defs.txt > '$(DESTDIR)$(emscripten_extension_imports_dir)/$(NAME).imports'
++	rm -f undef.txt defs.txt
++endif
+ 
+ # The plpgsql.h header file is needed by instrumentation plugins
+ install-headers: installdirs
+@@ -65,6 +74,9 @@ install-headers: installdirs
+ 
+ uninstall-data:
+ 	rm -f $(addprefix '$(DESTDIR)$(datadir)/extension'/, $(notdir $(DATA)))
++ifeq ($(PORTNAME), emscripten)
++	rm -f '$(DESTDIR)$(emscripten_extension_imports_dir)/$(NAME).imports'
++endif
+ 
+ uninstall-headers:
+ 	rm -f '$(DESTDIR)$(includedir_server)/plpgsql.h'
+diff --git a/src/template/emscripten b/src/template/emscripten
+new file mode 100644
+index 0000000000000000000000000000000000000000..78edf48a06d4dc96fd4289ee7cfd917bf7d3d040
+--- /dev/null
++++ b/src/template/emscripten
+@@ -0,0 +1,55 @@
++# src/template/emscripten
++
++# Prefer unnamed POSIX semaphores if available, unless user overrides choice
++if test x"$PREFERRED_SEMAPHORES" = x"" ; then
++  PREFERRED_SEMAPHORES=UNNAMED_POSIX
++fi
++
++# Force _GNU_SOURCE on; plperl is broken with Perl 5.8.0 otherwise
++# This is also required for ppoll(2), and perhaps other things
++CPPFLAGS="$CPPFLAGS -D_GNU_SOURCE"
++
++# Extra CFLAGS for code that will go into a shared library
++CFLAGS_SL="-fPIC"
++
++# src/template/emscripten
++
++# Prefer unnamed POSIX semaphores if available, unless user overrides choice
++if test x"$PREFERRED_SEMAPHORES" = x"" ; then
++  PREFERRED_SEMAPHORES=UNNAMED_POSIX
++fi
++
++# Force _GNU_SOURCE on; plperl is broken with Perl 5.8.0 otherwise
++# This is also required for ppoll(2), and perhaps other things
++CPPFLAGS="$CPPFLAGS -D_GNU_SOURCE"
++
++# Extra CFLAGS for code that will go into a shared library
++CFLAGS_SL="-fPIC"
++
++# src/template/emscripten
++
++# Prefer unnamed POSIX semaphores if available, unless user overrides choice
++if test x"$PREFERRED_SEMAPHORES" = x"" ; then
++  PREFERRED_SEMAPHORES=UNNAMED_POSIX
++fi
++
++# Force _GNU_SOURCE on; plperl is broken with Perl 5.8.0 otherwise
++# This is also required for ppoll(2), and perhaps other things
++CPPFLAGS="$CPPFLAGS -D_GNU_SOURCE"
++
++# Extra CFLAGS for code that will go into a shared library
++CFLAGS_SL="-fPIC"
++
++# src/template/emscripten
++
++# Prefer unnamed POSIX semaphores if available, unless user overrides choice
++if test x"$PREFERRED_SEMAPHORES" = x"" ; then
++  PREFERRED_SEMAPHORES=UNNAMED_POSIX
++fi
++
++# Force _GNU_SOURCE on; plperl is broken with Perl 5.8.0 otherwise
++# This is also required for ppoll(2), and perhaps other things
++CPPFLAGS="$CPPFLAGS -D_GNU_SOURCE"
++
++# Extra CFLAGS for code that will go into a shared library
++CFLAGS_SL="-fPIC"
+\ No newline at end of file
+diff --git a/src/timezone/Makefile b/src/timezone/Makefile
+index c85e831247a5a8cf7035efa2ce6b73264b2ba8d7..d871b67582378f589b47db63fdf80b5844d09cd2 100644
+--- a/src/timezone/Makefile
++++ b/src/timezone/Makefile
+@@ -48,8 +48,12 @@ endif
+ # but GNU make versions <= 3.78.1 or perhaps later have a bug
+ # that causes a segfault;  GNU make 3.81 or later fixes this.
+ ifeq (,$(ZIC))
++ifeq ($(PORTNAME), emscripten)
++ZIC= /usr/sbin/zic
++else
+ ZIC= ./zic
+ endif
++endif
+ 
+ zic: $(ZICOBJS) | submake-libpgport
+ 	$(CC) $(CFLAGS) $(ZICOBJS) $(LDFLAGS) $(LDFLAGS_EX) $(LIBS) -o $@$(X)
+@@ -77,3 +81,6 @@ endif
+ 
+ clean distclean:
+ 	rm -f zic$(X) $(ZICOBJS) abbrevs.txt
++ifeq ($(PORTNAME), emscripten)
++	rm -f zic.wasm
++endif
+\ No newline at end of file

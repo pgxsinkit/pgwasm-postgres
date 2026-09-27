@@ -16,7 +16,7 @@
     "prepare": "git config core.hooksPath .githooks || true",
     "test": "bun test ./tests",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "validate": "bun run format && bun run check",
+    "validate": "bun run format && bun run check && bun run patches:check",
     "validate:full": "bun run validate"
   },
   "devDependencies": {

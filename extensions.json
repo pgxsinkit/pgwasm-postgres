@@ -1,0 +1,59 @@
+{
+  "$comment": "TEMPORARY. The nine third-party extensions electric-sql/postgres-pglite b133782 pins as gitlinks (from its tree) with the URLs of its .gitmodules. Data only: the byte-identity build (step 2) clones them at these commits. Deleted with the amcheck-only build (ADR-0001 decision 3).",
+  "source": {
+    "repository": "https://github.com/electric-sql/postgres-pglite",
+    "commit": "b133782cd759f08b3aeb263b80a963b39c7b7af1"
+  },
+  "extensions": [
+    {
+      "path": "pglite/other_extensions/age",
+      "url": "https://github.com/apache/age.git",
+      "commit": "806fa2ebdb300b3e76ef30cdba61803babbf2683",
+      "branch": "PG18"
+    },
+    {
+      "path": "pglite/other_extensions/pg_hashids",
+      "url": "https://github.com/iCyberon/pg_hashids",
+      "commit": "8c404dd86408f3a987a3ff6825ac7e42bd618b98"
+    },
+    {
+      "path": "pglite/other_extensions/pg_ivm",
+      "url": "https://github.com/sraoss/pg_ivm.git",
+      "commit": "b66487f7a6f8deee3998e858d773e19923e4bd4b"
+    },
+    {
+      "path": "pglite/other_extensions/pg_textsearch",
+      "url": "https://github.com/timescale/pg_textsearch/",
+      "commit": "578ff529894992fb9e67cae4c69424e65c84868e"
+    },
+    {
+      "path": "pglite/other_extensions/pg_uuidv7",
+      "url": "https://github.com/fboulnois/pg_uuidv7/",
+      "commit": "c707aae2411181be4802f5fa565b44d9c0bcbc29"
+    },
+    {
+      "path": "pglite/other_extensions/pgmq",
+      "url": "https://github.com/pgmq/pgmq",
+      "commit": "885251cf4dcb4853d7fa253f56e382d84d5f0821"
+    },
+    {
+      "path": "pglite/other_extensions/pgtap",
+      "url": "https://github.com/theory/pgtap.git",
+      "commit": "b89585a64ffef012ff0f219de9197c669aa8485b"
+    },
+    {
+      "path": "pglite/other_extensions/postgis",
+      "url": "https://github.com/postgis/postgis.git",
+      "commit": "08d9b9f749fa3531591055db2a736bfb6df47006"
+    },
+    {
+      "path": "pglite/other_extensions/vector",
+      "url": "https://github.com/pgvector/pgvector.git",
+      "commit": "778dacf20c07caf904557a88705142631818d8cb"
+    }
+  ],
+  "notes": [
+    "The branch field is .gitmodules' `branch = PG18` for age; the commit is what is built.",
+    "b133782's .gitmodules also declares pglite/other_extensions/pgvector (the pgvector URL again) with no gitlink behind it; nothing is built from it, so it is not listed."
+  ]
+}

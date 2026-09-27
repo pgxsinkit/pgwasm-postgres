@@ -1,0 +1,201 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Anton Melser <anton.melser@outlook.com>
+Date: Sun, 27 Sep 2026 12:42:23 +0800
+Subject: [PATCH] backend-single-process: run the backend as one embedded
+ process
+
+PGlite runs one backend inside the host, with no postmaster, no
+auxiliary processes and a data directory on the Emscripten filesystem.
+Under __PGLITE__ (and __EMSCRIPTEN__ for postinit.c):
+
+- xlog.c: XLogWrite does not request a checkpoint when a WAL segment
+  fills.
+- checkpointer.c: RequestCheckpoint always runs the checkpoint in the
+  calling process, as a standalone backend does.
+- posix_sema.c: PGSemaphoreReset does a single sem_trywait.
+- fd.c: pg_flush_data calls fsync instead of the platform's flush
+  hints.
+- miscinit.c: checkDataDir skips the data directory's owner and
+  permission checks.
+- postinit.c: a standalone backend started for a user other than
+  WASM_USERNAME ("postgres") initialises that user's session instead of
+  the bootstrap superuser's.
+- guc.c: ReportGUCOption does not update last_reported.
+
+Derived from electric-sql/postgres-pglite b133782cd759f08b3aeb263b80a963b39c7b7af1 (PostgreSQL 18.3 fork, PostgreSQL License)
+---
+ src/backend/access/transam/xlog.c     |  2 ++
+ src/backend/port/posix_sema.c         |  5 +++++
+ src/backend/postmaster/checkpointer.c |  2 ++
+ src/backend/storage/file/fd.c         |  5 +++++
+ src/backend/utils/init/miscinit.c     |  6 +++---
+ src/backend/utils/init/postinit.c     | 16 ++++++++++++++++
+ src/backend/utils/misc/guc.c          |  2 ++
+ 7 files changed, 35 insertions(+), 3 deletions(-)
+
+diff --git a/src/backend/access/transam/xlog.c b/src/backend/access/transam/xlog.c
+index d03db6b1f85cd474e29a889bf6ba331233a3dac0..41d1ec7ce905746999649941cc416d2d560735b1 100644
+--- a/src/backend/access/transam/xlog.c
++++ b/src/backend/access/transam/xlog.c
+@@ -2496,12 +2496,14 @@ XLogWrite(XLogwrtRqst WriteRqst, TimeLineID tli, bool flexible)
+ 				 * like a checkpoint is needed, forcibly update RedoRecPtr and
+ 				 * recheck.
+ 				 */
++#ifndef __PGLITE__					
+ 				if (IsUnderPostmaster && XLogCheckpointNeeded(openLogSegNo))
+ 				{
+ 					(void) GetRedoRecPtr();
+ 					if (XLogCheckpointNeeded(openLogSegNo))
+ 						RequestCheckpoint(CHECKPOINT_CAUSE_XLOG);
+ 				}
++#endif				
+ 			}
+ 		}
+ 
+diff --git a/src/backend/port/posix_sema.c b/src/backend/port/posix_sema.c
+index 269c7460817ec74de780cb1f22eddf8ac096ea4d..9bbcbb19f8d3b701012b9027580a1d43d654ec62 100644
+--- a/src/backend/port/posix_sema.c
++++ b/src/backend/port/posix_sema.c
+@@ -293,6 +293,10 @@ PGSemaphoreCreate(void)
+ void
+ PGSemaphoreReset(PGSemaphore sema)
+ {
++#ifdef __PGLITE__
++    sem_trywait(PG_SEM_REF(sema));
++    return;
++#else
+ 	/*
+ 	 * There's no direct API for this in POSIX, so we have to ratchet the
+ 	 * semaphore down to 0 with repeated trywait's.
+@@ -308,6 +312,7 @@ PGSemaphoreReset(PGSemaphore sema)
+ 			elog(FATAL, "sem_trywait failed: %m");
+ 		}
+ 	}
++#endif	
+ }
+ 
+ /*
+diff --git a/src/backend/postmaster/checkpointer.c b/src/backend/postmaster/checkpointer.c
+index 3914ac8da2622f5b2301d666f7eb68d048f79837..57ace9913d9584e00fb786ec665be2e727caba23 100644
+--- a/src/backend/postmaster/checkpointer.c
++++ b/src/backend/postmaster/checkpointer.c
+@@ -1009,7 +1009,9 @@ RequestCheckpoint(int flags)
+ 	/*
+ 	 * If in a standalone backend, just do it ourselves.
+ 	 */
++#ifndef __PGLITE__	
+ 	if (!IsPostmasterEnvironment)
++#endif
+ 	{
+ 		/*
+ 		 * There's no point in doing slow checkpoints in a standalone backend,
+diff --git a/src/backend/storage/file/fd.c b/src/backend/storage/file/fd.c
+index 73fa05278a3991d384094d77a9a3496ddeca28cd..b2d45cf76c7e228492a2495be642933734044ef4 100644
+--- a/src/backend/storage/file/fd.c
++++ b/src/backend/storage/file/fd.c
+@@ -524,6 +524,10 @@ pg_file_exists(const char *name)
+ void
+ pg_flush_data(int fd, off_t offset, off_t nbytes)
+ {
++#ifdef __PGLITE__
++    //int res = sync_file_range(fd, offset, nbytes, SYNC_FILE_RANGE_WAIT_BEFORE | SYNC_FILE_RANGE_WRITE | SYNC_FILE_RANGE_WAIT_AFTER);
++    (void)fsync(fd);
++#else
+ 	/*
+ 	 * Right now file flushing is primarily used to avoid making later
+ 	 * fsync()/fdatasync() calls have less impact. Thus don't trigger flushes
+@@ -694,6 +698,7 @@ retry:
+ 		return;
+ 	}
+ #endif
++#endif // ifdef __PGLITE__
+ }
+ 
+ /*
+diff --git a/src/backend/utils/init/miscinit.c b/src/backend/utils/init/miscinit.c
+index df182577a19e2a95c03bc536799dfab23bcddf84..8648b8ef42cb1f7884474afb08300a527160fac7 100644
+--- a/src/backend/utils/init/miscinit.c
++++ b/src/backend/utils/init/miscinit.c
+@@ -380,7 +380,7 @@ checkDataDir(void)
+ 	 *
+ 	 * XXX can we safely enable this check on Windows?
+ 	 */
+-#if !defined(WIN32) && !defined(__CYGWIN__)
++#if !defined(WIN32) && !defined(__CYGWIN__) && !defined(__PGLITE__)
+ 	if (stat_buf.st_uid != geteuid())
+ 		ereport(FATAL,
+ 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+@@ -400,7 +400,7 @@ checkDataDir(void)
+ 	 * be proper support for Unix-y file permissions.  Need to think of a
+ 	 * reasonable check to apply on Windows.
+ 	 */
+-#if !defined(WIN32) && !defined(__CYGWIN__)
++#if !defined(WIN32) && !defined(__CYGWIN__) && !defined(__PGLITE__)
+ 	if (stat_buf.st_mode & PG_MODE_MASK_GROUP)
+ 		ereport(FATAL,
+ 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+@@ -421,7 +421,7 @@ checkDataDir(void)
+ 	 * Suppress when on Windows, because there may not be proper support for
+ 	 * Unix-y file permissions.
+ 	 */
+-#if !defined(WIN32) && !defined(__CYGWIN__)
++#if !defined(WIN32) && !defined(__CYGWIN__) && !defined(__PGLITE__)
+ 	SetDataDirectoryCreatePerm(stat_buf.st_mode);
+ 
+ 	umask(pg_mode_mask);
+diff --git a/src/backend/utils/init/postinit.c b/src/backend/utils/init/postinit.c
+index c86ceefda940b8f2fb500786253f9f23ffea3f8d..6f2308ee7f2b08b489888654a013fcde3f731a80 100644
+--- a/src/backend/utils/init/postinit.c
++++ b/src/backend/utils/init/postinit.c
+@@ -708,6 +708,12 @@ BaseInit(void)
+  *		Be very careful with the order of calls in the InitPostgres function.
+  * --------------------------------
+  */
++
++// force the name used with --single
++#if !defined(WASM_USERNAME)
++#define WASM_USERNAME "postgres"
++#endif
++
+ void
+ InitPostgres(const char *in_dbname, Oid dboid,
+ 			 const char *username, Oid useroid,
+@@ -870,8 +876,18 @@ InitPostgres(const char *in_dbname, Oid dboid,
+ 	}
+ 	else if (!IsUnderPostmaster)
+ 	{
++#if defined(__EMSCRIPTEN__)
++if (!strcmp( username , WASM_USERNAME )) {
++#endif		
+ 		InitializeSessionUserIdStandalone();
+ 		am_superuser = true;
++#if defined(__EMSCRIPTEN__)
++} else {
++        //puts("# 894: switching session id");
++        InitializeSessionUserId(username, InvalidOid, false);
++		am_superuser = superuser();
++}
++#endif		
+ 		if (!ThereIsAtLeastOneRole())
+ 			ereport(WARNING,
+ 					(errcode(ERRCODE_UNDEFINED_OBJECT),
+diff --git a/src/backend/utils/misc/guc.c b/src/backend/utils/misc/guc.c
+index ce5449f287853305082c84deaf2975950fdd1c5b..f4bbc04d76517da38eff0a71a9dcad39a56b2630 100644
+--- a/src/backend/utils/misc/guc.c
++++ b/src/backend/utils/misc/guc.c
+@@ -2645,6 +2645,7 @@ ReportGUCOption(struct config_generic *record)
+ 		pq_sendstring(&msgbuf, val);
+ 		pq_endmessage(&msgbuf);
+ 
++#ifndef __PGLITE__		
+ 		/*
+ 		 * We need a long-lifespan copy.  If guc_strdup() fails due to OOM,
+ 		 * we'll set last_reported to NULL and thereby possibly make a
+@@ -2652,6 +2653,7 @@ ReportGUCOption(struct config_generic *record)
+ 		 */
+ 		guc_free(record->last_reported);
+ 		record->last_reported = guc_strdup(LOG, val);
++#endif		
+ 	}
+ 
+ 	pfree(val);

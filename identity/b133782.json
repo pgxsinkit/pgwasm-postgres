@@ -1,0 +1,33 @@
+{
+  "$comment": "Tree identity (ADR-0001 decision 2): REL_18_3 + patches/ + overlay/ must give exactly this tree. Checked by patches:check until 18.3.0 is tagged, then deleted.",
+  "source": {
+    "repository": "https://github.com/electric-sql/postgres-pglite.git",
+    "commit": "b133782cd759f08b3aeb263b80a963b39c7b7af1",
+    "tree": "b4a1252f54debf9e9621682daf9895f119a3f7d7"
+  },
+  "upstream": {
+    "tag": "REL_18_3",
+    "commit": "62d6c7d3df6287f1bd83199c1a746e50d31571a0"
+  },
+  "excludedPaths": [
+    ".gitmodules",
+    "pglite/other_extensions/age",
+    "pglite/other_extensions/pg_hashids",
+    "pglite/other_extensions/pg_ivm",
+    "pglite/other_extensions/pg_textsearch",
+    "pglite/other_extensions/pg_uuidv7",
+    "pglite/other_extensions/pgmq",
+    "pglite/other_extensions/pgtap",
+    "pglite/other_extensions/postgis",
+    "pglite/other_extensions/vector"
+  ],
+  "expectedTree": "a3b4114a08d20cc5d97313d23c4e93376cd5861b",
+  "derivation": [
+    "git init -q derive && cd derive",
+    "git fetch -q --depth 1 https://github.com/electric-sql/postgres-pglite.git b133782cd759f08b3aeb263b80a963b39c7b7af1",
+    "export GIT_INDEX_FILE=\"$PWD/.git/identity-index\"",
+    "git read-tree FETCH_HEAD",
+    "git rm -q --cached .gitmodules pglite/other_extensions/{age,pg_hashids,pg_ivm,pg_textsearch,pg_uuidv7,pgmq,pgtap,postgis,vector}",
+    "git write-tree"
+  ]
+}
