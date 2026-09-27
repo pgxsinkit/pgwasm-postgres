@@ -13,6 +13,8 @@ export interface Layout {
   readonly identityDir: string;
   /** The temporary manifest of the third-party extensions that were gitlinks in the source. */
   readonly extensionsFile: string;
+  /** The builder image's definition (decision 9): its Containerfile and the `make` resource cap. */
+  readonly builderDir: string;
   /** Gitignored: the upstream clone and scratch worktrees. */
   readonly cacheDir: string;
   /** The bare, shallow clone holding only the upstream tags fetched so far. */
@@ -32,6 +34,7 @@ export function layoutFor(root: string): Layout {
     overlayDir: join(root, "overlay"),
     identityDir: join(root, "identity"),
     extensionsFile: join(root, "extensions.json"),
+    builderDir: join(root, "builder"),
     cacheDir,
     cacheRepo: join(cacheDir, "upstream.git"),
     cacheGitConfig: join(cacheDir, "gitconfig"),

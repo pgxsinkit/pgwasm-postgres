@@ -1,0 +1,17 @@
+#!/bin/bash
+# A resource cap, not part of Electric's build, and it changes no compiler input: GNU make's bare `-j`
+# means "unlimited jobs", which exhausts memory on a small host; this rewrites it to `-j4`. Explicit
+# counts (postgis's -j1, the Containerfile's -j"${JOBS}") pass through unchanged, and sub-makes share the
+# top-level jobserver. `bun run builder:image` bind-mounts it read-only at /usr/local/bin/make and gmake
+# for every RUN step (CMake picks gmake first; nothing lands in the image), and `bun run build` at
+# /usr/local/bin/make, which precedes /usr/bin in the image's PATH. Bash, because it runs inside the
+# builder image, which has no Bun.
+args=()
+for a in "$@"; do
+  if [ "$a" = "-j" ] || [ "$a" = "--jobs" ]; then
+    args+=("-j4")
+  else
+    args+=("$a")
+  fi
+done
+exec /usr/bin/make "${args[@]}"

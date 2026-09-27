@@ -5,6 +5,7 @@
   "license": "PostgreSQL",
   "type": "module",
   "scripts": {
+    "builder:image": "bun scripts/builder-image.ts",
     "check": "bun run typecheck && bun run lint && bun run test",
     "format": "oxfmt --config .oxfmtrc.jsonc --check .",
     "format:write": "oxfmt --config .oxfmtrc.jsonc --write .",
