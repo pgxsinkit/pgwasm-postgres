@@ -31,29 +31,24 @@ Add an "emscripten" port and the build hooks the PGlite build scripts
   version() names the build.
 - .gitignore ignores the build outputs.
 
-src/template/emscripten repeats its block four times and
-src/makefiles/Makefile.emscripten its first rules twice. They are
-carried as they are: the series has to reproduce the source tree exactly
-until its build is proven byte-identical.
-
 Derived from electric-sql/postgres-pglite b133782cd759f08b3aeb263b80a963b39c7b7af1 (PostgreSQL 18.3 fork, PostgreSQL License)
 ---
- .gitignore                        | 10 ++++++
+ .gitignore                        | 10 +++++++
  configure                         |  2 +-
  contrib/Makefile                  |  6 ++++
- src/Makefile.shlib                | 14 ++++++++
- src/backend/Makefile              | 48 +++++++++++++++++++++++++++
- src/bin/initdb/Makefile           |  9 +++++
- src/bin/pg_config/Makefile        | 21 ++++++++++++
+ src/Makefile.shlib                | 14 +++++++++
+ src/backend/Makefile              | 48 +++++++++++++++++++++++++++++++
+ src/bin/initdb/Makefile           |  9 ++++++
+ src/bin/pg_config/Makefile        | 21 ++++++++++++++
  src/bin/pg_ctl/Makefile           | 11 +++++++
  src/bin/pg_dump/Makefile          | 11 +++++++
- src/include/port/emscripten.h     | 16 +++++++++
- src/makefiles/Makefile.emscripten | 22 +++++++++++++
- src/makefiles/pgxs.mk             | 19 +++++++++++
- src/pl/plpgsql/src/Makefile       | 12 +++++++
- src/template/emscripten           | 55 +++++++++++++++++++++++++++++++
- src/timezone/Makefile             |  7 ++++
- 15 files changed, 262 insertions(+), 1 deletion(-)
+ src/include/port/emscripten.h     | 16 +++++++++++
+ src/makefiles/Makefile.emscripten | 14 +++++++++
+ src/makefiles/pgxs.mk             | 19 ++++++++++++
+ src/pl/plpgsql/src/Makefile       | 12 ++++++++
+ src/template/emscripten           | 13 +++++++++
+ src/timezone/Makefile             |  7 +++++
+ 15 files changed, 212 insertions(+), 1 deletion(-)
  create mode 100644 src/include/port/emscripten.h
  create mode 100644 src/makefiles/Makefile.emscripten
  create mode 100644 src/template/emscripten
@@ -370,18 +365,10 @@ index 0000000000000000000000000000000000000000..369dea61a8c319453d3f3acda15842f5
 \ No newline at end of file
 diff --git a/src/makefiles/Makefile.emscripten b/src/makefiles/Makefile.emscripten
 new file mode 100644
-index 0000000000000000000000000000000000000000..a2b97d7c026c482a95cb5aa03846d5fe9177a321
+index 0000000000000000000000000000000000000000..401d458943219df250a886c2bed6f46b6e3ac914
 --- /dev/null
 +++ b/src/makefiles/Makefile.emscripten
-@@ -0,0 +1,22 @@
-+# Use --enable-new-dtags to generate DT_RUNPATH instead of DT_RPATH.
-+# This allows LD_LIBRARY_PATH to still work when needed.
-+rpath = 
-+AROPT = crs
-+
-+# Rule for building a shared library from a single .o file
-+%.so: %.o
-+	$(CC) $(CFLAGS) $< $(LDFLAGS) $(LDFLAGS_SL) -shared -o $@
+@@ -0,0 +1,14 @@
 +# Use --enable-new-dtags to generate DT_RUNPATH instead of DT_RPATH.
 +# This allows LD_LIBRARY_PATH to still work when needed.
 +rpath = 
@@ -492,10 +479,10 @@ index 63cb96fae3efc9a2e2c546252819bed743a8b408..7bdf2cd3f1e5189553411ec8fee24a21
  	rm -f '$(DESTDIR)$(includedir_server)/plpgsql.h'
 diff --git a/src/template/emscripten b/src/template/emscripten
 new file mode 100644
-index 0000000000000000000000000000000000000000..78edf48a06d4dc96fd4289ee7cfd917bf7d3d040
+index 0000000000000000000000000000000000000000..33e2b56188e5e0d34b566508536067af95a07529
 --- /dev/null
 +++ b/src/template/emscripten
-@@ -0,0 +1,55 @@
+@@ -0,0 +1,13 @@
 +# src/template/emscripten
 +
 +# Prefer unnamed POSIX semaphores if available, unless user overrides choice
@@ -509,49 +496,6 @@ index 0000000000000000000000000000000000000000..78edf48a06d4dc96fd4289ee7cfd917b
 +
 +# Extra CFLAGS for code that will go into a shared library
 +CFLAGS_SL="-fPIC"
-+
-+# src/template/emscripten
-+
-+# Prefer unnamed POSIX semaphores if available, unless user overrides choice
-+if test x"$PREFERRED_SEMAPHORES" = x"" ; then
-+  PREFERRED_SEMAPHORES=UNNAMED_POSIX
-+fi
-+
-+# Force _GNU_SOURCE on; plperl is broken with Perl 5.8.0 otherwise
-+# This is also required for ppoll(2), and perhaps other things
-+CPPFLAGS="$CPPFLAGS -D_GNU_SOURCE"
-+
-+# Extra CFLAGS for code that will go into a shared library
-+CFLAGS_SL="-fPIC"
-+
-+# src/template/emscripten
-+
-+# Prefer unnamed POSIX semaphores if available, unless user overrides choice
-+if test x"$PREFERRED_SEMAPHORES" = x"" ; then
-+  PREFERRED_SEMAPHORES=UNNAMED_POSIX
-+fi
-+
-+# Force _GNU_SOURCE on; plperl is broken with Perl 5.8.0 otherwise
-+# This is also required for ppoll(2), and perhaps other things
-+CPPFLAGS="$CPPFLAGS -D_GNU_SOURCE"
-+
-+# Extra CFLAGS for code that will go into a shared library
-+CFLAGS_SL="-fPIC"
-+
-+# src/template/emscripten
-+
-+# Prefer unnamed POSIX semaphores if available, unless user overrides choice
-+if test x"$PREFERRED_SEMAPHORES" = x"" ; then
-+  PREFERRED_SEMAPHORES=UNNAMED_POSIX
-+fi
-+
-+# Force _GNU_SOURCE on; plperl is broken with Perl 5.8.0 otherwise
-+# This is also required for ppoll(2), and perhaps other things
-+CPPFLAGS="$CPPFLAGS -D_GNU_SOURCE"
-+
-+# Extra CFLAGS for code that will go into a shared library
-+CFLAGS_SL="-fPIC"
-\ No newline at end of file
 diff --git a/src/timezone/Makefile b/src/timezone/Makefile
 index c85e831247a5a8cf7035efa2ce6b73264b2ba8d7..d871b67582378f589b47db63fdf80b5844d09cd2 100644
 --- a/src/timezone/Makefile
