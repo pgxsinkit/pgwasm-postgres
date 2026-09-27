@@ -1,0 +1,23 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      # No `bun-version`: setup-bun reads package.json's `packageManager`, which mise.toml matches for local work.
+      - uses: oven-sh/setup-bun@v2
+      # patches:check fetches the pinned upstream tag (shallow) into .cache/upstream.git; keep it between runs.
+      - uses: actions/cache@v6
+        with:
+          path: .cache/upstream.git
+          key: upstream-${{ hashFiles('upstream.json') }}
+      - run: bun install --frozen-lockfile
+      - run: bun run validate:full
