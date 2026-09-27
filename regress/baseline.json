@@ -1,22 +1,22 @@
 {
   "$comment": "The pg_regress baseline (ADR-0001 decision 6): each test of the schedule on the pinned tag, run through the TCP bridge on the build, with --use-existing --max-connections=1. A failed test's normalised diff is regress/diffs/<test>.diff; an unstable test's outcome or diff differed between the recorded runs. `tests` and `summary` are written by `bun run regress --record`; `groups` (why each failing or unstable test fails) are written by hand and kept by --record. `bun run regress` fails on a new failure, a changed diff or a newly unstable test, and reports a vanished failure.",
   "upstream": {
-    "tag": "REL_18_3",
-    "commit": "62d6c7d3df6287f1bd83199c1a746e50d31571a0"
+    "tag": "REL_18_6",
+    "commit": "724edf9bde9d356724ad384a2e196edc3c9f80f7"
   },
   "schedule": "parallel_schedule",
   "runs": 8,
   "recordedWith": {
-    "pglite.js": "cabac9d6a431cac2e3d70f112fec2dfd7ce518acced85181c417502ba366da5b",
-    "pglite.wasm": "acbf58c590c85ce5837de71d40c5aac818e2c811cc9b8e7c0becbbea4b1b093a",
-    "pglite.data": "67dccef2c115b0b8e0853ed6139054436dbda07c79c609f498d3fab8a7b1731d",
-    "initdb.js": "6852f5292d9528c7aa2093a853236f0ba2ee6777b9d43a10f17b04ef22886194",
-    "initdb.wasm": "4c8988dca3b2f0bbfd23a0714023e4822a2909ead01804f37acffd9ff3ca9f8a"
+    "pglite.js": "5969cf9cd1cf54661f9838e14a4435b6b4f169f741d77eee2a7c32531d8bc8ee",
+    "pglite.wasm": "9e30c88fb9bc8efe4e8e9a84b2c62a99cc55369b513b7bbda6f4ecb384110847",
+    "pglite.data": "0d836559779b3658b05e8b0fa74fe310d0f0c897ef2cbe4815ec3a3e8d7204e3",
+    "initdb.js": "5da5c8aa5443ba113153f49d71b6fdacd4b888b4d4547bc7d9b5a7c45f5356c7",
+    "initdb.wasm": "1691997a10d595f0850bc0f0eaffd1ed6cbb22e1de6faec7a5f925e09305d336"
   },
   "summary": {
-    "tests": 230,
+    "tests": 231,
     "passed": 178,
-    "failed": 48,
+    "failed": 49,
     "unstable": 4
   },
   "groups": {
@@ -33,7 +33,7 @@
       "tests": ["collate.icu.utf8"]
     },
     "regress-library": {
-      "reason": "The tests' C functions are missing (binary_coercible, widget_in, interpt_pp, test_enc_setup, test_enc_conversion, make_tuple_indirect, trigger_return_old, test_fdw_handler, …), and so is everything built on them (the widget type, the iexit view, the test foreign-data wrapper, opr_sanity's binary_coercible checks, conversion's test_enc_* checks). The run's --dlpath holds no regress.so: the build tree's own src/test/regress/regress.so is not a module the build ships, so pglite.wasm does not export 29 of its imports (IsBinaryCoercible, pg_do_encoding_conversion_buf, lseg_intersect, cpu_operator_cost, …) and its dlopen fails, and in this runtime a failed dlopen breaks every later one. Without the file, CREATE FUNCTION … AS :'regresslib' fails with 'could not access file' before any dlopen. conversion's diff also shows session-authorization (DROP USER after RESET SESSION AUTHORIZATION).",
+      "reason": "The tests' C functions are missing (binary_coercible, widget_in, interpt_pp, test_enc_setup, test_enc_conversion, test_bytea_to_text, make_tuple_indirect, trigger_return_old, test_fdw_handler, test_pglz_compress, test_pglz_decompress, …), and so is everything built on them (the widget type, the iexit view, the test foreign-data wrapper, opr_sanity's binary_coercible checks, conversion's test_enc_* checks, encoding's ascii() checks on invalid multibyte input, all of compression_pglz). The run's --dlpath holds no regress.so: the build tree's own src/test/regress/regress.so is not a module the build ships, so pglite.wasm does not export 32 of its imports (IsBinaryCoercible, pg_do_encoding_conversion_buf, lseg_intersect, cpu_operator_cost, pglz_compress, …) and its dlopen fails, and in this runtime a failed dlopen breaks every later one. Without the file, CREATE FUNCTION … AS :'regresslib' fails with 'could not access file' before any dlopen. conversion's and copy2's diffs also show session-authorization (DROP USER, and copy2's clean-up, after RESET SESSION AUTHORIZATION).",
       "tests": [
         "test_setup",
         "type_sanity",
@@ -51,7 +51,8 @@
         "select_views",
         "alter_generic",
         "opr_sanity",
-        "conversion"
+        "conversion",
+        "compression_pglz"
       ]
     },
     "session-authorization": {
@@ -322,11 +323,12 @@
     "partition_info": "ok",
     "tuplesort": "ok",
     "explain": "ok",
-    "compression": "ok",
     "memoize": "ok",
     "stats": "unstable",
     "predicate": "ok",
     "numa": "ok",
+    "compression": "ok",
+    "compression_pglz": "failed",
     "oidjoins": "ok",
     "event_trigger": "failed",
     "event_trigger_login": "failed",

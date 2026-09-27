@@ -9,7 +9,7 @@ diff -U3 expected/foreign_data.out results/foreign_data.out
  -- Clean up in case a prior regression run failed
  -- Suppress NOTICE messages when roles don't exist
  SET client_min_messages TO 'warning';
-@@ -102,11 +103,11 @@
+@@ -102,18 +103,16 @@
  CREATE FOREIGN DATA WRAPPER test_fdw HANDLER invalid_fdw_handler;  -- ERROR
  ERROR:  function invalid_fdw_handler must return type fdw_handler
  CREATE FOREIGN DATA WRAPPER test_fdw HANDLER test_fdw_handler HANDLER invalid_fdw_handler;  -- ERROR
@@ -19,12 +19,21 @@ diff -U3 expected/foreign_data.out results/foreign_data.out
 +ERROR:  function test_fdw_handler() does not exist
  CREATE FOREIGN DATA WRAPPER test_fdw HANDLER test_fdw_handler;
 +ERROR:  function test_fdw_handler() does not exist
+ -- should preserve dependency on test_fdw_handler
+ ALTER FOREIGN DATA WRAPPER test_fdw VALIDATOR postgresql_fdw_validator;
+-WARNING:  changing the foreign-data wrapper validator can cause the options for dependent objects to become invalid
++ERROR:  foreign-data wrapper "test_fdw" does not exist
+ DROP FUNCTION test_fdw_handler(); -- ERROR
+-ERROR:  cannot drop function test_fdw_handler() because other objects depend on it
+-DETAIL:  foreign-data wrapper test_fdw depends on function test_fdw_handler()
+-HINT:  Use DROP ... CASCADE to drop the dependent objects too.
++ERROR:  function test_fdw_handler() does not exist
  DROP FOREIGN DATA WRAPPER test_fdw;
 +ERROR:  foreign-data wrapper "test_fdw" does not exist
  -- ALTER FOREIGN DATA WRAPPER
  ALTER FOREIGN DATA WRAPPER foo OPTIONS (nonexistent 'fdw');         -- ERROR
  ERROR:  invalid option "nonexistent"
-@@ -213,11 +214,9 @@
+@@ -220,11 +219,9 @@
  ALTER FOREIGN DATA WRAPPER foo HANDLER invalid_fdw_handler;  -- ERROR
  ERROR:  function invalid_fdw_handler must return type fdw_handler
  ALTER FOREIGN DATA WRAPPER foo HANDLER test_fdw_handler HANDLER anything;  -- ERROR
@@ -38,7 +47,7 @@ diff -U3 expected/foreign_data.out results/foreign_data.out
  DROP FUNCTION invalid_fdw_handler();
  -- DROP FOREIGN DATA WRAPPER
  DROP FOREIGN DATA WRAPPER nonexistent;                      -- ERROR
-@@ -225,12 +224,12 @@
+@@ -232,12 +229,12 @@
  DROP FOREIGN DATA WRAPPER IF EXISTS nonexistent;
  NOTICE:  foreign-data wrapper "nonexistent" does not exist, skipping
  \dew+

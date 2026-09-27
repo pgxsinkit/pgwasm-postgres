@@ -1505,7 +1505,7 @@ diff -U3 expected/collate.icu.utf8.out results/collate.icu.utf8.out
  SELECT 'abc' <= 'ABC' COLLATE case_sensitive, 'abc' >= 'ABC' COLLATE case_sensitive;
   ?column? | ?column? 
  ----------+----------
-@@ -1493,17 +1132,19 @@
+@@ -1523,17 +1162,19 @@
  
  -- test language tags
  CREATE COLLATION lt_insensitive (provider = icu, locale = 'en-u-ks-level1', deterministic = false);
@@ -1527,7 +1527,7 @@ diff -U3 expected/collate.icu.utf8.out results/collate.icu.utf8.out
  (1 row)
  
  CREATE TABLE test1cs (x text COLLATE case_sensitive);
-@@ -1990,6 +1631,7 @@
+@@ -2853,6 +2494,7 @@
  -- accents
  SET client_min_messages=WARNING;
  CREATE COLLATION ignore_accents (provider = icu, locale = '@colStrength=primary;colCaseLevel=yes', deterministic = false);

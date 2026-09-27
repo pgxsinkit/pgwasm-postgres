@@ -374,7 +374,60 @@ diff -U3 expected/encoding.out results/encoding.out
  -- substring needing last byte of its slice_size
  ALTER TABLE toast_3b_utf8 RENAME TO toast_4b_utf8;
  UPDATE toast_4b_utf8 SET c = repeat(U&'\+01F680', 3000);
-@@ -420,11 +380,17 @@
+@@ -418,32 +378,62 @@
+ 
+ -- ascii() and multibyte characters
+ SELECT ascii(test_bytea_to_text('\xc3'));
+-ERROR:  invalid byte sequence for encoding "UTF8"
++ERROR:  function test_bytea_to_text(unknown) does not exist
++LINE 1: SELECT ascii(test_bytea_to_text('\xc3'));
++                     ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT ascii(test_bytea_to_text('\xe2'));
+-ERROR:  invalid byte sequence for encoding "UTF8"
++ERROR:  function test_bytea_to_text(unknown) does not exist
++LINE 1: SELECT ascii(test_bytea_to_text('\xe2'));
++                     ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT ascii(test_bytea_to_text('\xe282'));
+-ERROR:  invalid byte sequence for encoding "UTF8"
++ERROR:  function test_bytea_to_text(unknown) does not exist
++LINE 1: SELECT ascii(test_bytea_to_text('\xe282'));
++                     ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT ascii(test_bytea_to_text('\xf0'));
+-ERROR:  invalid byte sequence for encoding "UTF8"
++ERROR:  function test_bytea_to_text(unknown) does not exist
++LINE 1: SELECT ascii(test_bytea_to_text('\xf0'));
++                     ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT ascii(test_bytea_to_text('\xf09f'));
+-ERROR:  invalid byte sequence for encoding "UTF8"
++ERROR:  function test_bytea_to_text(unknown) does not exist
++LINE 1: SELECT ascii(test_bytea_to_text('\xf09f'));
++                     ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT ascii(test_bytea_to_text('\xf09f98'));
+-ERROR:  invalid byte sequence for encoding "UTF8"
++ERROR:  function test_bytea_to_text(unknown) does not exist
++LINE 1: SELECT ascii(test_bytea_to_text('\xf09f98'));
++                     ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- invalid continuation byte
+ SELECT ascii(test_bytea_to_text('\xc3ff'));
+-ERROR:  invalid byte sequence for encoding "UTF8"
++ERROR:  function test_bytea_to_text(unknown) does not exist
++LINE 1: SELECT ascii(test_bytea_to_text('\xc3ff'));
++                     ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- invalid leading byte
+ SELECT ascii(test_bytea_to_text('\x80'));
+-ERROR:  invalid byte sequence for encoding "UTF8"
++ERROR:  function test_bytea_to_text(unknown) does not exist
++LINE 1: SELECT ascii(test_bytea_to_text('\x80'));
++                     ^
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ DROP TABLE encoding_tests;
  DROP TABLE toast_4b_utf8;
  DROP FUNCTION test_encoding;
  DROP FUNCTION test_wchars_to_text;

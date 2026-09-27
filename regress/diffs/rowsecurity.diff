@@ -1094,7 +1094,7 @@ diff -U3 expected/rowsecurity.out results/rowsecurity.out
  -- Check behavior with a child table.
  RESET SESSION AUTHORIZATION;
  SET row_security TO ON;
-@@ -3781,25 +3603,44 @@
+@@ -3781,25 +3603,24 @@
  SET SESSION AUTHORIZATION regress_rls_carol;
  SET row_security TO OFF;
  COPY copy_rel_to TO STDOUT WITH DELIMITER ','; --fail - permission denied
@@ -1109,42 +1109,22 @@ diff -U3 expected/rowsecurity.out results/rowsecurity.out
  SET row_security TO OFF;
  COPY copy_t FROM STDIN; --ok
 +ERROR:  permission denied for table copy_t
-+1	abc
-+2	bcd
-+3	cde
-+4	def
-+\.
-+invalid command \.
  SET row_security TO ON;
-+ERROR:  syntax error at or near "1"
-+LINE 1: 1 abc
-+        ^
  COPY copy_t FROM STDIN; --ok
 +ERROR:  permission denied for table copy_t
-+1	abc
-+2	bcd
-+3	cde
-+4	def
-+\.
-+invalid command \.
  -- Check COPY FROM as user with permissions.
  SET SESSION AUTHORIZATION regress_rls_bob;
-+ERROR:  syntax error at or near "1"
-+LINE 1: 1 abc
-+        ^
  SET row_security TO OFF;
  COPY copy_t FROM STDIN; --fail - would be affected by RLS.
 -ERROR:  query would be affected by row-level security policy for table "copy_t"
-+ERROR:  permission denied for table copy_t
  SET row_security TO ON;
  COPY copy_t FROM STDIN; --fail - COPY FROM not supported by RLS.
 -ERROR:  COPY FROM not supported with row-level security
 -HINT:  Use INSERT statements instead.
-+ERROR:  permission denied for table copy_t
  -- Check COPY FROM as user with permissions and BYPASSRLS
  SET SESSION AUTHORIZATION regress_rls_exempt_user;
  SET row_security TO ON;
-@@ -3814,6 +3655,7 @@
+@@ -3814,6 +3635,7 @@
  ERROR:  permission denied for table copy_t
  RESET SESSION AUTHORIZATION;
  DROP TABLE copy_t;
@@ -1152,7 +1132,7 @@ diff -U3 expected/rowsecurity.out results/rowsecurity.out
  DROP TABLE copy_rel_to CASCADE;
  NOTICE:  drop cascades to table copy_rel_to_child
  -- Check WHERE CURRENT OF
-@@ -4028,54 +3870,62 @@
+@@ -4028,54 +3850,62 @@
  RESET SESSION AUTHORIZATION;
  BEGIN;
  CREATE ROLE regress_rls_eve;
@@ -1233,7 +1213,7 @@ diff -U3 expected/rowsecurity.out results/rowsecurity.out
  ROLLBACK; -- cleanup
  --
  -- Policy expression handling
-@@ -4429,20 +4279,12 @@
+@@ -4429,20 +4259,12 @@
  SELECT count(*) = 1 FROM pg_shdepend
  				   WHERE objid = (SELECT oid FROM pg_policy WHERE polname = 'dep_p1')
  					 AND refobjid = (SELECT oid FROM pg_authid WHERE rolname = 'regress_rls_bob');
@@ -1256,7 +1236,7 @@ diff -U3 expected/rowsecurity.out results/rowsecurity.out
  -- Should return zero
  SELECT count(*) = 0 FROM pg_depend
  				   WHERE objid = (SELECT oid FROM pg_policy WHERE polname = 'dep_p1')
-@@ -4455,30 +4297,51 @@
+@@ -4455,30 +4277,51 @@
  -- DROP OWNED BY testing
  RESET SESSION AUTHORIZATION;
  CREATE ROLE regress_rls_dob_role1;
@@ -1308,7 +1288,7 @@ diff -U3 expected/rowsecurity.out results/rowsecurity.out
  -- Bug #15708: view + table with RLS should check policies as view owner
  CREATE TABLE ref_tbl (a int);
  INSERT INTO ref_tbl VALUES (1);
-@@ -4490,12 +4353,21 @@
+@@ -4490,12 +4333,21 @@
  GRANT SELECT ON rls_tbl TO regress_rls_bob;
  CREATE VIEW rls_view AS SELECT * FROM rls_tbl;
  ALTER VIEW rls_view OWNER TO regress_rls_bob;
@@ -1332,7 +1312,7 @@ diff -U3 expected/rowsecurity.out results/rowsecurity.out
  SELECT * FROM rls_view; -- OK
   a  
  ----
-@@ -4519,15 +4391,245 @@
+@@ -4519,15 +4371,245 @@
  CREATE OPERATOR <<< (procedure = op_leak, leftarg = int, rightarg = int,
                       restrict = scalarltsel);
  SELECT * FROM rls_tbl WHERE a <<< 1000;
@@ -1585,7 +1565,7 @@ diff -U3 expected/rowsecurity.out results/rowsecurity.out
  (2 rows)
  
  RESET SESSION AUTHORIZATION;
-@@ -4547,31 +4649,2347 @@
+@@ -4547,31 +4629,2347 @@
  CREATE POLICY p3 ON rls_part USING (a < 0);
  SET SESSION AUTHORIZATION regress_rls_alice;
  SELECT * FROM rls_tbl WHERE a <<< 1000;
@@ -3947,7 +3927,7 @@ diff -U3 expected/rowsecurity.out results/rowsecurity.out
  RESET SESSION AUTHORIZATION;
  REVOKE SELECT ON rls_tbl FROM regress_rls_alice;
  CREATE VIEW rls_tbl_view AS SELECT * FROM rls_tbl;
-@@ -4582,20 +7000,650 @@
+@@ -4582,20 +6980,650 @@
  SELECT * FROM rls_tbl WHERE a <<< 1000;
  ERROR:  permission denied for table rls_tbl
  SELECT * FROM rls_tbl_view WHERE a <<< 1000;
@@ -4605,7 +4585,7 @@ diff -U3 expected/rowsecurity.out results/rowsecurity.out
  
  DROP OPERATOR <<< (int, int);
  DROP FUNCTION op_leak(int, int);
-@@ -4658,10 +7706,12 @@
+@@ -4658,10 +7686,12 @@
  (1 row)
  
  set role regress_rls_bob;
@@ -4621,7 +4601,7 @@ diff -U3 expected/rowsecurity.out results/rowsecurity.out
  
  -- make sure RLS dependencies in CTEs are handled
  reset role;
-@@ -4677,10 +7727,12 @@
+@@ -4677,10 +7707,12 @@
  (1 row)
  
  set role regress_rls_bob;
@@ -4637,7 +4617,7 @@ diff -U3 expected/rowsecurity.out results/rowsecurity.out
  
  -- make sure RLS dependencies in subqueries are handled
  reset role;
-@@ -4696,10 +7748,12 @@
+@@ -4696,10 +7728,12 @@
  (1 row)
  
  set role regress_rls_bob;
@@ -4653,7 +4633,7 @@ diff -U3 expected/rowsecurity.out results/rowsecurity.out
  
  -- make sure RLS dependencies in sublinks are handled
  reset role;
-@@ -4715,10 +7769,11 @@
+@@ -4715,10 +7749,11 @@
  (1 row)
  
  set role regress_rls_bob;
@@ -4668,7 +4648,7 @@ diff -U3 expected/rowsecurity.out results/rowsecurity.out
  (1 row)
  
  -- make sure RLS dependencies are handled when coercion projections are inserted
-@@ -4735,10 +7790,11 @@
+@@ -4735,10 +7770,11 @@
  (1 row)
  
  set role regress_rls_bob;
@@ -4683,7 +4663,7 @@ diff -U3 expected/rowsecurity.out results/rowsecurity.out
  (1 row)
  
  -- make sure RLS dependencies in security invoker views are handled
-@@ -4757,10 +7813,12 @@
+@@ -4757,10 +7793,12 @@
  (1 row)
  
  set role regress_rls_bob;
@@ -4699,7 +4679,7 @@ diff -U3 expected/rowsecurity.out results/rowsecurity.out
  
  RESET ROLE;
  DROP FUNCTION rls_f();
-@@ -4794,8 +7852,12 @@
+@@ -4794,8 +7832,12 @@
  -- should lead to RLS error during query rewrite
  set role regress_rls_alice;
  select rls_f(c) from test_t order by rls_f;
@@ -4714,7 +4694,7 @@ diff -U3 expected/rowsecurity.out results/rowsecurity.out
  reset role;
  set plan_cache_mode to force_generic_plan;
  -- Table owner bypasses RLS, although cached plan will be invalidated
-@@ -4810,8 +7872,12 @@
+@@ -4810,8 +7852,12 @@
  -- should lead to plan invalidation and RLS error during query rewrite
  set role regress_rls_alice;
  select rls_f(c) from test_t order by rls_f;
@@ -4729,7 +4709,7 @@ diff -U3 expected/rowsecurity.out results/rowsecurity.out
  reset role;
  reset plan_cache_mode;
  reset rls_test.blah;
-@@ -4822,47 +7888,32 @@
+@@ -4822,47 +7868,32 @@
  --
  RESET SESSION AUTHORIZATION;
  DROP SCHEMA regress_rls_schema CASCADE;

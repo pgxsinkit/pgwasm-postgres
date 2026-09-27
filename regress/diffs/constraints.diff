@@ -1,7 +1,7 @@
 diff -U3 expected/constraints.out results/constraints.out
 --- expected/constraints.out
 +++ results/constraints.out
-@@ -1699,16 +1699,21 @@
+@@ -1703,16 +1703,21 @@
  -- unauthorized user
  RESET SESSION AUTHORIZATION;
  CREATE ROLE regress_constraint_comments_noaccess;

@@ -1,7 +1,7 @@
 diff -U3 expected/create_role.out results/create_role.out
 --- expected/create_role.out
 +++ results/create_role.out
-@@ -248,14 +248,31 @@
+@@ -275,14 +275,31 @@
  RESET SESSION AUTHORIZATION;
  REVOKE CREATE ON DATABASE regression FROM regress_role_admin CASCADE;
  DROP INDEX tenant_idx;

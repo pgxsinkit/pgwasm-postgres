@@ -359,7 +359,7 @@ diff -U3 expected/privileges.out results/privileges.out
  ROLLBACK;
  -- views
  SET SESSION AUTHORIZATION regress_priv_user3;
-@@ -1798,6 +1797,7 @@
+@@ -1850,6 +1849,7 @@
  GRANT SELECT ON atest4 TO regress_priv_user2 WITH GRANT OPTION;
  GRANT UPDATE ON atest4 TO regress_priv_user2;
  GRANT SELECT ON atest4 TO GROUP regress_priv_group1 WITH GRANT OPTION;
@@ -367,7 +367,7 @@ diff -U3 expected/privileges.out results/privileges.out
  SET SESSION AUTHORIZATION regress_priv_user2;
  GRANT SELECT ON atest4 TO regress_priv_user3;
  GRANT UPDATE ON atest4 TO regress_priv_user3; -- fail
-@@ -1922,8 +1922,7 @@
+@@ -1974,8 +1974,7 @@
  ERROR:  cannot fire deferred trigger within security-restricted operation
  CONTEXT:  SQL function "mv_action" statement 1
  BEGIN; SET CONSTRAINTS ALL IMMEDIATE; REFRESH MATERIALIZED VIEW sro_mv; COMMIT;
@@ -377,7 +377,7 @@ diff -U3 expected/privileges.out results/privileges.out
  CONTEXT:  SQL function "unwanted_grant" statement 1
  SQL statement "SELECT public.unwanted_grant()"
  PL/pgSQL function public.sro_trojan() line 1 at PERFORM
-@@ -1951,32 +1950,29 @@
+@@ -2003,32 +2002,29 @@
  CREATE FUNCTION dogrant_ok() RETURNS void LANGUAGE sql SECURITY DEFINER AS
  	'GRANT regress_priv_group2 TO regress_priv_user5';
  GRANT regress_priv_group2 TO regress_priv_user5; -- ok: had ADMIN OPTION
@@ -421,7 +421,7 @@ diff -U3 expected/privileges.out results/privileges.out
  -- has_sequence_privilege tests
  \c -
  CREATE SEQUENCE x_seq;
-@@ -2381,21 +2377,21 @@
+@@ -2433,21 +2429,21 @@
  	RETURN false;
  END$$;
  ALTER FUNCTION terminate_nothrow OWNER TO pg_signal_backend;
@@ -448,7 +448,7 @@ diff -U3 expected/privileges.out results/privileges.out
  REVOKE DELETE ON datdba_only FROM pg_database_owner;
  SELECT
  	pg_has_role('regress_priv_user1', 'pg_database_owner', 'USAGE') as priv,
-@@ -2410,44 +2406,33 @@
+@@ -2462,44 +2458,33 @@
  BEGIN;
  DO $$BEGIN EXECUTE format(
  	'ALTER DATABASE %I OWNER TO regress_priv_group2', current_catalog); END$$;
@@ -507,7 +507,7 @@ diff -U3 expected/privileges.out results/privileges.out
  ROLLBACK;
  -- test default ACLs
  \c -
-@@ -3110,7 +3095,9 @@
+@@ -3162,7 +3147,9 @@
  (5 rows)
  
  DROP GROUP regress_priv_group1;
@@ -517,7 +517,7 @@ diff -U3 expected/privileges.out results/privileges.out
  -- these are needed to clean up permissions
  REVOKE USAGE ON LANGUAGE sql FROM regress_priv_user1;
  DROP OWNED BY regress_priv_user1;
-@@ -3122,7 +3109,6 @@
+@@ -3174,7 +3161,6 @@
  DROP USER regress_priv_user6;
  DROP USER regress_priv_user7;
  DROP USER regress_priv_user8; -- does not exist
@@ -525,7 +525,7 @@ diff -U3 expected/privileges.out results/privileges.out
  -- leave some default ACLs for pg_upgrade's dump-restore test input.
  ALTER DEFAULT PRIVILEGES FOR ROLE pg_signal_backend
  	REVOKE USAGE ON TYPES FROM pg_signal_backend;
-@@ -3327,70 +3313,121 @@
+@@ -3379,70 +3365,121 @@
  REVOKE regress_group FROM regress_group_member;
  RESET SESSION AUTHORIZATION;
  DROP ROLE regress_group;
@@ -657,7 +657,7 @@ diff -U3 expected/privileges.out results/privileges.out
  VACUUM maintain_test;
  ANALYZE maintain_test;
  VACUUM (ANALYZE) maintain_test;
-@@ -3399,9 +3436,10 @@
+@@ -3451,9 +3488,10 @@
  REINDEX TABLE maintain_test;
  REINDEX INDEX maintain_test_a_idx;
  REINDEX SCHEMA reindex_test;
@@ -669,7 +669,7 @@ diff -U3 expected/privileges.out results/privileges.out
  VACUUM maintain_test;
  ANALYZE maintain_test;
  VACUUM (ANALYZE) maintain_test;
-@@ -3410,37 +3448,54 @@
+@@ -3462,37 +3500,54 @@
  REINDEX TABLE maintain_test;
  REINDEX INDEX maintain_test_a_idx;
  REINDEX SCHEMA reindex_test;

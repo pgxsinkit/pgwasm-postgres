@@ -1,7 +1,7 @@
 diff -U3 expected/stats_ext.out results/stats_ext.out
 --- expected/stats_ext.out
 +++ results/stats_ext.out
-@@ -122,115 +122,142 @@
+@@ -126,115 +126,142 @@
  ERROR:  must be owner of statistics object ab1_a_b_stats
  RESET SESSION AUTHORIZATION;
  DROP ROLE regress_stats_ext;
@@ -168,7 +168,7 @@ diff -U3 expected/stats_ext.out results/stats_ext.out
  -- Tests for stats with inheritance
  CREATE TABLE stxdinh(a int, b int);
  CREATE TABLE stxdinh1() INHERITS(stxdinh);
-@@ -311,76 +338,114 @@
+@@ -315,76 +342,114 @@
  DROP TABLE stxdinp;
  -- basic test for statistics on expressions
  CREATE TABLE ab1 (a INTEGER, b INTEGER, c TIMESTAMP, d TIMESTAMPTZ);
@@ -302,7 +302,7 @@ diff -U3 expected/stats_ext.out results/stats_ext.out
  DO $$
  DECLARE
  	relname text := reltoastrelid::regclass FROM pg_class WHERE oid = 'tststats.t'::regclass;
-@@ -390,18 +455,15 @@
+@@ -394,18 +459,15 @@
  	RAISE NOTICE 'stats on toast table not created';
  END;
  $$;
@@ -328,7 +328,7 @@ diff -U3 expected/stats_ext.out results/stats_ext.out
  -- n-distinct tests
  CREATE TABLE ndistinct (
      filler1 TEXT,
-@@ -480,11 +542,7 @@
+@@ -484,11 +546,7 @@
    FROM pg_statistic_ext s, pg_statistic_ext_data d
   WHERE s.stxrelid = 'ndistinct'::regclass
     AND d.stxoid = s.oid;
@@ -341,7 +341,7 @@ diff -U3 expected/stats_ext.out results/stats_ext.out
  -- minor improvement, make sure the ctid does not break the matching
  SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY ctid, a, b');
   estimated | actual 
-@@ -562,11 +620,7 @@
+@@ -566,11 +624,7 @@
    FROM pg_statistic_ext s, pg_statistic_ext_data d
   WHERE s.stxrelid = 'ndistinct'::regclass
     AND d.stxoid = s.oid;
@@ -354,7 +354,7 @@ diff -U3 expected/stats_ext.out results/stats_ext.out
  -- correct estimates
  SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, b');
   estimated | actual 
-@@ -627,10 +681,7 @@
+@@ -631,10 +685,7 @@
    FROM pg_statistic_ext s, pg_statistic_ext_data d
   WHERE s.stxrelid = 'ndistinct'::regclass
     AND d.stxoid = s.oid;
@@ -366,7 +366,7 @@ diff -U3 expected/stats_ext.out results/stats_ext.out
  -- dropping the statistics results in under-estimates
  SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, b');
   estimated | actual 
-@@ -711,11 +762,7 @@
+@@ -715,11 +766,7 @@
    FROM pg_statistic_ext s, pg_statistic_ext_data d
   WHERE s.stxrelid = 'ndistinct'::regclass
     AND d.stxoid = s.oid;
@@ -379,7 +379,7 @@ diff -U3 expected/stats_ext.out results/stats_ext.out
  SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY (a+1), (b+100)');
   estimated | actual 
  -----------+--------
-@@ -760,11 +807,7 @@
+@@ -764,11 +811,7 @@
    FROM pg_statistic_ext s, pg_statistic_ext_data d
   WHERE s.stxrelid = 'ndistinct'::regclass
     AND d.stxoid = s.oid;
@@ -392,7 +392,7 @@ diff -U3 expected/stats_ext.out results/stats_ext.out
  SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, b');
   estimated | actual 
  -----------+--------
-@@ -2286,11 +2329,7 @@
+@@ -2290,11 +2333,7 @@
    FROM pg_statistic_ext s, pg_statistic_ext_data d
   WHERE s.stxname = 'mcv_lists_stats'
     AND d.stxoid = s.oid;
@@ -405,7 +405,7 @@ diff -U3 expected/stats_ext.out results/stats_ext.out
  -- check change of column type resets the MCV statistics
  ALTER TABLE mcv_lists ALTER COLUMN c TYPE numeric;
  SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a = 1 AND b = ''1''');
-@@ -2595,11 +2634,7 @@
+@@ -2599,11 +2638,7 @@
         pg_mcv_list_items(d.stxdmcv) m
   WHERE s.stxname = 'mcv_lists_stats'
     AND d.stxoid = s.oid;
@@ -418,7 +418,7 @@ diff -U3 expected/stats_ext.out results/stats_ext.out
  -- 2 distinct combinations with NULL values, all in the MCV list
  TRUNCATE mcv_lists;
  DROP STATISTICS mcv_lists_stats;
-@@ -2638,12 +2673,7 @@
+@@ -2642,12 +2677,7 @@
         pg_mcv_list_items(d.stxdmcv) m
   WHERE s.stxname = 'mcv_lists_stats'
     AND d.stxoid = s.oid;
@@ -432,7 +432,7 @@ diff -U3 expected/stats_ext.out results/stats_ext.out
  SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE b = ''x'' OR d = ''x''');
   estimated | actual 
  -----------+--------
-@@ -3136,15 +3166,24 @@
+@@ -3140,15 +3170,24 @@
  --
  -- Currently this is only relevant for MCV stats.
  CREATE SCHEMA tststats;
@@ -457,7 +457,7 @@ diff -U3 expected/stats_ext.out results/stats_ext.out
  -- Check printing info about extended statistics by \dX
  create table stts_t1 (a int, b int);
  create statistics (ndistinct) on a, b from stts_t1;
-@@ -3155,29 +3194,31 @@
+@@ -3159,29 +3198,31 @@
  create table stts_t3 (col1 int, col2 int, col3 int);
  create statistics stts_hoge on col1, col2, col3 from stts_t3;
  create schema stts_s1;
@@ -505,7 +505,7 @@ diff -U3 expected/stats_ext.out results/stats_ext.out
  
  \dX stts_t*
                               List of extended statistics
-@@ -3197,22 +3238,20 @@
+@@ -3201,22 +3242,20 @@
  (1 row)
  
  \dX+
@@ -542,7 +542,7 @@ diff -U3 expected/stats_ext.out results/stats_ext.out
  
  \dX+ stts_t*
                               List of extended statistics
-@@ -3232,11 +3271,10 @@
+@@ -3236,11 +3275,10 @@
  (1 row)
  
  \dX+ stts_s2.stts_yama
@@ -558,7 +558,7 @@ diff -U3 expected/stats_ext.out results/stats_ext.out
  
  create statistics (mcv) ON a, b, (a+b), (a-b) FROM stts_t1;
  create statistics (mcv) ON a, b, (a+b), (a-b) FROM stts_t1;
-@@ -3256,26 +3294,29 @@
+@@ -3260,26 +3298,29 @@
  set search_path to public, stts_s1;
  \dX
                                                         List of extended statistics
@@ -600,7 +600,7 @@ diff -U3 expected/stats_ext.out results/stats_ext.out
   public | func_deps_stat         | (a * 2), upper(b), (c + 1::numeric) FROM functional_dependencies |           | defined      | 
   public | mcv_lists_arrays_stats | a, b, c FROM mcv_lists_arrays                                    |           |              | defined
   public | mcv_lists_bool_stats   | a, b, c FROM mcv_lists_bool                                      |           |              | defined
-@@ -3285,23 +3326,34 @@
+@@ -3289,23 +3330,34 @@
   public | stts_t1_a_b_stat1      | a, b FROM stts_t1                                                | defined   | defined      | 
   public | stts_t1_a_b_stat2      | a, b FROM stts_t1                                                | defined   | defined      | defined
   public | stts_t2_b_c_stat       | b, c FROM stts_t2                                                | defined   | defined      | defined
@@ -638,7 +638,7 @@ diff -U3 expected/stats_ext.out results/stats_ext.out
  -- Attempt to gain access using a leaky operator
  CREATE FUNCTION op_leak(int, int) RETURNS bool
      AS 'BEGIN RAISE NOTICE ''op_leak => %, %'', $1, $2; RETURN $1 < $2; END'
-@@ -3314,101 +3366,135 @@
+@@ -3318,101 +3370,135 @@
  CREATE OPERATOR <<< (procedure = op_leak, leftarg = record, rightarg = record,
                       restrict = scalarltsel);
  SELECT * FROM tststats.priv_test_tbl WHERE a <<< 0 AND b <<< 0; -- Permission denied
@@ -818,7 +818,7 @@ diff -U3 expected/stats_ext.out results/stats_ext.out
  -- privilege checks for pg_stats_ext and pg_stats_ext_exprs
  RESET SESSION AUTHORIZATION;
  CREATE TABLE stats_ext_tbl (id INT PRIMARY KEY GENERATED BY DEFAULT AS IDENTITY, col TEXT);
-@@ -3418,23 +3504,30 @@
+@@ -3422,23 +3508,30 @@
  ANALYZE stats_ext_tbl;
  -- unprivileged role should not have access
  SET SESSION AUTHORIZATION regress_stats_user1;
@@ -853,7 +853,7 @@ diff -U3 expected/stats_ext.out results/stats_ext.out
  SELECT statistics_name, most_common_vals FROM pg_stats_ext x
      WHERE tablename = 'stats_ext_tbl' ORDER BY ROW(x.*);
   statistics_name |             most_common_vals              
-@@ -3454,38 +3547,58 @@
+@@ -3458,38 +3551,58 @@
  -- CREATE STATISTICS checks for CREATE on the schema
  RESET SESSION AUTHORIZATION;
  CREATE SCHEMA sts_sch1 CREATE TABLE sts_sch1.tbl (a INT, b INT, c INT GENERATED ALWAYS AS (b * 2) STORED);
@@ -916,7 +916,7 @@ diff -U3 expected/stats_ext.out results/stats_ext.out
  -- Tidy up
  DROP OPERATOR <<< (int, int);
  DROP FUNCTION op_leak(int, int);
-@@ -3494,13 +3607,12 @@
+@@ -3498,38 +3611,47 @@
  RESET SESSION AUTHORIZATION;
  DROP TABLE stats_ext_tbl;
  DROP SCHEMA tststats CASCADE;
@@ -929,6 +929,47 @@ diff -U3 expected/stats_ext.out results/stats_ext.out
 -NOTICE:  drop cascades to table sts_sch1.tbl
 +ERROR:  schema "sts_sch1" does not exist
  DROP USER regress_stats_user1;
++ERROR:  permission denied to drop role
++DETAIL:  Only roles with the CREATEROLE attribute and the ADMIN option on the target roles may drop roles.
+ -- CREATE STATISTICS checks for the owner
+ CREATE ROLE regress_relowner;
++ERROR:  permission denied to create role
++DETAIL:  Only roles with the CREATEROLE attribute may create roles.
+ CREATE ROLE regress_stxowner;
++ERROR:  permission denied to create role
++DETAIL:  Only roles with the CREATEROLE attribute may create roles.
+ CREATE TABLE stats_ext_tbl (a int, b int);
+ ALTER TABLE stats_ext_tbl OWNER TO regress_relowner;
++ERROR:  role "regress_relowner" does not exist
+ CREATE STATISTICS tst ON a, b FROM stats_ext_tbl;
+ ALTER STATISTICS tst OWNER TO regress_stxowner;
++ERROR:  role "regress_stxowner" does not exist
+ SELECT stxowner::regrole FROM pg_statistic_ext WHERE stxname = 'tst';
+-     stxowner     
+-------------------
+- regress_stxowner
++     stxowner      
++-------------------
++ regress_stats_ext
+ (1 row)
+ 
+ -- re-creating statistics via ALTER TABLE preserve the statistics owner.
+ ALTER TABLE stats_ext_tbl ALTER COLUMN a TYPE bigint;
+ SELECT stxowner::regrole FROM pg_statistic_ext WHERE stxname = 'tst';
+-     stxowner     
+-------------------
+- regress_stxowner
++     stxowner      
++-------------------
++ regress_stats_ext
+ (1 row)
+ 
+ -- Tidy up
+ DROP TABLE stats_ext_tbl;
+ DROP ROLE regress_relowner;
++ERROR:  permission denied to drop role
++DETAIL:  Only roles with the CREATEROLE attribute and the ADMIN option on the target roles may drop roles.
+ DROP ROLE regress_stxowner;
 +ERROR:  permission denied to drop role
 +DETAIL:  Only roles with the CREATEROLE attribute and the ADMIN option on the target roles may drop roles.
  CREATE TABLE grouping_unique (x integer);

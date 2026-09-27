@@ -21,7 +21,7 @@ diff -U3 expected/alter_table.out results/alter_table.out
  -- try altering non-existent table, should fail
  alter table nosuchtable drop column bar;
  ERROR:  relation "nosuchtable" does not exist
-@@ -3587,28 +3586,39 @@
+@@ -3588,28 +3587,39 @@
  SHOW allow_system_table_mods;
   allow_system_table_mods 
  -------------------------
@@ -64,7 +64,7 @@ diff -U3 expected/alter_table.out results/alter_table.out
  DROP TABLE old_system_table;
  -- set logged
  CREATE UNLOGGED TABLE unlogged1(f1 SERIAL PRIMARY KEY, f2 TEXT); -- has sequence, toast
-@@ -4040,25 +4050,40 @@
+@@ -4051,25 +4061,40 @@
  ERROR:  must be owner of table not_owned_by_me
  RESET SESSION AUTHORIZATION;
  DROP TABLE owned_by_me, not_owned_by_me;
@@ -109,7 +109,7 @@ diff -U3 expected/alter_table.out results/alter_table.out
  -- check any TEMP-ness
  CREATE TEMP TABLE temp_parted (a int) PARTITION BY LIST (a);
  CREATE TABLE perm_part (a int);
-@@ -4069,19 +4094,20 @@
+@@ -4080,19 +4105,20 @@
  CREATE TYPE mytype AS (a int);
  CREATE TABLE fail_part OF mytype;
  ALTER TABLE list_parted ATTACH PARTITION fail_part FOR VALUES IN (1);
@@ -134,7 +134,7 @@ diff -U3 expected/alter_table.out results/alter_table.out
  DROP TABLE fail_part;
  -- check that columns match in type, collation and NOT NULL status
  CREATE TABLE fail_part (
-@@ -4089,10 +4115,10 @@
+@@ -4100,10 +4126,10 @@
  	a int NOT NULL
  );
  ALTER TABLE list_parted ATTACH PARTITION fail_part FOR VALUES IN (1);
@@ -147,7 +147,7 @@ diff -U3 expected/alter_table.out results/alter_table.out
  DROP TABLE fail_part;
  -- check that the table being attached has all constraints of the parent
  CREATE TABLE fail_part (
-@@ -4100,11 +4126,11 @@
+@@ -4111,11 +4137,11 @@
  	a int NOT NULL
  );
  ALTER TABLE list_parted ATTACH PARTITION fail_part FOR VALUES IN (1);
@@ -161,7 +161,7 @@ diff -U3 expected/alter_table.out results/alter_table.out
  DROP TABLE fail_part;
  -- check the attributes and constraints after partition is attached
  CREATE TABLE part_1 (
-@@ -4113,18 +4139,19 @@
+@@ -4124,18 +4150,19 @@
  	CONSTRAINT check_a CHECK (a > 0)
  );
  ALTER TABLE list_parted ATTACH PARTITION part_1 FOR VALUES IN (1);
@@ -184,7 +184,7 @@ diff -U3 expected/alter_table.out results/alter_table.out
  (1 row)
  
  -- check that NOT NULL NO INHERIT cannot be merged to a normal NOT NULL
-@@ -4133,25 +4160,23 @@
+@@ -4144,25 +4171,23 @@
  	CONSTRAINT check_a CHECK (a > 0)
  );
  ALTER TABLE list_parted ATTACH PARTITION part_fail FOR VALUES IN (2);
@@ -215,7 +215,7 @@ diff -U3 expected/alter_table.out results/alter_table.out
  -- check validation when attaching list partitions
  CREATE TABLE list_parted2 (
  	a int,
-@@ -4196,6 +4221,7 @@
+@@ -4207,6 +4232,7 @@
  	a int,
  	b int
  ) PARTITION BY RANGE (a, b);
@@ -223,7 +223,7 @@ diff -U3 expected/alter_table.out results/alter_table.out
  -- check that violating rows are correctly reported
  CREATE TABLE part1 (
  	a int NOT NULL CHECK (a = 1),
-@@ -4204,10 +4230,11 @@
+@@ -4215,10 +4241,11 @@
  INSERT INTO part1 VALUES (1, 10);
  -- Remember the TO bound is exclusive
  ALTER TABLE range_parted ATTACH PARTITION part1 FOR VALUES FROM (1, 1) TO (1, 10);
@@ -236,7 +236,7 @@ diff -U3 expected/alter_table.out results/alter_table.out
  -- adding constraints that describe the desired partition constraint
  -- (or more restrictive) will help skip the validation scan
  CREATE TABLE part2 (
-@@ -4215,21 +4242,26 @@
+@@ -4226,21 +4253,26 @@
  	b int NOT NULL CHECK (b >= 10 AND b < 18)
  );
  ALTER TABLE range_parted ATTACH PARTITION part2 FOR VALUES FROM (1, 10) TO (1, 20);
@@ -267,7 +267,7 @@ diff -U3 expected/alter_table.out results/alter_table.out
  -- check that leaf partitions are scanned when attaching a partitioned
  -- table
  CREATE TABLE part_5 (
-@@ -4582,13 +4614,12 @@
+@@ -4593,13 +4625,12 @@
                                                ^
  -- dropping non-partition key columns should be allowed on the parent table.
  ALTER TABLE list_parted DROP COLUMN b;
@@ -284,7 +284,7 @@ diff -U3 expected/alter_table.out results/alter_table.out
  DROP TABLE fail_def_part;
  DROP TABLE hash_parted;
  -- more tests for certain multi-level partitioning scenarios
-@@ -4636,6 +4667,8 @@
+@@ -4647,6 +4678,8 @@
  ANALYZE attmp;
  DROP TABLE attmp;
  DROP USER regress_alter_table_user1;
@@ -293,7 +293,7 @@ diff -U3 expected/alter_table.out results/alter_table.out
  -- check that violating rows are correctly reported when attaching as the
  -- default partition
  create table defpart_attach_test (a int) partition by list (a);
-@@ -4698,11 +4731,16 @@
+@@ -4709,11 +4742,16 @@
      operator 1 < (int4, int4), operator 2 <= (int4, int4),
      operator 3 = (int4, int4), operator 4 >= (int4, int4),
      operator 5 > (int4, int4), function 1 at_test_sql_partop(int4, int4);
@@ -310,7 +310,7 @@ diff -U3 expected/alter_table.out results/alter_table.out
  drop function at_test_sql_partop;
  /* Test case for bug #16242 */
  -- We create a parent and child where the child has missing
-@@ -4841,21 +4879,23 @@
+@@ -4852,21 +4890,23 @@
  insert into attach_parted_part1 values (2, 1);
  -- Test altering table having publication
  create schema alter1;
