@@ -53,6 +53,13 @@ consumes the releases. Read [README.md](README.md) and
   or `scripts/lib/driver/`. `identity/prepopulated.json` changes only through `prepopulated --record`, after
   a deliberate build change. `data-format.json` changes only by declaring a new `dataFormat` with its new
   tuple, never by editing the current one to match a build.
+- **So does the pg_regress gate.** `bun run regress` (a build, podman and the builder image; about two
+  minutes a run) is not in `validate` or CI; run it after any change that reaches the build or
+  `scripts/lib/driver/`, and never while another `pgwasm-postgres-*` container runs. `regress/baseline.json`'s
+  results and `regress/diffs/` change only through `bun run regress --record`, after a deliberate change;
+  never edit a diff by hand. The failure groups are written by hand: every failing or unstable test needs a
+  group with a reason, and `bun test` refuses `unclassified`. An unstable test is recorded with its reason,
+  never tolerated silently.
 - Never commit PostgreSQL source, build outputs or the contents of `.cache/` or `work/`.
 
 ## Directory hygiene

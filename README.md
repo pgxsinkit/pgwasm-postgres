@@ -15,7 +15,9 @@ the patches + the overlay gives exactly that tree, without its extension submodu
 `build:verify` prove that the tree, with those extensions, builds PGlite 0.5.8's artefacts byte for byte
 (2026-09-27). The build's artefacts run under this repository's own minimal driver, which also makes the
 prepopulated data directory as a deterministic asset, and `data-format:check` guards the on-disk format
-(step 3a, 2026-09-27). There is no release yet.
+(step 3a, 2026-09-27). Postgres's own regression suite runs on the build through a TCP bridge, against a
+checked-in 18.3 baseline: of the 230 tests of `parallel_schedule`, 172 pass, 51 fail the same way in every
+run and 7 are unstable (step 3b, 2026-09-27). There is no release yet.
 
 ## Layout
 
@@ -27,6 +29,7 @@ prepopulated data directory as a deterministic asset, and `data-format:check` gu
 | `extensions.json`  | Temporary: the nine third-party extensions `b133782` pins as submodules (path, URL, commit)       |
 | `data-format.json` | The declared `dataFormat` and its compatibility tuple, which `data-format:check` enforces         |
 | `identity/`        | Identity records: the tree's and artefacts' (temporary, until `18.3.0`), the prepopulated asset's |
+| `regress/`         | The pg_regress baseline: every test's result, the failing tests' diffs, why each group fails      |
 | `builder/`         | The builder image: its pinned `Containerfile`, the package set it must have, the `make -j` cap    |
 | `scripts/`         | The Bun scripts below                                                                             |
 | `docs/adr/`        | Decisions                                                                                         |
@@ -126,8 +129,11 @@ bun run data-format:check              # the data-format guard: the build's tupl
 The driver (`scripts/lib/driver/`) runs a build's `pglite.js`/`pglite.wasm`/`pglite.data` and
 `initdb.js`/`initdb.wasm` directly against their Emscripten glue, with nothing from pgxsinkit: initdb into
 MEMFS (its own module, whose `system()`/`popen()` calls run the backend on a scratch instance), a
-single-user start on a data directory, a byte channel for the wire protocol (`exchange(bytes) → bytes`),
-reading and writing a data directory, installing an extension archive, and a clean close. It takes the
+single-user start on a data directory, a byte channel for the wire protocol (`exchange(bytes) → bytes`, or
+streamed, with blocking reads, for the bridge), reading and writing a data directory, mounting a host directory,
+installing an extension archive, and a clean close. After an ERROR it restores the wasm's shadow stack pointer,
+which the error's unwind leaves where the deepest abandoned frame put it (about 1.2 kB lost per ERROR
+otherwise, until `max_stack_depth` refuses everything); an exit (a FATAL) ends the session. It takes the
 artefact directory as a build's `dist/` (`bin/`, `extensions/`) or a flat directory of the same files.
 
 - **`driver:smoke [--artefacts <dir>] [--from <archive>]`** runs initdb (or unpacks a data directory
@@ -154,6 +160,76 @@ artefact directory as a build's `dist/` (`bin/`, `extensions/`) or a flat direct
 None of them runs in `validate` or CI, which have no build. Run them after a change that reaches the build
 or the driver; `bun test` covers their pure logic (the parsers, the tar writer, the determinism helpers).
 
+## Regression tests
+
+Requirements: a build (`bun run build`, or any directory holding the artefacts), podman and the builder image.
+
+```sh
+bun run regress                  # run parallel_schedule once and compare it with regress/baseline.json
+bun run regress --record         # run it twice or more and rewrite the baseline's results and diffs
+bun run regress:bridge [--artefacts <dir>] [--port <n>] [--database <name>] [--setup <sql>]… [--mount <dir>]…
+```
+
+- **`regress [--artefacts <dir>] [--runs <n>] [--timeout <minutes>] [--regress-lib <regress.so>] [--record]`** is
+  the engine gate's pg_regress (ADR-0001 decision 6). It builds upstream's `pg_regress` and `psql` from the
+  pristine pinned tag, never the patched tree (the client is upstream's; the server under test is ours), with
+  the builder image's host gcc (about 40 s, cached per tag under `.cache/regress/<tag>/`). It then runs
+  `src/test/regress/parallel_schedule` with `--use-existing --max-connections=1` in the builder image on the
+  host's network, against the bridge serving the artefacts (default: the build's `dist/`); a run takes about
+  two minutes, and its output stays in `.cache/regress/runs/<n>/`. Each test is compared with the baseline: a
+  new failure, a changed diff or a newly unstable test fails the gate; a vanished failure is reported, so the
+  baseline can be tightened; a test the baseline records as unstable is reported apart. `--record` (2 runs by
+  default, at least 2) rewrites `regress/baseline.json`'s results and `regress/diffs/`, and records a test whose
+  outcome or diff differs between the runs as unstable. It keeps the failure groups, which are written by hand:
+  a new failure lands in `unclassified`, which `bun test` refuses until it has a group and a reason.
+- **Diffs are normalised** so that two runs of one build give the same bytes: the header's paths become
+  `expected/…` and `results/…`, the timestamps go, and in the content the run's input and output directories
+  become `@abs_srcdir@` and `@abs_builddir@` and the bridge's port `@port@`.
+- **`--use-existing` makes pg_regress create nothing**, so the bridge creates `regression` as pg_regress's own
+  `create_database()` would (`TEMPLATE=template0`, then its six `ALTER DATABASE … SET`s), on a cluster made by
+  the build's initdb on the driver's deterministic host, whose clock starts at the pinned tag's commit time. The run's directories have the same paths on the host,
+  in the container and in the backend's filesystem (a NODEFS mount), so the tests' server-side
+  `COPY … FROM :'filename'` reads the tag's `data/` and writes into the run's `results/`. The run gives no
+  `regress.so`: the build tree's own does not load (see the baseline's `regress-library` group), so the tests'
+  C functions are missing. `--regress-lib` supplies one for experiments; the baseline is recorded without.
+- **The bridge** (`scripts/lib/bridge/`) serves the build's single backend to native clients: TCP in a worker
+  thread, the backend on the main thread, which waits on a SharedArrayBuffer so that a `COPY … FROM STDIN`
+  blocks for the client's data as on a socket. One connection owns the session at a time; a new one takes it
+  over, since psql's `\c` opens its new connection before closing the old one. Before every startup packet it
+  resets the session (Sync, `ROLLBACK` if a transaction block is open, `DISCARD ALL`, and
+  `SET SESSION AUTHORIZATION postgres`, since single-user mode leaves `session_authorization` without a reset
+  value). What a new backend would start without stays as it was (its pid, loaded libraries, caches and
+  statistics), and login event triggers never fire. The startup packet's settings (`PGTZ`, `PGDATESTYLE`, `PGOPTIONS`'s `-c`s) become the
+  session's defaults, with `set_config` and as `-c` start parameters (the backend is restarted when they
+  change), so `RESET` returns to them. The user and database are fixed (`postgres`, the served one): a startup
+  packet for another is refused with a FATAL. Only whole messages reach the backend, never a Terminate. A backend
+  that fails (a throw out of the wasm, an exit) is restarted from its data directory, which runs crash recovery,
+  and the log says `BACKEND FAILED` and for which test. `regress:bridge` runs it on its own, for psql or any
+  other client: it prints the port it listens on, and its options are in its usage line.
+
+The 18.3 baseline (4 runs on the byte-identity build) has 230 tests: 172 pass, 51 fail the same way in every
+run and 7 are unstable; each run reports 58 failures. The failures, by group (`regress/baseline.json` has the
+full reasons):
+
+| Group                     | Tests | Why                                                                                            |
+| ------------------------- | ----- | ---------------------------------------------------------------------------------------------- |
+| `session-authorization`   | 20    | `RESET SESSION AUTHORIZATION` does nothing in single-user mode; the test runs on as the role   |
+| `regress-library`         | 15    | The tests' C functions: the build's `regress.so` imports symbols `pglite.wasm` does not export |
+| `dynamic-loading`         | 4     | `libpqwalreceiver.so` does not load, and after one failed `dlopen` every later one fails       |
+| `conversion-modules`      | 3     | Encoding conversion modules call unexported functions, which ends the backend                  |
+| `wasm-stack`              | 3     | Deep recursion overflows the host's native stack before `max_stack_depth` (2 unstable)         |
+| `single-process`          | 3     | No checkpointer, no background or parallel workers                                             |
+| `session-persistence`     | 3     | `\c` gets the same backend back: login triggers, `temp_buffers`, loaded libraries              |
+| `extended-protocol-ready` | 2     | An extended-query error sends an early ReadyForQuery, which desynchronises psql (unstable)     |
+| `restart-dependent`       | 2     | Whether a `dlopen` still fails depends on an earlier restart (unstable)                        |
+| `clock-resolution`        | 1     | The wasm's wall clock has millisecond resolution (unstable)                                    |
+| `start-parameters`        | 1     | PGlite's start parameters: `search_path=public` (and `-O`)                                     |
+| `icu-locales`             | 1     | The only ICU collations are `und-x-icu` and `unicode`                                          |
+
+Neither script runs in `validate` or CI: they need a build and podman. Run `regress` after any change that
+reaches the build or the driver, and `--record` only after a deliberate change, with each new failure given a
+group and a reason.
+
 ## Scripts
 
 | Script                    | Does                                                                                    |
@@ -171,6 +247,8 @@ or the driver; `bun test` covers their pure logic (the parsers, the tar writer, 
 | `driver:smoke`            | Drive a build's artefacts: initdb, boot, a wire-protocol smoke test (not in CI)         |
 | `prepopulated`            | Make the prepopulated data directory asset; `--check` it against its record (not in CI) |
 | `data-format:check`       | Check a build's compatibility tuple against `data-format.json` (not in CI)              |
+| `regress:bridge`          | Serve a build's backend over TCP to native clients (not in CI)                          |
+| `regress`                 | Run pg_regress on a build and compare it with the baseline; `--record` it (not in CI)   |
 
 ## Versions and releases
 

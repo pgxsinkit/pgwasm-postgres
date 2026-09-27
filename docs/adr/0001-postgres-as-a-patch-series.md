@@ -117,13 +117,51 @@ Postgres's own regression suite has never run on the wasm build.
 
 6. **The engine gate runs here, before a tag.** Clean apply; build; export-list diff (removing a core
    symbol from `included.pglite.exports` fails, anything else is reported); pg_regress against a
-   baseline. pg_regress is native, built from the same tag inside the builder image, run with
-   `--use-existing --max-connections=1`, and talks to the wasm build through a Bun TCP bridge of about
-   100 lines on the build's byte channel. The first run on 18.3 records the known failures
-   (multi-session tests, tablespaces, `\c` reconnects, …) as a checked-in baseline. The gate is "no new
-   diffs", and a vanished diff is reported so the baseline tightens. The contract gate (pgxsinkit's
-   suites on the pin-bump PR) lives in pgxsinkit. A release that passes the engine gate and fails the
-   contract gate is superseded by a new revision, never retracted.
+   baseline. The contract gate (pgxsinkit's suites on the pin-bump PR) lives in pgxsinkit. A release that
+   passes the engine gate and fails the contract gate is superseded by a new revision, never retracted.
+   The pg_regress part is `bun run regress`:
+   - `pg_regress` and `psql` are upstream's, built natively from the pristine pinned tag, never the patched
+     tree (the client is upstream's; the server under test is ours), with the builder image's host gcc, and
+     cached per tag under `.cache/regress/<tag>/`. They run `parallel_schedule` in the builder image on the
+     host's network with `--use-existing --max-connections=1`. `--use-existing` creates nothing, so the
+     bridge creates `regression` as pg_regress's own `create_database()` would. The run's directories have
+     the same paths on the host, in the container and in the backend's filesystem (a NODEFS mount), so the
+     tests' server-side `COPY … FROM :'filename'` works as on a local server.
+   - The bridge (`scripts/lib/bridge/`, `bun run regress:bridge`) serves the build's one backend over TCP
+     through the driver's byte channel. It is not the 100 lines planned: a `COPY … FROM STDIN` needs the
+     backend to block for the client's data in the middle of an exchange, so TCP runs in a worker and the
+     backend, on the main thread, waits on a SharedArrayBuffer; and psql's `\c` opens its new connection
+     before it closes the old one, so a new connection takes the session over instead of queueing. Before
+     every startup packet the bridge resets the session: Sync, `ROLLBACK` if a transaction block is open,
+     `DISCARD ALL`, then `SET SESSION AUTHORIZATION postgres`. The startup packet's settings become the
+     session's defaults, applied with `set_config` and as `-c` start parameters (the backend is restarted
+     when they change), so that `RESET` returns to them. A startup packet for another user or database is
+     refused with a FATAL. Only whole messages reach the backend, never a Terminate. A backend that fails
+     is restarted from its data directory, which runs crash recovery, as a postmaster restarts after a
+     crash.
+   - `regress/baseline.json` holds every test's result and, per group of failing or unstable tests, why
+     (written by hand); `regress/diffs/` holds each failing test's diff, normalised (no paths, timestamps
+     or port). A new failure, a changed diff or a newly unstable test fails the gate; a vanished failure is
+     reported so the baseline tightens; a test the baseline records as unstable is reported apart.
+     `--record` runs at least twice, and a test whose outcome or diff differs between the runs is recorded
+     as unstable. The gate needs a build and podman, so it is not in `validate` or CI.
+   - The 18.3 baseline (2026-09-27, 4 runs on the byte-identity build, about two minutes each): of 230
+     tests, 172 pass, 51 fail the same way in every run and 7 are unstable. Tablespaces and `\c` work
+     (in-place tablespaces; `\c` through the reset). What fails is the engine's and the build's, not the
+     method's: in single-user mode `RESET SESSION AUTHORIZATION` does nothing, since
+     `session_authorization` never gets a value (20 tests); an error in an extended-query batch sends a
+     ReadyForQuery before its Sync (the overlay's `pgl_longjmp` sets `send_ready_for_query` before the error
+     handling sets `ignore_till_sync`), which desynchronises psql; `pglite.wasm` does not export what its
+     own encoding conversion modules and `libpqwalreceiver.so` import (a conversion's call throws out of
+     the wasm and ends the backend), nor what the tree's `regress.so` imports, so the tests' C functions
+     are missing; once one `dlopen` has failed, every later one fails; deep recursion overflows the host's
+     native stack before `max_stack_depth` trips; the wall clock has millisecond resolution; there is one
+     process, and `\c` gets it back; PGlite's start parameters; no ICU language collations.
+   - The first runs also found a defect in the driver: every ERROR leaked about 1.2 kB of the wasm's
+     shadow stack, because nothing restored the stack pointer the error's unwind left behind, until
+     `max_stack_depth` refused every statement. The driver now restores it after each unwound call.
+     pgxsinkit's `pgwasm-c` host (`postgres-instance.ts`) drives the main loop the same way, without a
+     restore.
 
 7. **Trigger and automation.** A weekly `git ls-remote` poll finds a new tag of the current major; the
    Bun bump script applies the series, refreshes `patches/`, builds, runs the engine gate and opens a
@@ -232,7 +270,9 @@ Postgres's own regression suite has never run on the wasm build.
        - 3a (done 2026-09-27): the driver and `driver:smoke`; the prepopulated data directory as a
          deterministic asset, with `prepopulated` and its record; the compatibility tuple,
          `data-format.json` and `data-format:check` (decisions 8 and 10).
-       - 3b (next): the pg_regress bridge and its 18.3 baseline (decision 6).
+       - 3b (done 2026-09-27): the TCP bridge, native pg_regress and psql from the pinned tag, the gate
+         (`bun run regress`) and the 18.3 baseline: of 230 tests, 172 pass, 51 fail and 7 are unstable
+         (decision 6).
     4. `18.3.0`: amcheck only, the manifest and extension libraries deleted, the fixed-path
        reproducible build, the `pgwasm-postgres` label, our prepopulated data directory. pgxsinkit
        adopts it.
@@ -267,6 +307,8 @@ Postgres's own regression suite has never run on the wasm build.
   fails `patches:check`.
 - Until `18.3.0`, cleaning up ElectricSQL's code breaks tree identity, so it waits.
 - The overlay includes two ICU data files, which bring the Unicode License into `NOTICE`.
+- The first pg_regress baseline is a list of the engine's and the build's defects (decision 6); each one
+  fixed, in `18.3.0` or later, tightens the baseline through `bun run regress --record`.
 
 References: pgxsinkit ADR-0062 (absorb PGlite as pgwasm), ADR-0063 (build permanence and the storage
 build), ADR-0064 (the C build's supply chain, pending).
