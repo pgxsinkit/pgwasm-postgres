@@ -16,7 +16,7 @@ import {
   type TestRun,
 } from "../scripts/lib/regress/baseline.ts";
 import { backendFailures, normaliseDiff, parseStatusLines, splitDiffs } from "../scripts/lib/regress/results.ts";
-import { DATABASE_SETUP } from "../scripts/lib/regress/run.ts";
+import { BRIDGE_STACK_KIB, bridgeCommand, bridgeEnvironment, DATABASE_SETUP } from "../scripts/lib/regress/run.ts";
 import { CONFIGURE_FLAGS, toolsBuildScript } from "../scripts/lib/regress/tools.ts";
 
 describe("pg_regress's output", () => {
@@ -219,6 +219,31 @@ describe("the run", () => {
         `ALTER DATABASE "regression" SET timezone_abbreviations TO 'Default';`,
       ].join(""),
     ]);
+  });
+
+  test("runs the bridge with a raised native stack", () => {
+    expect(bridgeCommand("/bin/bun", "/repo/scripts/regress-bridge.ts", ["--port", "0"])).toEqual([
+      "bash",
+      "-c",
+      `ulimit -s ${BRIDGE_STACK_KIB} && exec "$@"`,
+      "bash",
+      "/bin/bun",
+      "/repo/scripts/regress-bridge.ts",
+      "--port",
+      "0",
+    ]);
+    expect(BRIDGE_STACK_KIB).toBe(262144);
+    const env = bridgeEnvironment({ PATH: "/bin", UNSET: undefined });
+    expect(env).toEqual({ PATH: "/bin", BUN_JSC_maxPerThreadStackUsage: String(255 * 1024 * 1024) });
+    // Bun picks the raised stack up: a plain recursion goes about 50 times as deep as with the defaults.
+    const recursion =
+      "let d = 0; const f = (n) => { d = n; return f(n + 1) + 1; }; try { f(0); } catch {} console.log(d);";
+    const depth = (command: string[], env: Record<string, string>): number =>
+      Number(Bun.spawnSync(command, { env, stdout: "pipe", stderr: "pipe" }).stdout.toString().trim());
+    const raised = depth(bridgeCommand(process.execPath, "-e", [recursion]), bridgeEnvironment(process.env));
+    const plain = depth([process.execPath, "-e", recursion], bridgeEnvironment({ PATH: process.env["PATH"] }));
+    expect(raised).toBeGreaterThan(1_000_000);
+    expect(plain).toBeLessThan(raised);
   });
 
   test("builds the client tools from the pristine tree, with configure's flags", () => {

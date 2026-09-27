@@ -9,10 +9,12 @@
  * in the backend's filesystem (a NODEFS mount), so the server-side `COPY … FROM :'filename'` of the tests reads
  * the tag's `data/` and writes into the run's `results/` as a local server would. The run's `lib/` is
  * pg_regress's `--dlpath`, where the tests look for the regress library (`:libdir/regress.so`). It is empty
- * unless a library is given: the build's own `src/test/regress/regress.so` imports 21 functions and several
- * data symbols `pglite.wasm` does not export (its export list comes from the shipped extensions), so its
- * `dlopen` fails, and in this runtime a failed `dlopen` makes every later one fail too, `plpgsql.so`
- * included. Without the file, `CREATE FUNCTION … AS :'regresslib'` fails before any `dlopen`.
+ * unless a library is given: the build's own `src/test/regress/regress.so` imports functions and data symbols
+ * `pglite.wasm` does not export (its export list comes from the modules the build ships, which regress.so is
+ * not), so its `dlopen` fails, and in this runtime a failed `dlopen` makes every later one fail too. Without
+ * the file, `CREATE FUNCTION … AS :'regresslib'` fails before any `dlopen`.
+ *
+ * The bridge runs with a raised native stack ({@link BRIDGE_STACK_KIB}).
  */
 import { closeSync, copyFileSync, existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -25,6 +27,32 @@ import { backendFailures, normaliseDiff, parseStatusLines, splitDiffs, type Back
 import { TOOLS_PREFIX, type ToolsPaths } from "./tools.ts";
 
 export const REGRESS_CONTAINER = `${CONTAINER_PREFIX}regress`;
+
+/**
+ * The native stack the bridge's backend runs on: 256 MiB. The backend runs on the bridge's main thread, and every
+ * wasm frame takes native stack, while Postgres' check_stack_depth() measures only the wasm's shadow stack (the
+ * locals whose address is taken). With the defaults (an 8 MiB RLIMIT_STACK, and JavaScriptCore's
+ * maxPerThreadStackUsage, which stops a plain JavaScript recursion at about 45,000 frames) a deep recursion
+ * overflows the native stack first, and throws a RangeError out of the wasm, which ends the backend; how deep it
+ * gets depends on how far JavaScriptCore has compiled the wasm. `SELECT infinite_recurse()` (max_stack_depth
+ * 2MB) needs between 32 and 48 MiB (2026-09-27); 256 MiB, about 50 times the default's depth, leaves the stack
+ * check to Postgres. Both limits are raised: RLIMIT_STACK (`ulimit -s`, in KiB) sizes the main thread's stack,
+ * and `BUN_JSC_maxPerThreadStackUsage` (bytes, 1 MiB less) lets JavaScriptCore use it.
+ */
+export const BRIDGE_STACK_KIB = 256 * 1024;
+
+/** The bridge's command: bash raises RLIMIT_STACK, then execs Bun on the bridge script. */
+export function bridgeCommand(bun: string, script: string, args: readonly string[]): string[] {
+  return ["bash", "-c", `ulimit -s ${BRIDGE_STACK_KIB} && exec "$@"`, "bash", bun, script, ...args];
+}
+
+/** The bridge's environment: the caller's, with JavaScriptCore allowed the raised stack. */
+export function bridgeEnvironment(env: Readonly<Record<string, string | undefined>>): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const [name, value] of Object.entries(env)) if (value !== undefined) result[name] = value;
+  result["BUN_JSC_maxPerThreadStackUsage"] = String((BRIDGE_STACK_KIB - 1024) * 1024);
+  return result;
+}
 export const REGRESSION_DATABASE = "regression";
 export const SCHEDULE = "parallel_schedule";
 
@@ -80,9 +108,7 @@ function timeout(ms: number, what: string): { promise: Promise<never>; cancel: (
 
 /** Starts the bridge and waits for its `listening on <host>:<port>` line. */
 async function startBridge(input: RunInput, logFile: string): Promise<{ bridge: Bun.Subprocess; port: number }> {
-  const args = [
-    process.execPath,
-    join(input.layout.root, "scripts", "regress-bridge.ts"),
+  const args = bridgeCommand(process.execPath, join(input.layout.root, "scripts", "regress-bridge.ts"), [
     ...["--artefacts", input.artefactsDir],
     ...["--database", REGRESSION_DATABASE],
     ...DATABASE_SETUP.flatMap((sql) => ["--setup", sql]),
@@ -90,8 +116,14 @@ async function startBridge(input: RunInput, logFile: string): Promise<{ bridge: 
     ...["--mount", input.runDir],
     ...["--epoch", String(input.epoch)],
     ...["--log", logFile],
-  ];
-  const bridge = Bun.spawn(args, { cwd: input.layout.root, stdin: "ignore", stdout: "pipe", stderr: "inherit" });
+  ]);
+  const bridge = Bun.spawn(args, {
+    cwd: input.layout.root,
+    env: bridgeEnvironment(process.env),
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "inherit",
+  });
   const reader = bridge.stdout.getReader();
   const decoder = new TextDecoder();
   let text = "";
