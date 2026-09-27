@@ -15,6 +15,10 @@ export interface Layout {
   readonly extensionsFile: string;
   /** The byte-identity record `build:verify` checks the build's output against (decision 2). */
   readonly artefactsRecord: string;
+  /** The record of the prepopulated data directory `prepopulated --check` reproduces (decision 10). */
+  readonly prepopulatedRecord: string;
+  /** The declared data format and its compatibility tuple (decision 8). */
+  readonly dataFormatFile: string;
   /** The builder image's definition (decision 9): its Containerfile and the `make` resource cap. */
   readonly builderDir: string;
   /** Gitignored: the upstream clone and scratch worktrees. */
@@ -29,6 +33,8 @@ export interface Layout {
   readonly buildSource: string;
   /** Its `dist/`: the build's output, mounted at `/pglite` in the builder. */
   readonly buildDist: string;
+  /** Where `bun run prepopulated` writes the asset by default. */
+  readonly prepopulatedAsset: string;
   /** The git config every command against the cache runs with (the user's global config is not read). */
   readonly cacheGitConfig: string;
   /** Gitignored: `patches:work` worktrees, one per upstream tag. */
@@ -46,6 +52,8 @@ export function layoutFor(root: string): Layout {
     identityDir: join(root, "identity"),
     extensionsFile: join(root, "extensions.json"),
     artefactsRecord: join(root, "identity", "0.5.8-artefacts.json"),
+    prepopulatedRecord: join(root, "identity", "prepopulated.json"),
+    dataFormatFile: join(root, "data-format.json"),
     builderDir: join(root, "builder"),
     cacheDir,
     cacheRepo: join(cacheDir, "upstream.git"),
@@ -53,6 +61,7 @@ export function layoutFor(root: string): Layout {
     buildDir,
     buildSource: join(buildDir, "postgres-pglite"),
     buildDist: join(buildDir, "postgres-pglite", "dist"),
+    prepopulatedAsset: join(cacheDir, "prepopulated", "prepopulated.tar.gz"),
     cacheGitConfig: join(cacheDir, "gitconfig"),
     workDir: join(root, "work"),
   };

@@ -1,0 +1,20 @@
+{
+  "$comment": "The data format (ADR-0001 decision 8): the compatibility tuple a server compares against its compile-time values before it uses a data directory (ReadControlFile() in xlog.c, and XLOG_PAGE_MAGIC in xlogreader.c), keyed by the C field names, and the dataFormat it stands for. `bun run data-format:check` extracts the tuple from a build's data directory and fails unless it equals `tuple`. A changed tuple needs a new dataFormat (move the current entry to `previous` and declare dataFormat + 1 with the new tuple); a new dataFormat needs a new tuple. pgxsinkit carries `dataFormat` into the build's identity. Extracted from the prepopulated data directory of the PGlite 0.5.8 build (REL_18_3, wasm32).",
+  "dataFormat": 1,
+  "tuple": {
+    "pg_control_version": 1800,
+    "catalog_version_no": 202506291,
+    "maxAlign": 8,
+    "floatFormat": 1234567,
+    "blcksz": 8192,
+    "relseg_size": 131072,
+    "xlog_blcksz": 8192,
+    "nameDataLen": 64,
+    "indexMaxKeys": 32,
+    "toast_max_chunk_size": 1996,
+    "loblksize": 2048,
+    "float8ByVal": false,
+    "xlp_magic": "0xD118"
+  },
+  "previous": []
+}

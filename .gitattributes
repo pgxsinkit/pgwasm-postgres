@@ -2,3 +2,4 @@
 # byte and line ending, so git must never convert them.
 /patches/** -text
 /overlay/** -text
+/tests/fixtures/** binary

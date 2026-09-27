@@ -27,7 +27,7 @@ export interface TreeIdentity {
 
 export type Json = Record<string, unknown>;
 
-function readJson(file: string, root: string): Json {
+export function readJson(file: string, root: string): Json {
   const name = relative(root, file);
   if (!existsSync(file)) throw new UserError(`${name} is missing.`);
   let parsed: unknown;
@@ -83,6 +83,8 @@ export const IDENTITY_KINDS = {
   tree: "tree",
   /** The artefacts the build gives (`build:verify`, see `artefacts.ts`). */
   artefacts: "artefacts",
+  /** The prepopulated data directory the build's own initdb gives (`prepopulated --check`, see `prepopulated.ts`). */
+  prepopulated: "prepopulated",
 } as const;
 
 /** Reads an `identity/*.json` record and checks its `kind`. */
