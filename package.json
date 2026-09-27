@@ -20,6 +20,7 @@
     "patches:work": "bun scripts/patches-work.ts",
     "prepare": "git config core.hooksPath .githooks || true",
     "prepopulated": "bun scripts/prepopulated.ts",
+    "regress": "bun scripts/regress.ts",
     "regress:bridge": "bun scripts/regress-bridge.ts",
     "test": "bun test ./tests",
     "typecheck": "tsc --noEmit -p tsconfig.json",

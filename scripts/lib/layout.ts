@@ -21,6 +21,12 @@ export interface Layout {
   readonly dataFormatFile: string;
   /** The builder image's definition (decision 9): its Containerfile and the `make` resource cap. */
   readonly builderDir: string;
+  /** The pg_regress baseline (decision 6): the results and the failure groups. */
+  readonly regressBaseline: string;
+  /** The baseline's normalised diffs, one per failing test. */
+  readonly regressDiffsDir: string;
+  /** Gitignored: the native pg_regress and psql per upstream tag, and the runs' output. */
+  readonly regressCache: string;
   /** Gitignored: the upstream clone and scratch worktrees. */
   readonly cacheDir: string;
   /** The bare, shallow clone holding only the upstream tags fetched so far. */
@@ -55,6 +61,9 @@ export function layoutFor(root: string): Layout {
     prepopulatedRecord: join(root, "identity", "prepopulated.json"),
     dataFormatFile: join(root, "data-format.json"),
     builderDir: join(root, "builder"),
+    regressBaseline: join(root, "regress", "baseline.json"),
+    regressDiffsDir: join(root, "regress", "diffs"),
+    regressCache: join(cacheDir, "regress"),
     cacheDir,
     cacheRepo: join(cacheDir, "upstream.git"),
     extensionsCache: join(cacheDir, "extensions.git"),
