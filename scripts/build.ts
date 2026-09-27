@@ -1,9 +1,9 @@
 /**
  * bun run build
  *
- * The build: proves the series (`patches:check`), materialises its tree and the extensions of extensions.json into
- * .cache/build/postgres-pglite (gitignored; the previous build there is deleted), and runs `build-pglite.sh` on it
- * in the builder image, as ElectricSQL's CI ran it for 0.5.8 (see scripts/lib/build.ts). The artefacts land in
+ * The build: proves the series (`patches:check`), materialises its tree into .cache/build/postgres-pglite
+ * (gitignored; the previous build there is deleted), and runs `build-pglite.sh` on it in the builder image, as
+ * ElectricSQL's CI ran it for 0.5.8 (see scripts/lib/build.ts). The artefacts land in
  * .cache/build/postgres-pglite/dist; the full log in .cache/build/build.log. About 15 minutes.
  *
  * Not part of validate or CI: it takes too long, and the image is not published yet.
@@ -50,7 +50,6 @@ await runCliAsync(async () => {
 
   const manifest = {
     tree: source.tree,
-    extensions: source.extensions,
     image,
     imageId: id,
     recipe: RECIPE,

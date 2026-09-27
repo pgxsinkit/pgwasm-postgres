@@ -11,8 +11,6 @@ export interface Layout {
   readonly overlayDir: string;
   /** Identity records: the prepopulated data directory's (decision 10). */
   readonly identityDir: string;
-  /** The temporary manifest of the third-party extensions that were gitlinks in the source. */
-  readonly extensionsFile: string;
   /** The record of the prepopulated data directory `prepopulated --check` reproduces (decision 10). */
   readonly prepopulatedRecord: string;
   /** The declared data format and its compatibility tuple (decision 8). */
@@ -29,8 +27,6 @@ export interface Layout {
   readonly cacheDir: string;
   /** The bare, shallow clone holding only the upstream tags fetched so far. */
   readonly cacheRepo: string;
-  /** The bare, shallow clone holding the extension commits `extensions.json` pins. */
-  readonly extensionsCache: string;
   /** Where `bun run build` works: the source, the log and `build.json`. Replaced by every build. */
   readonly buildDir: string;
   /** The materialised source the build runs in. */
@@ -54,7 +50,6 @@ export function layoutFor(root: string): Layout {
     patchesDir: join(root, "patches"),
     overlayDir: join(root, "overlay"),
     identityDir: join(root, "identity"),
-    extensionsFile: join(root, "extensions.json"),
     prepopulatedRecord: join(root, "identity", "prepopulated.json"),
     dataFormatFile: join(root, "data-format.json"),
     builderDir: join(root, "builder"),
@@ -63,7 +58,6 @@ export function layoutFor(root: string): Layout {
     regressCache: join(cacheDir, "regress"),
     cacheDir,
     cacheRepo: join(cacheDir, "upstream.git"),
-    extensionsCache: join(cacheDir, "extensions.git"),
     buildDir,
     buildSource: join(buildDir, "postgres-pglite"),
     buildDist: join(buildDir, "postgres-pglite", "dist"),

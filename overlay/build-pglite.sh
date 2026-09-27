@@ -126,30 +126,15 @@ fi
 emmake make PORTNAME=emscripten -j || { echo 'error: emmake make PORTNAME=emscripten -j' ; exit 21; }
 emmake make PORTNAME=emscripten install || { echo 'error: emmake make PORTNAME=emscripten install' ; exit 23; }
 
-# Step 3.1: make ported contrib extensions - do not install
-emmake make PORTNAME=emscripten -C contrib/ -j || { echo 'error: emmake make PORTNAME=emscripten -C contrib/ -j' ; exit 31; }
+# Step 3: the shipped extensions: each contrib module of PGLITE_CONTRIB, built and packaged by contrib/dist.mk as
+# $INSTALL_FOLDER/extensions/<module>.tar.gz
+PGLITE_CONTRIB="amcheck"
+emmake make PORTNAME=emscripten -C contrib/ $(for module in $PGLITE_CONTRIB; do echo "$module.tar.gz"; done) || { echo 'error: emmake make PORTNAME=emscripten -C contrib/ <module>.tar.gz' ; exit 31; }
 
-# Step 3.2 pgcrypto - special case
-cd ./pglite && ./build-pgcrypto.sh && cd ../
+# Step 4: get exported functions
+emmake make PORTNAME=emscripten -j -C src/backend pglite-exported-functions || { echo 'emmake make PORTNAME=emscripten -j -C src/backend pglite-exported-functions' ; exit 41; }
 
-# Step 3.3: make dist contrib extensions - this will create an archive for each extension
-PGLITE_WITH_PGCRYPTO=1 emmake make PORTNAME=emscripten -C contrib/ dist || { echo 'error: emmake make PORTNAME=emscripten -C contrib/ dist' ; exit 32; }
-# the above will also create a file with the imports that each extension needs - we pass these as input in the next step for emscripten to keep alive
-
-# Step 4: make and dist other extensions
-SAVE_PATH=$PATH
-PATH=$PATH:$INSTALL_FOLDER/bin
-emmake make OPTFLAGS="" PORTNAME=emscripten -C pglite/other_extensions -j || { echo 'emmake make OPTFLAGS="" PORTNAME=emscripten -j -C pglite/other_extensions' ; exit 41; }
-# Step 4.1: special case: make PostGIS
-cd ./pglite/ && ./build-postgis.sh && cd ../
-emmake make OPTFLAGS="" PORTNAME=emscripten -C pglite/other_extensions dist || { echo 'emmake make OPTFLAGS="" PORTNAME=emscripten -C pglite/other_extensions dist' ; exit 42; }
-emmake make OPTFLAGS="" PORTNAME=emscripten -C pglite/other_extensions dist-postgis || { echo 'emmake make OPTFLAGS="" PORTNAME=emscripten -C pglite/ dist-postgis' ; exit 43; }
-PATH=$SAVE_PATH
-
-# Step 5: get exported functions
-emmake make PORTNAME=emscripten -j -C src/backend pglite-exported-functions || { echo 'emmake make PORTNAME=emscripten -j -C src/backend pglite-exported-functions' ; exit 51; }
-
-# Step 6: make and install pglite
+# Step 5: make and install pglite
 PGROOT=/pglite
 # PG_IMPORTS_DIR=$PGROOT/imports
 PGPRELOAD="\
@@ -178,5 +163,5 @@ $PGPRELOAD \
 -lnodefs.js -lidbfs.js"
 
 # Building pglite itself needs to be the last step because of the PRELOAD_FILES parameter (a list of files and folders) need to be available.
-POSTGRES_PGLITE_FLAGS="$PGLITE_CFLAGS $POSTGRES_PGLITE_FLAGS" emmake make PORTNAME=emscripten -C src/backend/ -j pglite || { echo 'emmake make OPTFLAGS="" PORTNAME=emscripten -j -C pglite' ; exit 61; }
-emmake make PORTNAME=emscripten -C src/backend/ install-pglite || { echo 'emmake make PORTNAME=emscripten -C src/backend/ install-pglite' ; exit 62; }
+POSTGRES_PGLITE_FLAGS="$PGLITE_CFLAGS $POSTGRES_PGLITE_FLAGS" emmake make PORTNAME=emscripten -C src/backend/ -j pglite || { echo 'emmake make OPTFLAGS="" PORTNAME=emscripten -j -C pglite' ; exit 51; }
+emmake make PORTNAME=emscripten -C src/backend/ install-pglite || { echo 'emmake make PORTNAME=emscripten -C src/backend/ install-pglite' ; exit 52; }

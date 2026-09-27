@@ -33,7 +33,8 @@ The fork carries no licence file of its own: its COPYRIGHT file is PostgreSQL's,
 unchanged, and PGlite's README (https://github.com/electric-sql/pglite) states:
 "Changes to the Postgres source are licensed under the PostgreSQL License." The
 fork's 22 commits on top of REL_18_3 were recut into five topic patches, each of
-which names its source commit. The overlay files are copied unchanged.
+which names its source commit. The overlay started as the fork's files, copied
+unchanged; since release 18.3.0 pgwasm-postgres changes and adds to it.
 
 ------------------------------------------------------------------------------
 Unicode: ICU collation data

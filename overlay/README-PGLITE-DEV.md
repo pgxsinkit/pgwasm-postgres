@@ -14,7 +14,7 @@ All our changes to the upstream PostgreSQL code are marked with a `__PGLITE__` d
 
 A search for `__PGLITE__` should reveal all the points where we intervened.
 
-In addition, we added a top-level folder called `pglite` that contains additional backend code (see `pglitec.c`) as well as git submodules for external extensions, helper scripts and static data. Additionally, see `build-with-docker.sh` and `build-pglite.sh` scripts at the top level for entry points into the build process.
+In addition, we added a top-level folder called `pglite` that contains additional backend code (see `pglitec.c`), helper scripts and static data. Additionally, see the `build-pglite.sh` script at the top level for the entry point into the build process.
 
 ## Loop unrolling
 

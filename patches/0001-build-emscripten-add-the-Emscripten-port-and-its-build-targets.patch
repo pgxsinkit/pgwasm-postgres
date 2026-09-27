@@ -24,9 +24,9 @@ Add an "emscripten" port and the build hooks the PGlite build scripts
 - The initdb, pg_config, pg_ctl and pg_dump Makefiles install their
   .wasm outputs; pg_config and pg_ctl are wrapped by
   pglite/scripts/run_pg_cmd.mjs so other tools can run them.
-- contrib/Makefile builds pgcrypto when PGLITE_WITH_PGCRYPTO=1 and
-  includes the overlay's contrib/dist.mk; src/timezone/Makefile uses the
-  host's zic.
+- contrib/Makefile includes the overlay's contrib/dist.mk, which
+  packages a contrib module as an extension archive;
+  src/timezone/Makefile uses the host's zic.
 - configure puts "(PGlite $PGLITE_VERSION)" into PG_VERSION_STR, so
   version() names the build.
 - .gitignore ignores the build outputs.
@@ -35,7 +35,7 @@ Derived from electric-sql/postgres-pglite b133782cd759f08b3aeb263b80a963b39c7b7a
 ---
  .gitignore                        | 10 +++++++
  configure                         |  2 +-
- contrib/Makefile                  |  6 ++++
+ contrib/Makefile                  |  2 ++
  src/Makefile.shlib                | 14 +++++++++
  src/backend/Makefile              | 48 +++++++++++++++++++++++++++++++
  src/bin/initdb/Makefile           |  9 ++++++
@@ -48,7 +48,7 @@ Derived from electric-sql/postgres-pglite b133782cd759f08b3aeb263b80a963b39c7b7a
  src/pl/plpgsql/src/Makefile       | 12 ++++++++
  src/template/emscripten           | 13 +++++++++
  src/timezone/Makefile             |  7 +++++
- 15 files changed, 212 insertions(+), 1 deletion(-)
+ 15 files changed, 208 insertions(+), 1 deletion(-)
  create mode 100644 src/include/port/emscripten.h
  create mode 100644 src/makefiles/Makefile.emscripten
  create mode 100644 src/template/emscripten
@@ -86,21 +86,10 @@ index 540f911863fb1153d8127cdbc602091997a70894..09be7f11db46fef48c459b8b2bbd5046
  
  
 diff --git a/contrib/Makefile b/contrib/Makefile
-index 2f0a88d3f77448d3f6b9f1dda3de3690be747552..91aab329a7f6c4356657a4224c9bab11ce6844ee 100644
+index 2f0a88d3f77448d3f6b9f1dda3de3690be747552..022c520cbbf981b6dbb6b8086e5179707b50301c 100644
 --- a/contrib/Makefile
 +++ b/contrib/Makefile
-@@ -59,6 +59,10 @@ else
- ALWAYS_SUBDIRS += pgcrypto sslinfo
- endif
- 
-+ifeq ($(PGLITE_WITH_PGCRYPTO), 1)
-+SUBDIRS += pgcrypto
-+endif
-+
- ifneq ($(with_uuid),no)
- SUBDIRS += uuid-ossp
- else
-@@ -92,6 +96,8 @@ endif
+@@ -92,6 +92,8 @@ endif
  # Missing:
  #		start-scripts	\ (does not have a makefile)
  

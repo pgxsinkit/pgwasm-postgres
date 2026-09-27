@@ -1,8 +1,8 @@
 # Scratch space (agents: tmp/agents/ only).
 tmp/
 node_modules/
-# The upstream Postgres clone (bare) and the throwaway worktrees patches:check makes in it, the extensions
-# clone, and bun run build's tree, artefacts and logs.
+# The upstream Postgres clone (bare) and the throwaway worktrees patches:check makes in it, bun run build's
+# tree, artefacts and logs, and the regress tools and runs.
 .cache/
 # patches:work worktrees, one per upstream tag.
 work/
