@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -36,7 +36,6 @@ describe("the export list", () => {
 
   test("the reference holds every core symbol", () => {
     const layout = layoutFor(repoRoot);
-    if (!existsSync(layout.exportsReference)) return;
     const reference = new Set(readExportList(layout.exportsReference));
     const core = coreSymbols(
       readFileSync(join(layout.overlayDir, "pglite", "static", "included.pglite.exports"), "utf8"),
