@@ -33,7 +33,7 @@ export interface Layout {
   readonly buildDir: string;
   /** The materialised source the build runs in. */
   readonly buildSource: string;
-  /** Its `dist/`: the build's output, mounted at `/pglite` in the builder. */
+  /** Its `dist/`: the build's output and its `manifest.json`, mounted at `/pglite` in the builder. */
   readonly buildDist: string;
   /** Where `bun run prepopulated` writes the asset by default. */
   readonly prepopulatedAsset: string;

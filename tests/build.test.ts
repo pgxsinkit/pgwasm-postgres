@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-import { BUILD_CONTAINER, buildCommand, buildPaths, buildRecipe } from "../scripts/lib/build.ts";
+import { BUILD_CONTAINER, buildCommand, buildEnvironment, buildPaths, SOURCE_MOUNT } from "../scripts/lib/build.ts";
 import { BUILDER_IMAGE } from "../scripts/lib/builder.ts";
 import { git, UserError } from "../scripts/lib/git.ts";
 import { layoutFor, type Layout } from "../scripts/lib/layout.ts";
@@ -15,9 +15,11 @@ const fixtures = new Fixtures();
 afterEach(() => fixtures.cleanup());
 
 describe("the build command", () => {
-  test("the build runs as ElectricSQL's CI did, with the release version", () => {
-    const paths = buildPaths(layoutFor("/repo"));
-    const command = buildCommand(BUILDER_IMAGE, buildRecipe("18.3.0"), paths);
+  const paths = buildPaths(layoutFor("/repo"));
+  const inputs = { version: "18.3.0", sourceDateEpoch: 1_790_501_297, debug: false };
+
+  test("mounts the source at /build, whatever the checkout's path, and passes the release inputs", () => {
+    const command = buildCommand(BUILDER_IMAGE, inputs, paths);
     expect(command.slice(0, 5)).toEqual(["nice", "-n", "10", "podman", "run"]);
     expect(command.slice(-2)).toEqual([BUILDER_IMAGE, "./build-pglite.sh"]);
     const joined = command.join(" ");
@@ -27,18 +29,29 @@ describe("the build command", () => {
       "--unsetenv container",
       "--umask 0022",
       "--cpus 4 --memory 16g",
-      "-e DEBUG=false -e PGWASM_POSTGRES_VERSION=18.3.0",
-      "--workdir=/home/runner/_work/pglite/pglite/postgres-pglite",
-      "-v /repo/.cache/build/postgres-pglite:/home/runner/_work/pglite/pglite/postgres-pglite:rw",
+      "-e DEBUG=false -e PGWASM_POSTGRES_VERSION=18.3.0 -e SOURCE_DATE_EPOCH=1790501297 -e LC_ALL=C",
+      `--workdir=${SOURCE_MOUNT}`,
+      "-v /repo/.cache/build/postgres-pglite:/build:rw",
       "-v /repo/.cache/build/postgres-pglite/dist:/pglite:rw",
       "-v /repo/builder/bin/make:/usr/local/bin/make:ro",
     ]) {
       expect(joined).toContain(part);
     }
+    // A release build never sees the host path, except as the mount's source.
+    expect(joined.split("/repo/").length - 1).toBe(3);
+    expect(joined).not.toContain("HOST_SOURCE_DIR");
     expect(BUILD_CONTAINER.startsWith(CONTAINER_PREFIX)).toBe(true);
-    expect(() => buildCommand(BUILDER_IMAGE, buildRecipe("18.3.0"), { ...paths, source: "/a:b" })).toThrow(
-      /cannot|Cannot/,
-    );
+    expect(() => buildCommand(BUILDER_IMAGE, inputs, { ...paths, source: "/a:b" })).toThrow(/Cannot/);
+  });
+
+  test("a debug build maps /build back to the host's source", () => {
+    expect(buildEnvironment({ ...inputs, debug: true }, paths)).toEqual({
+      DEBUG: "true",
+      PGWASM_POSTGRES_VERSION: "18.3.0",
+      SOURCE_DATE_EPOCH: "1790501297",
+      LC_ALL: "C",
+      HOST_SOURCE_DIR: "/repo/.cache/build/postgres-pglite",
+    });
   });
 });
 

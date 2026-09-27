@@ -3,12 +3,16 @@
 ### NOTES ###
 # $INSTALL_PREFIX is expected to point to the installation folder of various libraries built to wasm (see pglite-builder)
 #
-# pgwasm-postgres runs this with `bun run build`, in its builder image, with:
+# pgwasm-postgres runs this with `bun run build`, in its builder image, with the source at /build and:
 #   PGWASM_POSTGRES_VERSION  the release version version() names (required)
+#   SOURCE_DATE_EPOCH        the commit time the extension archives' member mtimes are set to (required)
+#   LC_ALL=C                 so that sorting and messages do not depend on the host's locale
+#   DEBUG=true               a debug build (-g); HOST_SOURCE_DIR then maps /build back to the host's checkout
 #############
 
 : "${PGWASM_POSTGRES_VERSION:?must be the release version that version() names}"
-export PGWASM_POSTGRES_VERSION
+: "${SOURCE_DATE_EPOCH:?must be the commit time, which the extension archives carry as member mtimes}"
+export PGWASM_POSTGRES_VERSION SOURCE_DATE_EPOCH
 
 emcc --clear-cache
 
@@ -21,6 +25,10 @@ if [ "$DEBUG" = true ]
 then
     echo "pglite: building debug version."
     PGLITE_CFLAGS="$PGLITE_CFLAGS -g -gsource-map --no-wasm-opt"
+    # the source is built at a fixed path; the debug info points at the host's checkout, where a debugger finds it
+    if [ -n "$HOST_SOURCE_DIR" ]; then
+        PGLITE_CFLAGS="$PGLITE_CFLAGS -ffile-prefix-map=$(pwd)=$HOST_SOURCE_DIR"
+    fi
 else
     echo "pglite: building release version."
     PGLITE_CFLAGS="$PGLITE_CFLAGS -O2"

@@ -1,15 +1,17 @@
 /**
- * The build, still much as ElectricSQL CI's `build-with-docker.sh` invocation for `@electric-sql/pglite@0.5.8` ran
- * it (the byte-identity build of ADR-0001 decision 2), with podman and our builder image. From
- * `build-with-docker.sh` (overlay, as at `b133782`):
+ * The build (ADR-0001 decision 9): `build-pglite.sh` on the materialised source, in the builder image, reproducible
+ * from any checkout:
  *
- *   docker run --rm -e DEBUG=false -e PGLITE_VERSION=0.5.8 --workdir=$(pwd) -v .:$(pwd):rw -v ./dist:/pglite:rw \
- *     electricsql/pglite-builder:3.1.74-7 ./build-pglite.sh
+ * - the source is mounted at a fixed path, {@link SOURCE_MOUNT}, wherever the checkout is (paths reach the
+ *   artefacts: pg_config's flags, pgxs's Makefile.global in pglite.data, `__FILE__` in error reports);
+ * - `SOURCE_DATE_EPOCH` is the commit time of HEAD, the extension archives' member mtimes;
+ * - it runs under `LC_ALL=C`, as root with umask 022 and no `TZ`, and `--unsetenv container` drops the one
+ *   variable podman adds;
+ * - `PGWASM_POSTGRES_VERSION` is the candidate version (see version.ts), which `version()` names.
  *
- * with `$(pwd)` = `/home/runner/_work/pglite/pglite/postgres-pglite` on ElectricSQL's runner. The container runs
- * as root with umask 022, no `TZ` and no `LANG`/`LC_*` (podman passes none of the host's environment), and
- * `--unsetenv container` drops the one variable podman adds and docker does not. Instead of `PGLITE_VERSION`, the
- * build gets `PGWASM_POSTGRES_VERSION`, the candidate version of HEAD (version.ts), which `version()` names.
+ * A debug build (`DEBUG=true`, `-g`) also gets the checkout's host path as `HOST_SOURCE_DIR`, which
+ * `build-pglite.sh` turns into `-ffile-prefix-map=/build=<host path>`, so that its debug info points at the files
+ * on the host. A release build never sees the host path.
  *
  * Resource caps that change no compiler input: `builder/bin/make` over `/usr/local/bin/make` turns the script's
  * bare `make -j` into `make -j4`; the container gets 4 CPUs and 16 GiB; podman (and so the build) runs under
@@ -20,26 +22,13 @@ import { join } from "node:path";
 import type { Layout } from "./layout.ts";
 import { CONTAINER_PREFIX } from "./podman.ts";
 
-/** The build inputs besides the source and the image. */
-export interface BuildRecipe {
-  /** Where the source is mounted and the build runs (embedded in pglite.wasm and pglite.data). */
-  readonly sourcePath: string;
-  /** What the container gets with `-e`, in order. */
-  readonly environment: Readonly<Record<string, string>>;
-}
-
-/** The build's inputs: ElectricSQL CI's checkout path, and the release version `version()` names. */
-export function buildRecipe(version: string): BuildRecipe {
-  return {
-    sourcePath: "/home/runner/_work/pglite/pglite/postgres-pglite",
-    environment: { DEBUG: "false", PGWASM_POSTGRES_VERSION: version },
-  };
-}
-
 /** The build container's name: one build at a time. */
 export const BUILD_CONTAINER = `${CONTAINER_PREFIX}build`;
 
-/** `build-pglite.sh`'s output folder (its `INSTALL_FOLDER` default), where `build-with-docker.sh` mounts `./dist`. */
+/** Where the source is mounted, and the build runs, whatever the host path of the checkout. */
+export const SOURCE_MOUNT = "/build";
+
+/** `build-pglite.sh`'s output folder (its `INSTALL_FOLDER` default), where the build's `dist/` is mounted. */
 export const OUTPUT_MOUNT = "/pglite";
 
 /** Where `builder/bin/make` goes: ahead of `/usr/bin/make` on the image's PATH. */
@@ -58,6 +47,27 @@ export function buildPaths(layout: Layout): BuildPaths {
   return { source: layout.buildSource, dist: layout.buildDist, make: join(layout.builderDir, "bin", "make") };
 }
 
+/** What a build is made from, besides the source and the image. */
+export interface BuildInputs {
+  /** The release version `version()` names (`18.3.0`). */
+  readonly version: string;
+  /** The commit time of HEAD, in seconds. */
+  readonly sourceDateEpoch: number;
+  /** A debug build: `-g`, no wasm-opt, and debug info that points at the host's checkout. */
+  readonly debug: boolean;
+}
+
+/** The environment the build runs with, in the order it is passed. */
+export function buildEnvironment(inputs: BuildInputs, paths: BuildPaths): Record<string, string> {
+  return {
+    DEBUG: inputs.debug ? "true" : "false",
+    PGWASM_POSTGRES_VERSION: inputs.version,
+    SOURCE_DATE_EPOCH: String(inputs.sourceDateEpoch),
+    LC_ALL: "C",
+    ...(inputs.debug ? { HOST_SOURCE_DIR: paths.source } : {}),
+  };
+}
+
 /** A bind mount's host path: podman's `-v` syntax cannot carry `:` or `,`. */
 function mountable(path: string): string {
   if (/[:,]/.test(path)) throw new Error(`Cannot bind-mount ${path}: the path contains ":" or ",".`);
@@ -65,7 +75,7 @@ function mountable(path: string): string {
 }
 
 /** The command `bun run build` runs. */
-export function buildCommand(image: string, recipe: BuildRecipe, paths: BuildPaths): string[] {
+export function buildCommand(image: string, inputs: BuildInputs, paths: BuildPaths): string[] {
   return [
     "nice",
     "-n",
@@ -84,10 +94,10 @@ export function buildCommand(image: string, recipe: BuildRecipe, paths: BuildPat
     "0022",
     "--unsetenv",
     "container",
-    ...Object.entries(recipe.environment).flatMap(([name, value]) => ["-e", `${name}=${value}`]),
-    `--workdir=${recipe.sourcePath}`,
+    ...Object.entries(buildEnvironment(inputs, paths)).flatMap(([name, value]) => ["-e", `${name}=${value}`]),
+    `--workdir=${SOURCE_MOUNT}`,
     "-v",
-    `${mountable(paths.source)}:${recipe.sourcePath}:rw`,
+    `${mountable(paths.source)}:${SOURCE_MOUNT}:rw`,
     "-v",
     `${mountable(paths.dist)}:${OUTPUT_MOUNT}:rw`,
     "-v",

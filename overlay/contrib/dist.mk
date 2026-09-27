@@ -1,6 +1,8 @@
 # contrib/dist.mk
 #
-# Package each contrib extension into its own .tar.gz archive
+# Package each contrib extension into its own .tar.gz archive, reproducibly: the members sorted by name (not
+# in the filesystem's directory order), their mtimes at $SOURCE_DATE_EPOCH (not the moment of `make install`),
+# owned by root:0, and gzip's header without a name or mtime (tar pipes into gzip).
 
 prefix ?= /pglite
 CONTRIB_BUILD_ROOT := /tmp/extensions/build
@@ -20,8 +22,7 @@ dist: $(addsuffix .tar.gz,$(CONTRIBS))
 	@echo "=== Packaging $* ==="
 	mkdir -p $(ARCHIVE_DIR)
 	cd $(CONTRIB_BUILD_ROOT)/$*/$(prefix) && \
-	files=$$(find . -type f -o -type l | sed 's|^\./||') && \
-	tar -czf $(ARCHIVE_DIR)/$*.tar.gz $$files
-# 	tar -C $(CONTRIB_BUILD_ROOT)/$*/$(prefix) -czf $(ARCHIVE_DIR)/$*.tar.gz .
+	files=$$(find . -type f -o -type l | sed 's|^\./||' | LC_ALL=C sort) && \
+	tar --mtime=@$${SOURCE_DATE_EPOCH:?} --owner=root:0 --group=root:0 -czf $(ARCHIVE_DIR)/$*.tar.gz $$files
 
 .PHONY: dist
