@@ -13,20 +13,23 @@ The series is the split of ElectricSQL's PGlite fork (`electric-sql/postgres-pgl
 PostgreSQL 18.3 tree PGlite 0.5.8 was built from). `patches:check` proves that the pinned `REL_18_3` +
 the patches + the overlay gives exactly that tree, without its extension submodules. `build` and
 `build:verify` prove that the tree, with those extensions, builds PGlite 0.5.8's artefacts byte for byte
-(2026-09-27). There is no release yet.
+(2026-09-27). The build's artefacts run under this repository's own minimal driver, which also makes the
+prepopulated data directory as a deterministic asset, and `data-format:check` guards the on-disk format
+(step 3a, 2026-09-27). There is no release yet.
 
 ## Layout
 
-| Path              | What                                                                                                         |
-| ----------------- | ------------------------------------------------------------------------------------------------------------ |
-| `upstream.json`   | The pin: upstream repository, tag, and the commit the tag must resolve to                                    |
-| `patches/`        | The series: `git format-patch` output, applied in order with `git am --3way`                                 |
-| `overlay/`        | Files copied into the tree verbatim, mirroring tree paths; never patched                                     |
-| `extensions.json` | Temporary: the nine third-party extensions `b133782` pins as submodules (path, URL, commit)                  |
-| `identity/`       | Temporary: the identity records `patches:check` and `build:verify` check, until the first release (`18.3.0`) |
-| `builder/`        | The builder image: its pinned `Containerfile`, the package set it must have, the `make -j` cap               |
-| `scripts/`        | The Bun scripts below                                                                                        |
-| `docs/adr/`       | Decisions                                                                                                    |
+| Path               | What                                                                                              |
+| ------------------ | ------------------------------------------------------------------------------------------------- |
+| `upstream.json`    | The pin: upstream repository, tag, and the commit the tag must resolve to                         |
+| `patches/`         | The series: `git format-patch` output, applied in order with `git am --3way`                      |
+| `overlay/`         | Files copied into the tree verbatim, mirroring tree paths; never patched                          |
+| `extensions.json`  | Temporary: the nine third-party extensions `b133782` pins as submodules (path, URL, commit)       |
+| `data-format.json` | The declared `dataFormat` and its compatibility tuple, which `data-format:check` enforces         |
+| `identity/`        | Identity records: the tree's and artefacts' (temporary, until `18.3.0`), the prepopulated asset's |
+| `builder/`         | The builder image: its pinned `Containerfile`, the package set it must have, the `make -j` cap    |
+| `scripts/`         | The Bun scripts below                                                                             |
+| `docs/adr/`        | Decisions                                                                                         |
 
 The source tree is the pinned tag, with the patches applied as commits and the overlay copied on top.
 The overlay only adds files: an upstream file changes through a patch, and no patch touches an overlay
@@ -110,20 +113,64 @@ None of them runs in `validate` or CI: they take too long, and the image is not 
 `build` and `build:verify` after changing anything that reaches the build: `builder/`, `extensions.json`,
 the build scripts. A mismatch is diagnosed and fixed in the build, never by editing the record.
 
+## Driving the artefacts
+
+Requirements: a build (`bun run build`, or any directory holding the artefacts); no containers.
+
+```sh
+bun run driver:smoke                   # initdb, boot, and a wire-protocol smoke test
+bun run prepopulated [--check]         # make the prepopulated data directory; --check reproduces the record
+bun run data-format:check              # the data-format guard: the build's tuple against data-format.json
+```
+
+The driver (`scripts/lib/driver/`) runs a build's `pglite.js`/`pglite.wasm`/`pglite.data` and
+`initdb.js`/`initdb.wasm` directly against their Emscripten glue, with nothing from pgxsinkit: initdb into
+MEMFS (its own module, whose `system()`/`popen()` calls run the backend on a scratch instance), a
+single-user start on a data directory, a byte channel for the wire protocol (`exchange(bytes) → bytes`),
+reading and writing a data directory, installing an extension archive, and a clean close. It takes the
+artefact directory as a build's `dist/` (`bin/`, `extensions/`) or a flat directory of the same files.
+
+- **`driver:smoke [--artefacts <dir>] [--from <archive>]`** runs initdb (or unpacks a data directory
+  archive), boots, and over the wire checks `SELECT version()`, a DDL/DML round trip that survives a unique
+  violation, and `CREATE EXTENSION amcheck` with `bt_index_check` on catalog indexes.
+- **`prepopulated [--artefacts <dir>] [--out <file>] [--check | --record] [--compare <archive>]`** makes the
+  prepopulated data directory the way ElectricSQL made `@electric-sql/pglite-prepopulatedfs` 0.5.8 (the
+  build's own initdb with PGlite's arguments, a start with PGlite's start parameters, then the archive of the
+  running backend's data directory), deterministically: the driver gives the wasm a virtual clock from
+  `SOURCE_DATE_EPOCH` (default: the commit time of HEAD), entropy seeded from it, and UTC, and the tarball
+  has sorted members with absolute paths, mtimes at `SOURCE_DATE_EPOCH`, owner 0/0, modes 0750/0640 and a
+  gzip header with no name and mtime 0. It carries no pgwasm build marker. The asset goes to
+  `.cache/prepopulated/prepopulated.tar.gz`, and is then booted and queried to prove it loads. `--check`
+  regenerates at the SOURCE_DATE_EPOCH `identity/prepopulated.json` records, from the artefacts it records,
+  and requires its sha256s (the archive's, and the gzip's, which holds for the pinned Bun's zlib);
+  `--record` rewrites the record after a deliberate build change; `--compare` reports how the asset differs
+  from another data directory archive, file by file, pg_control field by field and WAL record by record.
+- **`data-format:check [--artefacts <dir>] [<data directory or archive>]`** extracts the compatibility
+  tuple from a build's data directory (a fresh initdb through the driver by default, or a directory or an
+  archive): pg_control parsed in TypeScript for the wasm32 layout with its CRC-32C verified, and the first WAL
+  segment's page magic. It fails unless the tuple is the one `data-format.json` declares for the current
+  `dataFormat`, and unless the declaration keeps its rules (formats numbered 1, 2, …, no two with one tuple).
+
+None of them runs in `validate` or CI, which have no build. Run them after a change that reaches the build
+or the driver; `bun test` covers their pure logic (the parsers, the tar writer, the determinism helpers).
+
 ## Scripts
 
-| Script                    | Does                                                                   |
-| ------------------------- | ---------------------------------------------------------------------- |
-| `format` / `format:write` | oxfmt, check / write                                                   |
-| `lint` / `lint:fix`       | oxlint (type-aware), check / fix                                       |
-| `typecheck`               | TypeScript 7                                                           |
-| `test`                    | Unit tests (`bun test`)                                                |
-| `check`                   | typecheck + lint + test                                                |
-| `validate`                | format + check + `patches:check`: the pre-commit hook                  |
-| `validate:full`           | The same, for now: what CI runs on pushes to main and on pull requests |
-| `builder:image`           | Build the builder image from `builder/` and check its package set      |
-| `build`                   | Build the materialised source in the builder image (not in CI)         |
-| `build:verify`            | Check a build's `dist/` against the byte-identity record (not in CI)   |
+| Script                    | Does                                                                                    |
+| ------------------------- | --------------------------------------------------------------------------------------- |
+| `format` / `format:write` | oxfmt, check / write                                                                    |
+| `lint` / `lint:fix`       | oxlint (type-aware), check / fix                                                        |
+| `typecheck`               | TypeScript 7                                                                            |
+| `test`                    | Unit tests (`bun test`)                                                                 |
+| `check`                   | typecheck + lint + test                                                                 |
+| `validate`                | format + check + `patches:check`: the pre-commit hook                                   |
+| `validate:full`           | The same, for now: what CI runs on pushes to main and on pull requests                  |
+| `builder:image`           | Build the builder image from `builder/` and check its package set                       |
+| `build`                   | Build the materialised source in the builder image (not in CI)                          |
+| `build:verify`            | Check a build's `dist/` against the byte-identity record (not in CI)                    |
+| `driver:smoke`            | Drive a build's artefacts: initdb, boot, a wire-protocol smoke test (not in CI)         |
+| `prepopulated`            | Make the prepopulated data directory asset; `--check` it against its record (not in CI) |
+| `data-format:check`       | Check a build's compatibility tuple against `data-format.json` (not in CI)              |
 
 ## Versions and releases
 

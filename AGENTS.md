@@ -48,6 +48,11 @@ consumes the releases. Read [README.md](README.md) and
   any change that reaches the build (`builder/`, `extensions.json`, the build scripts). A mismatch is
   diagnosed in the build; the record is never edited to make it pass. Run long builds in the background
   and wait on the process, never with a long fixed `sleep`.
+- **The driver's scripts need a build too.** `bun run driver:smoke`, `bun run prepopulated --check` and
+  `bun run data-format:check` are not in `validate` or CI; run them after any change that reaches the build
+  or `scripts/lib/driver/`. `identity/prepopulated.json` changes only through `prepopulated --record`, after
+  a deliberate build change. `data-format.json` changes only by declaring a new `dataFormat` with its new
+  tuple, never by editing the current one to match a build.
 - Never commit PostgreSQL source, build outputs or the contents of `.cache/` or `work/`.
 
 ## Directory hygiene

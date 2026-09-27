@@ -136,14 +136,26 @@ Postgres's own regression suite has never run on the wasm build.
 8. **Majors are adopted deliberately, and on-disk compatibility is guarded mechanically.** Main tracks
    one major. The trigger to move is a feature we need, or the current major coming within 12 months of
    its end of life (18: November 2030); until then the readiness issue and a `port-19` branch rebased
-   onto main keep the port warm. Each release's manifest records the compatibility tuple Postgres checks
-   at boot: catalog version, `PG_CONTROL_VERSION`, `XLOG_PAGE_MAGIC`, `MAXALIGN`, `BLCKSZ`,
-   `XLOG_BLCKSZ`, `NAMEDATALEN`, `INDEX_MAX_KEYS`, `TOAST_MAX_CHUNK_SIZE`, `LOBLKSIZE`,
-   `FLOAT8PASSBYVAL`. The engine gate fails if the tuple changes without the release declaring a new
-   `dataFormat`, for a major and equally for our own flag changes (a wasm64 build turns on
-   `FLOAT8_BYVAL`). pgxsinkit carries the declared `dataFormat` into the build's identity. How existing
-   stores cross a `dataFormat` change is a pgwasm decision, still open; it blocks the first major, not
-   the patch work.
+   onto main keep the port warm. Each release's manifest records the compatibility tuple: what Postgres
+   compares against its compile-time values before it uses a data directory, read from the source.
+   `ReadControlFile()` (REL_18_3 xlog.c) refuses a pg_control whose `pg_control_version` is not
+   `PG_CONTROL_VERSION` (lines 4388 and 4398, before the CRC check at 4414), then one whose
+   `catalog_version_no` (4424), `maxAlign` (4434), `floatFormat` (4444), `blcksz` (4450), `relseg_size`
+   (4460), `xlog_blcksz` (4470), `nameDataLen` (4480), `indexMaxKeys` (4490), `toast_max_chunk_size`
+   (4500), `loblksize` (4510) or `float8ByVal` (4521-4535) differs from the build's; and
+   `XLogReaderValidatePageHeader()` (xlogreader.c line 1247) refuses WAL whose page magic is not
+   `XLOG_PAGE_MAGIC`. Those thirteen values are the tuple. `xlog_seg_size` is not in it: the server
+   adopts pg_control's value and only checks that it is a power of two between 1 MB and 1 GB (4539-4541);
+   `data_checksum_version` and `default_char_signedness` are not compared either. `data-format.json`
+   declares the current `dataFormat` (1) and its tuple, keyed by the C field names, and keeps every
+   earlier format under `previous`. `bun run data-format:check` extracts the tuple from a build's data
+   directory (pg_control parsed in TypeScript for the wasm32 layout, its CRC-32C verified; the magic from
+   the first WAL segment's first page header; the build's `pg_controldata.js` has no `.wasm` and is not
+   used) and fails unless it is the declared one: a changed tuple needs a new `dataFormat`, and a new
+   `dataFormat` needs a new tuple (formats are numbered 1, 2, … and never share one). The engine gate
+   runs it, for a major and equally for our own flag changes (a wasm64 build turns on `FLOAT8_BYVAL`).
+   pgxsinkit carries the declared `dataFormat` into the build's identity. How existing stores cross a
+   `dataFormat` change is a pgwasm decision, still open; it blocks the first major, not the patch work.
 
 9. **Our own builder image, and every release reproducible.** The builder image is defined in
    `builder/` at the repository root (its `Containerfile`, the runner stage's package set, and the
@@ -163,12 +175,32 @@ Postgres's own regression suite has never run on the wasm build.
    the reason goes next to the pin), then moves to the latest Emscripten (6.0.10 on 2026-09-27) as its
    own release through both gates, because the glue under `pgwasm-c`'s host code changes.
 
-10. **This repository runs its artefacts with its own minimal driver,** a few hundred lines of Bun
-    TypeScript written against the Emscripten glue (MEMFS, initdb via `callMain`, server boot, byte
-    exchange), used by the engine gate and the release job. The prepopulated data directory becomes a
-    release asset: the driver runs the release's own initdb with a fixed clock (`SOURCE_DATE_EPOCH`),
-    which fixes pg_control's system identifier and timestamps, and the tarball has normalised mtimes,
-    owners and order. It ships without pgwasm's build marker; pgwasm adds the marker on restore.
+10. **This repository runs its artefacts with its own minimal driver,** Bun TypeScript written against
+    the Emscripten glue, importing nothing from pgxsinkit (`scripts/lib/driver/`: MEMFS, initdb via
+    `callMain` with its `system()` and `popen()` calls run on a scratch instance, a single-user start, the
+    byte exchange, loading and dumping a data directory), used by the engine gate and the release job;
+    `bun run driver:smoke` proves it on a build. The prepopulated data directory becomes a release asset,
+    made as ElectricSQL made `@electric-sql/pglite-prepopulatedfs` 0.5.8: PGlite's initdb arguments and
+    environment, a start with PGlite's start parameters, then the archive of the running backend's data
+    directory (998 entries with absolute paths, `postmaster.pid` and the relcache init files included).
+    It is deterministic without a C patch. The driver gives the wasm a virtual clock that starts at
+    `SOURCE_DATE_EPOCH` (default: the commit time of HEAD) and moves a microsecond per read, through the
+    imports `clock_time_get`, `emscripten_date_now` and `emscripten_get_now`: that fixes pg_control's
+    system identifier and timestamps, the WAL's commit and checkpoint times, and postmaster.pid's start
+    time. Generating twice and diffing found two more sources: entropy (`pg_strong_random` reads
+    `/dev/urandom`, the host's `crypto.getRandomValues`, for pg_control's `mock_authentication_nonce`; the
+    driver replaces the random devices and the `random_get` import with a stream seeded from
+    `SOURCE_DATE_EPOCH`) and the host's timezone (initdb picks `timezone` by probing libc local time,
+    which the runtime takes from the JavaScript engine; the driver runs in UTC, as ElectricSQL's CI did,
+    which gives its `Etc/GMT0`). initdb's `LANG` is set too, since the runtime's default comes from
+    `navigator.languages`. The tarball has sorted members, mtimes at `SOURCE_DATE_EPOCH`, owner 0/0, modes
+    0750 and 0640, and a gzip header with no name and mtime 0. Two generations are byte-identical, and
+    `identity/prepopulated.json` records the epoch, the artefacts' sha256s and the archive's and asset's,
+    which `bun run prepopulated --check` reproduces. Against ElectricSQL's asset, 995 of the 998 entries
+    are byte-identical, every catalog relation file and relcache init file among them; pg_control, the WAL
+    segment and `postmaster.pid` differ only by the clock, the nonce, the CRCs over them, uninitialised
+    padding in a few WAL records, and the data directory's inode number in `postmaster.pid`. It ships
+    without pgwasm's build marker; pgwasm adds the marker on restore.
 
 11. **Browser floor: Safari/iOS 18.4, Chrome 137, Firefox 131.** 18.4 is where Safari gets standard
     wasm exceptions (`exnref`), which give wasm-native setjmp/longjmp and `PG_TRY` without legacy
@@ -195,8 +227,12 @@ Postgres's own regression suite has never run on the wasm build.
          stay, so the bytes cannot change. Mirror releases are named `builder-sources-<n>`, never a
          semver tag, so they cannot be read as a build version, and an asset is never replaced in
          place.
-    3. The driver, the compatibility tuple, the pg_regress bridge and its 18.3 baseline, the
-       prepopulated asset.
+    3. The driver, the compatibility tuple, the prepopulated asset, the pg_regress bridge and its 18.3
+       baseline, in two parts.
+       - 3a (done 2026-09-27): the driver and `driver:smoke`; the prepopulated data directory as a
+         deterministic asset, with `prepopulated` and its record; the compatibility tuple,
+         `data-format.json` and `data-format:check` (decisions 8 and 10).
+       - 3b (next): the pg_regress bridge and its 18.3 baseline (decision 6).
     4. `18.3.0`: amcheck only, the manifest and extension libraries deleted, the fixed-path
        reproducible build, the `pgwasm-postgres` label, our prepopulated data directory. pgxsinkit
        adopts it.
