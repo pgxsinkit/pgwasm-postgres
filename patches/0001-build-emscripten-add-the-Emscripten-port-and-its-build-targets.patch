@@ -4,7 +4,7 @@ Date: Sun, 27 Sep 2026 12:42:22 +0800
 Subject: [PATCH] build-emscripten: add the Emscripten port and its build
  targets
 
-Add an "emscripten" port and the build hooks the PGlite build scripts
+Add an "emscripten" port and the build hooks the build scripts
 (build-pglite.sh and pglite/ in the overlay) rely on:
 
 - src/template/emscripten, src/include/port/emscripten.h and
@@ -22,8 +22,8 @@ Add an "emscripten" port and the build hooks the PGlite build scripts
 - contrib/Makefile includes the overlay's contrib/dist.mk, which
   packages a contrib module as an extension archive;
   src/timezone/Makefile uses the host's zic.
-- configure puts "(PGlite $PGLITE_VERSION)" into PG_VERSION_STR, so
-  version() names the build.
+- configure puts "(pgwasm-postgres $PGWASM_POSTGRES_VERSION)" into
+  PG_VERSION_STR, so version() names the release.
 - .gitignore ignores the build outputs.
 
 Derived from electric-sql/postgres-pglite b133782cd759f08b3aeb263b80a963b39c7b7af1 (PostgreSQL 18.3 fork, PostgreSQL License)
@@ -66,7 +66,7 @@ index 4e911395fe3bae8edf33e5a05257872060146f09..2a4b919c69291150e40d4119391228af
 +*.undef.txt
 \ No newline at end of file
 diff --git a/configure b/configure
-index 540f911863fb1153d8127cdbc602091997a70894..09be7f11db46fef48c459b8b2bbd5046ac1aafcb 100755
+index 540f911863fb1153d8127cdbc602091997a70894..f9051b46da51bf046a4f0bb70becb05f21da7f09 100755
 --- a/configure
 +++ b/configure
 @@ -19494,7 +19494,7 @@ fi
@@ -74,7 +74,7 @@ index 540f911863fb1153d8127cdbc602091997a70894..09be7f11db46fef48c459b8b2bbd5046
  
  cat >>confdefs.h <<_ACEOF
 -#define PG_VERSION_STR "PostgreSQL $PG_VERSION on $host, compiled by $cc_string, `expr $ac_cv_sizeof_void_p \* 8`-bit"
-+#define PG_VERSION_STR "PostgreSQL $PG_VERSION (PGlite $PGLITE_VERSION) on $host, compiled by $cc_string, `expr $ac_cv_sizeof_void_p \* 8`-bit"
++#define PG_VERSION_STR "PostgreSQL $PG_VERSION (pgwasm-postgres $PGWASM_POSTGRES_VERSION) on $host, compiled by $cc_string, `expr $ac_cv_sizeof_void_p \* 8`-bit"
  _ACEOF
  
  

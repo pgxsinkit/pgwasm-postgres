@@ -2,7 +2,13 @@
 
 ### NOTES ###
 # $INSTALL_PREFIX is expected to point to the installation folder of various libraries built to wasm (see pglite-builder)
+#
+# pgwasm-postgres runs this with `bun run build`, in its builder image, with:
+#   PGWASM_POSTGRES_VERSION  the release version version() names (required)
 #############
+
+: "${PGWASM_POSTGRES_VERSION:?must be the release version that version() names}"
+export PGWASM_POSTGRES_VERSION
 
 emcc --clear-cache
 

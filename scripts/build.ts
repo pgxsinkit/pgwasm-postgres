@@ -2,8 +2,8 @@
  * bun run build
  *
  * The build: proves the series (`patches:check`), materialises its tree into .cache/build/postgres-pglite
- * (gitignored; the previous build there is deleted), and runs `build-pglite.sh` on it in the builder image, as
- * ElectricSQL's CI ran it for 0.5.8 (see scripts/lib/build.ts). The artefacts land in
+ * (gitignored; the previous build there is deleted), and runs `build-pglite.sh` on it in the builder image, much as
+ * ElectricSQL's CI ran it for 0.5.8, with the candidate version of HEAD (see scripts/lib/build.ts). The artefacts land in
  * .cache/build/postgres-pglite/dist; the full log in .cache/build/build.log. About 15 minutes.
  *
  * Not part of validate or CI: it takes too long, and the image is not published yet.
@@ -11,13 +11,15 @@
 import { closeSync, mkdirSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 
-import { BUILD_CONTAINER, buildCommand, buildPaths, RECIPE } from "./lib/build.ts";
+import { BUILD_CONTAINER, buildCommand, buildPaths, buildRecipe } from "./lib/build.ts";
 import { BUILDER_IMAGE } from "./lib/builder.ts";
 import { info, runCliAsync } from "./lib/cli.ts";
+import { readUpstreamPin } from "./lib/config.ts";
 import { UserError } from "./lib/git.ts";
 import { layoutFor, repoRoot } from "./lib/layout.ts";
 import { imageId, refuseOtherContainers, removeBuildOutput, removeContainer, requirePodman } from "./lib/podman.ts";
 import { materialiseSource } from "./lib/source.ts";
+import { repositoryCandidate } from "./lib/version.ts";
 
 function duration(ms: number): string {
   const seconds = Math.round(ms / 1000);
@@ -28,6 +30,7 @@ await runCliAsync(async () => {
   if (process.argv.length > 2) throw new UserError("Usage: bun run build");
   const layout = layoutFor(repoRoot);
   const image = BUILDER_IMAGE;
+  const recipe = buildRecipe(repositoryCandidate(layout.root, readUpstreamPin(layout).tag));
 
   requirePodman();
   const id = imageId(image);
@@ -52,13 +55,15 @@ await runCliAsync(async () => {
     tree: source.tree,
     image,
     imageId: id,
-    recipe: RECIPE,
+    recipe,
     startedAt: started.toISOString(),
   };
   writeFileSync(manifestFile, `${JSON.stringify(manifest, null, 2)}\n`);
 
-  const command = buildCommand(image, RECIPE, paths);
-  info(`build: ${image} (${id.slice(0, 12)}), source at ${RECIPE.sourcePath}`);
+  const command = buildCommand(image, recipe, paths);
+  info(
+    `build: ${recipe.environment["PGWASM_POSTGRES_VERSION"]} with ${image} (${id.slice(0, 12)}), source at ${recipe.sourcePath}`,
+  );
   info(`build: ${command.join(" ")}`);
   info(`build: log at ${relative(layout.root, logFile)} (about 15 minutes)`);
 

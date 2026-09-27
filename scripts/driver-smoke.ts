@@ -27,7 +27,7 @@ import { UserError } from "./lib/git.ts";
 import { layoutFor, repoRoot } from "./lib/layout.ts";
 import { unpackDataDir } from "./lib/prepopulated.ts";
 
-const EXPECTED_VERSION = /^PostgreSQL 18\.3 \(PGlite 0\.5\.8\) on wasm32-unknown-emscripten, /;
+const EXPECTED_VERSION = /^PostgreSQL 18\.3 \(pgwasm-postgres \d+\.\d+\.\d+\) on wasm32-unknown-emscripten, /;
 
 function options(args: readonly string[]): { artefacts: string | undefined; from: string | undefined } {
   const usage = "Usage: bun run driver:smoke [--artefacts <dir>] [--from <data dir archive>]";
@@ -78,7 +78,11 @@ await runCliAsync(async () => {
     const value = (sql: string): string | null | undefined => query(sql).at(-1)?.rows[0]?.[0];
 
     const version = value("SELECT version()");
-    expect(EXPECTED_VERSION.test(version ?? ""), "version() names PostgreSQL 18.3 (PGlite 0.5.8) on wasm32", version);
+    expect(
+      EXPECTED_VERSION.test(version ?? ""),
+      "version() names PostgreSQL 18.3 (pgwasm-postgres N.N.N) on wasm32",
+      version,
+    );
     info(`driver:smoke: ${version}`);
 
     query("CREATE TABLE smoke (id integer PRIMARY KEY, note text NOT NULL)");

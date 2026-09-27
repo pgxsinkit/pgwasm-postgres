@@ -1,13 +1,15 @@
 /**
- * The build, still as ElectricSQL CI's `build-with-docker.sh` invocation for `@electric-sql/pglite@0.5.8` ran it
- * (the byte-identity build of ADR-0001 decision 2), with podman and our builder image. From `build-with-docker.sh` (overlay, as at `b133782`):
+ * The build, still much as ElectricSQL CI's `build-with-docker.sh` invocation for `@electric-sql/pglite@0.5.8` ran
+ * it (the byte-identity build of ADR-0001 decision 2), with podman and our builder image. From
+ * `build-with-docker.sh` (overlay, as at `b133782`):
  *
  *   docker run --rm -e DEBUG=false -e PGLITE_VERSION=0.5.8 --workdir=$(pwd) -v .:$(pwd):rw -v ./dist:/pglite:rw \
  *     electricsql/pglite-builder:3.1.74-7 ./build-pglite.sh
  *
  * with `$(pwd)` = `/home/runner/_work/pglite/pglite/postgres-pglite` on ElectricSQL's runner. The container runs
  * as root with umask 022, no `TZ` and no `LANG`/`LC_*` (podman passes none of the host's environment), and
- * `--unsetenv container` drops the one variable podman adds and docker does not.
+ * `--unsetenv container` drops the one variable podman adds and docker does not. Instead of `PGLITE_VERSION`, the
+ * build gets `PGWASM_POSTGRES_VERSION`, the candidate version of HEAD (version.ts), which `version()` names.
  *
  * Resource caps that change no compiler input: `builder/bin/make` over `/usr/local/bin/make` turns the script's
  * bare `make -j` into `make -j4`; the container gets 4 CPUs and 16 GiB; podman (and so the build) runs under
@@ -22,15 +24,17 @@ import { CONTAINER_PREFIX } from "./podman.ts";
 export interface BuildRecipe {
   /** Where the source is mounted and the build runs (embedded in pglite.wasm and pglite.data). */
   readonly sourcePath: string;
-  /** What `build-with-docker.sh` passes with `-e`, in order. */
+  /** What the container gets with `-e`, in order. */
   readonly environment: Readonly<Record<string, string>>;
 }
 
-/** ElectricSQL CI's inputs for 0.5.8: the checkout path, and the environment `build-with-docker.sh` passes. */
-export const RECIPE: BuildRecipe = {
-  sourcePath: "/home/runner/_work/pglite/pglite/postgres-pglite",
-  environment: { DEBUG: "false", PGLITE_VERSION: "0.5.8" },
-};
+/** The build's inputs: ElectricSQL CI's checkout path, and the release version `version()` names. */
+export function buildRecipe(version: string): BuildRecipe {
+  return {
+    sourcePath: "/home/runner/_work/pglite/pglite/postgres-pglite",
+    environment: { DEBUG: "false", PGWASM_POSTGRES_VERSION: version },
+  };
+}
 
 /** The build container's name: one build at a time. */
 export const BUILD_CONTAINER = `${CONTAINER_PREFIX}build`;

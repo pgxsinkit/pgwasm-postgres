@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-import { BUILD_CONTAINER, buildCommand, buildPaths, RECIPE } from "../scripts/lib/build.ts";
+import { BUILD_CONTAINER, buildCommand, buildPaths, buildRecipe } from "../scripts/lib/build.ts";
 import { BUILDER_IMAGE } from "../scripts/lib/builder.ts";
 import { git, UserError } from "../scripts/lib/git.ts";
 import { layoutFor, type Layout } from "../scripts/lib/layout.ts";
@@ -15,9 +15,9 @@ const fixtures = new Fixtures();
 afterEach(() => fixtures.cleanup());
 
 describe("the build command", () => {
-  test("the build runs as ElectricSQL's CI did", () => {
+  test("the build runs as ElectricSQL's CI did, with the release version", () => {
     const paths = buildPaths(layoutFor("/repo"));
-    const command = buildCommand(BUILDER_IMAGE, RECIPE, paths);
+    const command = buildCommand(BUILDER_IMAGE, buildRecipe("18.3.0"), paths);
     expect(command.slice(0, 5)).toEqual(["nice", "-n", "10", "podman", "run"]);
     expect(command.slice(-2)).toEqual([BUILDER_IMAGE, "./build-pglite.sh"]);
     const joined = command.join(" ");
@@ -27,7 +27,7 @@ describe("the build command", () => {
       "--unsetenv container",
       "--umask 0022",
       "--cpus 4 --memory 16g",
-      "-e DEBUG=false -e PGLITE_VERSION=0.5.8",
+      "-e DEBUG=false -e PGWASM_POSTGRES_VERSION=18.3.0",
       "--workdir=/home/runner/_work/pglite/pglite/postgres-pglite",
       "-v /repo/.cache/build/postgres-pglite:/home/runner/_work/pglite/pglite/postgres-pglite:rw",
       "-v /repo/.cache/build/postgres-pglite/dist:/pglite:rw",
@@ -36,7 +36,9 @@ describe("the build command", () => {
       expect(joined).toContain(part);
     }
     expect(BUILD_CONTAINER.startsWith(CONTAINER_PREFIX)).toBe(true);
-    expect(() => buildCommand(BUILDER_IMAGE, RECIPE, { ...paths, source: "/a:b" })).toThrow(/cannot|Cannot/);
+    expect(() => buildCommand(BUILDER_IMAGE, buildRecipe("18.3.0"), { ...paths, source: "/a:b" })).toThrow(
+      /cannot|Cannot/,
+    );
   });
 });
 
