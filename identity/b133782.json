@@ -1,5 +1,6 @@
 {
   "$comment": "Tree identity (ADR-0001 decision 2): REL_18_3 + patches/ + overlay/ must give exactly this tree. Checked by patches:check until 18.3.0 is tagged, then deleted.",
+  "kind": "tree",
   "source": {
     "repository": "https://github.com/electric-sql/postgres-pglite.git",
     "commit": "b133782cd759f08b3aeb263b80a963b39c7b7af1",

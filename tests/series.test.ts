@@ -124,6 +124,7 @@ describe("patches:work, patches:export and patches:check", () => {
     write(
       join(layout.identityDir, "source.json"),
       JSON.stringify({
+        kind: "tree",
         source: { repository: fixture.upstream, commit: pin.commit },
         upstream: { tag: "v1", commit: pin.commit },
         excludedPaths: [".gitmodules"],

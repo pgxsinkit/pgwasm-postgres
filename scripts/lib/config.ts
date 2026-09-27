@@ -4,7 +4,7 @@ import { join, relative } from "node:path";
 import { UserError } from "./git.ts";
 import type { Layout } from "./layout.ts";
 
-const SHA = /^[0-9a-f]{40}$/;
+export const SHA = /^[0-9a-f]{40}$/;
 /** Upstream tags become ref names and directory names: keep them to plain characters. */
 const TAG = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
@@ -25,7 +25,7 @@ export interface TreeIdentity {
   readonly expectedTree: string;
 }
 
-type Json = Record<string, unknown>;
+export type Json = Record<string, unknown>;
 
 function readJson(file: string, root: string): Json {
   const name = relative(root, file);
@@ -42,7 +42,7 @@ function readJson(file: string, root: string): Json {
   return parsed as Json;
 }
 
-function field(object: Json, path: string, name: string): unknown {
+export function field(object: Json, path: string, name: string): unknown {
   let value: unknown = object;
   for (const key of path.split(".")) {
     if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -53,7 +53,7 @@ function field(object: Json, path: string, name: string): unknown {
   return value;
 }
 
-function stringField(object: Json, path: string, name: string, pattern?: RegExp): string {
+export function stringField(object: Json, path: string, name: string, pattern?: RegExp): string {
   const value = field(object, path, name);
   if (typeof value !== "string" || value === "")
     throw new UserError(`${name}: \`${path}\` must be a non-empty string.`);
@@ -77,16 +77,39 @@ export function readUpstreamPin(layout: Layout): UpstreamPin {
   };
 }
 
-/** Every `identity/*.json`, sorted by name. None once the split is proven and the records are retired. */
+/** What an `identity/*.json` record proves: its `kind`. */
+export const IDENTITY_KINDS = {
+  /** The tree the series gives (`patches:check`). */
+  tree: "tree",
+  /** The artefacts the build gives (`build:verify`, see `artefacts.ts`). */
+  artefacts: "artefacts",
+} as const;
+
+/** Reads an `identity/*.json` record and checks its `kind`. */
+export function readIdentityRecord(layout: Layout, file: string): { name: string; kind: string; json: Json } {
+  const name = relative(layout.root, file);
+  const json = readJson(file, layout.root);
+  const kind = stringField(json, "kind", name);
+  if (!Object.values<string>(IDENTITY_KINDS).includes(kind)) {
+    throw new UserError(
+      `${name}: \`kind\` is ${JSON.stringify(kind)}; expected one of ${Object.values(IDENTITY_KINDS).join(", ")}.`,
+    );
+  }
+  return { name, kind, json };
+}
+
+/**
+ * Every tree-identity record (`identity/*.json` of kind "tree"), sorted by name. None once the split is
+ * proven and the records are retired.
+ */
 export function readIdentities(layout: Layout): TreeIdentity[] {
   if (!existsSync(layout.identityDir)) return [];
   return readdirSync(layout.identityDir)
     .filter((entry) => entry.endsWith(".json"))
     .sort()
-    .map((entry) => {
-      const file = join(layout.identityDir, entry);
-      const name = relative(layout.root, file);
-      const json = readJson(file, layout.root);
+    .map((entry) => readIdentityRecord(layout, join(layout.identityDir, entry)))
+    .filter((record) => record.kind === IDENTITY_KINDS.tree)
+    .map(({ name, json }) => {
       const excluded = field(json, "excludedPaths", name);
       if (!Array.isArray(excluded) || excluded.some((path) => typeof path !== "string" || path === "")) {
         throw new UserError(`${name}: \`excludedPaths\` must be an array of non-empty strings.`);
@@ -102,6 +125,9 @@ export function readIdentities(layout: Layout): TreeIdentity[] {
       };
     });
 }
+
+/** A relative, `/`-separated path of plain names: no empty, `.`, `..` or `.git` segment. */
+export const TREE_PATH = /^(?!.*(?:^|\/)(?:\.{1,2}|\.git)(?:\/|$))[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+)*$/;
 
 /** The tree paths of `extensions.json`'s entries, or `undefined` once the manifest is gone. */
 export function readExtensionPaths(layout: Layout): string[] | undefined {
