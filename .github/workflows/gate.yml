@@ -1,0 +1,68 @@
+name: Gate
+
+# The engine gate (ADR-0001 decisions 6 and 9) of a pull request's head and of every push to develop and main:
+# `bun run gate --lock` builds the commit from scratch in the builder image builder/image.lock.json pins (pulled
+# by digest; built from builder/ in the job when builder/ changed since it was published), runs every check, and
+# writes the release it would publish to .cache/gate/<commit>/, uploaded as the artifact gate-<commit>. The release
+# job (release.yml) builds the tag again and requires its manifest to be identical to this one. Everything is in
+# the scripts; this file only sets up the runner.
+
+on:
+  pull_request:
+  push:
+    branches: [main, develop]
+
+permissions: {}
+
+concurrency:
+  # A pull request's newer head replaces its older one; a pushed commit is always gated.
+  group: gate-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  gate:
+    runs-on: ubuntu-26.04
+    # About 25 minutes in the published image; building the image in the job adds up to an hour.
+    timeout-minutes: 150
+    permissions:
+      contents: read
+      packages: read
+    env:
+      # The pull request's head, not GitHub's merge commit: the gated commit is the one main is fast-forwarded to.
+      COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.COMMIT }}
+          # The build's version is derived from the release tags of the commit's ancestors: full history and tags.
+          fetch-depth: 0
+      # No `bun-version`: setup-bun reads package.json's `packageManager`, which mise.toml matches for local work.
+      - uses: oven-sh/setup-bun@v2
+      # The runner image has podman (5.7.0 in ubuntu-26.04 20260920); install it only if a new image drops it.
+      - name: podman
+        run: |
+          command -v podman || { sudo apt-get update && sudo apt-get install --yes podman; }
+          podman --version
+      - uses: actions/cache@v6
+        with:
+          path: .cache/upstream.git
+          key: upstream-${{ hashFiles('upstream.json') }}
+      # pg_regress and psql, built from the pinned tag in the builder image: keyed by the pin and by builder/,
+      # whose lock holds the image's digest.
+      - uses: actions/cache@v6
+        with:
+          path: .cache/regress/REL_*
+          key: regress-tools-${{ hashFiles('upstream.json') }}-${{ hashFiles('builder/**') }}
+      - run: bun install --frozen-lockfile
+      - name: Log in to ghcr.io
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$TOKEN" | podman login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+      - run: bun run gate --lock --summary "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: gate-${{ env.COMMIT }}
+          path: .cache/gate/${{ env.COMMIT }}/
+          # The path is under .cache/, which upload-artifact counts as hidden; the directory holds only the release.
+          include-hidden-files: true
+          if-no-files-found: error

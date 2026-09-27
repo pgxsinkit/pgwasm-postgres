@@ -1,0 +1,66 @@
+name: Release
+
+# Publishes a release (ADR-0001 decisions 5, 7 and 9) when a tag N.N.N is pushed. In order:
+#   1. `release:check` refuses a tag that is not the candidate version of the commit it points at;
+#   2. `gate --lock --published` runs the engine gate at the tag, from scratch, in the published builder image;
+#   3. `release:gated` downloads the gated build of the same commit (the gate-<commit> artifact of a successful
+#      gate.yml run), and
+#   4. `release:publish` requires the two manifests to be identical (what was gated is provably what ships), then
+#      creates the GitHub release with every file of the gate directory and notes generated from the manifest.
+# Everything is in the scripts; this file only sets up the runner.
+
+on:
+  push:
+    # Release tags only: `builder-sources-<n>` and anything else that is not N.N.N never triggers a release.
+    tags: ["[0-9]+.[0-9]+.[0-9]+"]
+
+permissions: {}
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 150
+    permissions:
+      contents: write
+      packages: read
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The candidate version is derived from the release tags of the commit's ancestors: full history and tags.
+          fetch-depth: 0
+      # No `bun-version`: setup-bun reads package.json's `packageManager`, which mise.toml matches for local work.
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - name: The tag is the commit's candidate version
+        run: bun run release:check "$GITHUB_REF_NAME"
+      # The runner image has podman (5.7.0 in ubuntu-26.04 20260920); install it only if a new image drops it.
+      - name: podman
+        run: |
+          command -v podman || { sudo apt-get update && sudo apt-get install --yes podman; }
+          podman --version
+      - uses: actions/cache@v6
+        with:
+          path: .cache/upstream.git
+          key: upstream-${{ hashFiles('upstream.json') }}
+      - uses: actions/cache@v6
+        with:
+          path: .cache/regress/REL_*
+          key: regress-tools-${{ hashFiles('upstream.json') }}-${{ hashFiles('builder/**') }}
+      - name: Log in to ghcr.io
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$TOKEN" | podman login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+      - name: The engine gate at the tag, in the published builder image
+        run: bun run gate --lock --published --summary "$GITHUB_STEP_SUMMARY"
+      - name: The gated build of the same commit
+        run: bun run release:gated "$GITHUB_SHA" --out .cache/gated
+      - name: Identical manifests, then the release
+        run: bun run release:publish "$GITHUB_REF_NAME" --gated .cache/gated --summary "$GITHUB_STEP_SUMMARY"

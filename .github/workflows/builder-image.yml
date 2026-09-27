@@ -1,0 +1,47 @@
+name: Builder image
+
+# Publishes the builder image (ADR-0001 decision 9) when builder/ changes on develop or main, or on demand:
+# `bun run builder:image --push` builds builder/Containerfile, checks its package set, and pushes it as
+# ghcr.io/pgxsinkit/pgwasm-builder:<tag>. It publishes a content of builder/ once per tag: when
+# builder/image.lock.json already records it, nothing is pushed; when the lock records the tag published from other
+# content, it refuses. The job summary shows the digest and the `bun run builder:lock` command that records it;
+# the lock is committed by hand, and CI builds in the image by that digest from then on.
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - "builder/**"
+      # Recording a publication in the lock is not a change to the image.
+      - "!builder/image.lock.json"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: builder-image
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-26.04
+    # About 40 minutes from scratch on four CPUs.
+    timeout-minutes: 150
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+      # No `bun-version`: setup-bun reads package.json's `packageManager`, which mise.toml matches for local work.
+      - uses: oven-sh/setup-bun@v2
+      # The runner image has podman (5.7.0 in ubuntu-26.04 20260920); install it only if a new image drops it.
+      - name: podman
+        run: |
+          command -v podman || { sudo apt-get update && sudo apt-get install --yes podman; }
+          podman --version
+      - run: bun install --frozen-lockfile
+      - name: Log in to ghcr.io
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$TOKEN" | podman login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+      - run: bun run builder:image --push --summary "$GITHUB_STEP_SUMMARY"
