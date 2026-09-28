@@ -252,4 +252,14 @@ describe("the run", () => {
     expect(script).toContain("make -C src/backend generated-headers");
     expect(script.indexOf("generated-headers")).toBeLessThan(script.indexOf("make -j4 -C src/bin/psql"));
   });
+
+  test("makes the shared libraries before psql, whose prerequisites would make them at once", () => {
+    const script = toolsBuildScript();
+    const psql = script.indexOf("make -j4 -C src/bin/psql");
+    for (const dir of ["src/port", "src/common", "src/fe_utils", "src/interfaces/libpq"]) {
+      const at = script.indexOf(`make -j4 -C ${dir}\n`);
+      expect(at).toBeGreaterThan(script.indexOf("generated-headers"));
+      expect(at).toBeLessThan(psql);
+    }
+  });
 });

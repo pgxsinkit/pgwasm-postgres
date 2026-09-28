@@ -72,6 +72,13 @@ export function toolsBuildScript(): string {
     `${SOURCE_MOUNT}/configure ${CONFIGURE_FLAGS.join(" ")}`,
     // psql includes generated catalog headers, which only the backend's makefile generates.
     "make -C src/backend generated-headers",
+    // The libraries psql and pg_regress link come first, one directory at a time: psql's prerequisites
+    // submake-libpgport and submake-libpgfeutils both make src/port and src/common, and under -j they ran at
+    // once in the same directory, racing on its archives (the 18.6.1 release job's first run failed on it).
+    "make -j4 -C src/port",
+    "make -j4 -C src/common",
+    "make -j4 -C src/fe_utils",
+    "make -j4 -C src/interfaces/libpq",
     "make -j4 -C src/bin/psql",
     "make -j4 -C src/test/regress pg_regress",
     "make -C src/interfaces/libpq install",
