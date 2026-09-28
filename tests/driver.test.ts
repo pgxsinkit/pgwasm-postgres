@@ -164,7 +164,7 @@ describe("the deterministic host", () => {
     const env = { memory, emscripten_date_now: realNow, emscripten_get_now: realNow, other: realNow };
     const wasi = { clock_time_get: () => 0, random_get: () => 0, fd_write: realNow };
     const host = deterministicHost(1_700_000_000);
-    const imports = host.imports({ env, wasi_snapshot_preview1: wasi });
+    const imports = host.imports({ env, wasi_snapshot_preview1: wasi }, () => memory);
     const hostEnv = imports["env"] as Record<string, (...args: unknown[]) => unknown>;
     const hostWasi = imports["wasi_snapshot_preview1"] as Record<string, (...args: unknown[]) => unknown>;
     expect(hostEnv["other"]).toBe(realNow);

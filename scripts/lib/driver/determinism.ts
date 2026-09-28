@@ -92,20 +92,25 @@ export class SeededRandom {
   }
 }
 
-/** What a module is given of the host: a view of its imports and its random devices. */
+/** What a module is given of the host: its instantiation (so, its imports) and its random devices. */
 export interface Host {
   /** A human-readable description, for logs. */
   readonly description: string;
-  /** The imports to instantiate a module with, given the ones the glue built. */
-  imports(imports: Bun.WebAssembly.Imports): Bun.WebAssembly.Imports;
+  /** Instantiates a module with the imports its glue built (what the glue hands `instantiateWasm`). */
+  instantiate(module: WebAssembly.Module, imports: Bun.WebAssembly.Imports): Promise<WebAssembly.Instance>;
   /** Called in `preRun`, once the runtime's filesystem exists. */
   prepareFilesystem(FS: EmscriptenFS): void;
+}
+
+/** A deterministic host; `imports` is its view of a module's imports, given the memory they write into. */
+export interface DeterministicHost extends Host {
+  imports(imports: Bun.WebAssembly.Imports, memory: () => WebAssembly.Memory): Bun.WebAssembly.Imports;
 }
 
 /** The real host: the wasm reads the host's clock, entropy and timezone. */
 export const realHost: Host = {
   description: "the real clock and entropy",
-  imports: (imports) => imports,
+  instantiate: (module, imports) => WebAssembly.instantiate(module, imports),
   prepareFilesystem: () => undefined,
 };
 
@@ -125,18 +130,16 @@ const WASI_EINVAL = 28;
  * A host whose clock starts at `sourceDateEpoch` and whose entropy is seeded from it, in UTC. Every module
  * created with one host shares its clock and its stream, so a run's reads form one sequence.
  */
-export function deterministicHost(sourceDateEpoch: number): Host {
+export function deterministicHost(sourceDateEpoch: number): DeterministicHost {
   pinProcessTimezone();
   const clock = new VirtualClock(sourceDateEpoch);
   const random = new SeededRandom(`pgwasm-postgres SOURCE_DATE_EPOCH=${sourceDateEpoch}`);
-  return {
+  const host: DeterministicHost = {
     description: `a virtual clock from SOURCE_DATE_EPOCH=${sourceDateEpoch} (${new Date(sourceDateEpoch * 1000).toISOString()}), seeded entropy, UTC`,
-    imports(imports) {
+    imports(imports, memory) {
       const env = imports["env"];
       const wasi = imports["wasi_snapshot_preview1"];
       if (env === undefined || wasi === undefined) throw new Error("the module has no env or WASI imports");
-      const memory = env["memory"];
-      if (!(memory instanceof WebAssembly.Memory)) throw new Error("the module does not import its memory");
       return {
         ...imports,
         env: overlay(env, {
@@ -147,15 +150,33 @@ export function deterministicHost(sourceDateEpoch: number): Host {
           clock_time_get: (clockId: number, _precision: bigint, pointer: number) => {
             if (clockId < 0 || clockId >= CLOCK_IDS) return WASI_EINVAL;
             const ns = clockId === CLOCK_REALTIME ? clock.realtimeNs() : clock.monotonicNs();
-            new DataView(memory.buffer).setBigUint64(pointer, ns, true);
+            new DataView(memory().buffer).setBigUint64(pointer, ns, true);
             return 0;
           },
           random_get: (pointer: number, length: number) => {
-            random.fill(new Uint8Array(memory.buffer, pointer, length));
+            random.fill(new Uint8Array(memory().buffer, pointer, length));
             return 0;
           },
         }),
       };
+    },
+    /**
+     * The memory the replaced imports write into is the one the module imports (pglite.js, built with
+     * IMPORTED_MEMORY) or, failing that, the one it exports: since Emscripten 4.0.19 a main module (initdb.js) is
+     * not relocatable and defines its own. Neither import is called before the instance exists.
+     */
+    async instantiate(module, imports) {
+      let instance: WebAssembly.Instance | undefined;
+      const imported = imports["env"]?.["memory"];
+      const memory = (): WebAssembly.Memory => {
+        if (imported instanceof WebAssembly.Memory) return imported;
+        const exported = instance?.exports["memory"];
+        if (exported instanceof WebAssembly.Memory) return exported;
+        throw new Error("the module neither imports nor exports its memory");
+      };
+      instance = await WebAssembly.instantiate(module, host.imports(imports, memory));
+      memory();
+      return instance;
     },
     prepareFilesystem(FS) {
       for (const name of ["random", "urandom"]) {
@@ -164,6 +185,7 @@ export function deterministicHost(sourceDateEpoch: number): Host {
       }
     },
   };
+  return host;
 }
 
 function pinProcessTimezone(): void {

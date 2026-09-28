@@ -93,7 +93,7 @@ async function runInitdb(
       print,
       printErr: print,
       instantiateWasm: (imports, done) => {
-        WebAssembly.instantiate(artefacts.initdbWasm, host.imports(imports)).then(
+        host.instantiate(artefacts.initdbWasm, imports).then(
           (wasm) => done(wasm, artefacts.initdbWasm),
           (error: unknown) => failInstantiation(error),
         );

@@ -183,7 +183,7 @@ export class Postgres {
       print: output,
       printErr: output,
       instantiateWasm: (imports, done) => {
-        WebAssembly.instantiate(artefacts.postgresWasm, host.imports(imports)).then(
+        host.instantiate(artefacts.postgresWasm, imports).then(
           (wasm) => {
             stack = shadowStack(wasm);
             done(wasm, artefacts.postgresWasm);
