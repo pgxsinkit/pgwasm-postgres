@@ -24,6 +24,7 @@
     "patches:work": "bun scripts/patches-work.ts",
     "prepare": "git config core.hooksPath .githooks || true",
     "prepopulated": "bun scripts/prepopulated.ts",
+    "readiness": "bun scripts/readiness.ts",
     "regress": "bun scripts/regress.ts",
     "regress:bridge": "bun scripts/regress-bridge.ts",
     "release:check": "bun scripts/release-check.ts",

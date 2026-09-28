@@ -345,6 +345,9 @@ describe("the bump in the upstream cache", () => {
         .map((commit) => commit.subject);
       expect(touching).toEqual(["Return 3"]);
       expect(file?.excerpts[0]).toContain("<<<<<<<");
+      // Without the history (another major's readiness), the same file, hunks and regions, and no commits.
+      const [bare] = conflictedFiles(layout, rebased.worktree, failure, patches, old, next, false);
+      expect(bare).toEqual({ ...file, commits: undefined, touching: [] } as typeof bare);
 
       const report = conflictReport({
         from: { tag: "REL_1_1", commit: old },

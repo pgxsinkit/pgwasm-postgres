@@ -275,16 +275,16 @@ export function bumpVerdict(input: BumpReportInput): Verdict {
   return { blocking, investigate, rerecord };
 }
 
-function tableRow(cells: readonly string[]): string {
+export function tableRow(cells: readonly string[]): string {
   return `| ${cells.join(" | ")} |`;
 }
 
-function codeBlock(text: string, language = "text"): string[] {
+export function codeBlock(text: string, language = "text"): string[] {
   const fence = text.includes("```") ? "````" : "```";
   return [`${fence}${language}`, text === "" ? "(empty)" : text, fence];
 }
 
-function details(summary: string, body: readonly string[]): string[] {
+export function details(summary: string, body: readonly string[]): string[] {
   return ["<details>", `<summary>${summary}</summary>`, "", ...body, "", "</details>"];
 }
 
@@ -304,14 +304,14 @@ function header(from: TagRef, to: TagRef): string {
 }
 
 /**
- * The conflicting files of a failed apply, a `### file` section each: the patch's hunks, where the plain apply
+ * The conflicting files of a failed apply, a `### file` section each (at `level`): the patch's hunks, where the plain apply
  * stopped, the 3-way merge's conflict regions with their text, and the upstream commits between the tags that changed
  * the file (when they were looked up).
  */
-export function conflictSections(files: readonly ConflictedFile[]): string[] {
+export function conflictSections(files: readonly ConflictedFile[], level = 3): string[] {
   const lines: string[] = [];
   for (const file of files) {
-    lines.push("", `### ${code(file.file)}`, "");
+    lines.push("", `${"#".repeat(level)} ${code(file.file)}`, "");
     if (file.hunks.length > 0) lines.push(`- The patch's hunks: ${file.hunks.map(code).join(", ")}`);
     if (file.rejected.length > 0) lines.push(`- Where the plain apply stopped: ${names(file.rejected)}`);
     if (file.regions.length > 0) {
@@ -371,7 +371,7 @@ export function conflictReport(input: ConflictReportInput): string {
   ].join("\n");
 }
 
-function escapeCell(text: string): string {
+export function escapeCell(text: string): string {
   return text.replace(/\|/g, "\\|");
 }
 
