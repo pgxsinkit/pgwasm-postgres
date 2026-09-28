@@ -15,6 +15,7 @@
  */
 
 #include <unistd.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <sys/shm.h>
 #include <errno.h>
@@ -480,6 +481,20 @@ ssize_t EMSCRIPTEN_KEEPALIVE pgl_send(int __fd, const void *__buf, size_t __n, i
 int EMSCRIPTEN_KEEPALIVE pgl_connect(int socket, const struct sockaddr *address, socklen_t address_len) {
 	// dummy
 	return 0;
+}
+
+/*
+* Overrides the socket() libc function. The host carries every connection (pgl_send and pgl_recv above), so the
+* descriptor only has to exist until it is closed: every other call on it is one of the overrides above (connect,
+* poll, fcntl, the socket options). It is a descriptor of /dev/null. Emscripten's SOCKFS creates AF_INET sockets
+* only since 6.0, and libpq connects over a Unix socket by default (pg_dump does), which failed with
+* EAFNOSUPPORT; a SOCKFS socket would also bring SOCKFS into every program this file is linked into.
+*/
+int EMSCRIPTEN_KEEPALIVE pgl_socket(int domain, int type, int protocol) {
+	(void)domain;
+	(void)type;
+	(void)protocol;
+	return open("/dev/null", O_RDWR);
 }
 
 struct pollfd {

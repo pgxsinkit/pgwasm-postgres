@@ -63,7 +63,7 @@ PGLITE_CFLAGS="$PGLITE_CFLAGS \
 -Dfcntl=pgl_fcntl \
 -Datexit=pgl_atexit \
 -Dsetsockopt=pgl_setsockopt -Dgetsockopt=pgl_getsockopt -Dgetsockname=pgl_getsockname \
--Drecv=pgl_recv -Dsend=pgl_send -Dconnect=pgl_connect \
+-Dsocket=pgl_socket -Drecv=pgl_recv -Dsend=pgl_send -Dconnect=pgl_connect \
 -Dpoll=pgl_poll \
 -Dshmget=pgl_shmget -Dshmat=pgl_shmat -Dshmdt=pgl_shmdt -Dshmctl=pgl_shmctl \
 -Dlongjmp=pgl_longjmp -Dsiglongjmp=pgl_siglongjmp"
