@@ -19,11 +19,18 @@ emcc --clear-cache
 # final output folder
 INSTALL_FOLDER=${INSTALL_FOLDER:-"/pglite"}
 
+# The browser floor (ADR-0001 decision 11): Safari and iOS 18.4, Chrome 137, Firefox 131, the first releases with
+# standard wasm exceptions (exnref). Emscripten encodes Safari's version as MMmmVV. Bun runs the artefacts as `node`
+# (ENVIRONMENT), whose floor stays Emscripten's own (MIN_NODE_VERSION). These are link settings: they go with the
+# compiler flags because those reach every link (pglite, the tools, the shared modules), as ENVIRONMENT does.
+PGLITE_BROWSER_FLOOR="-sMIN_SAFARI_VERSION=180400 -sMIN_CHROME_VERSION=137 -sMIN_FIREFOX_VERSION=131"
+
 # build with optimizations by default aka release
 # setjmp/longjmp stay Emscripten's JavaScript implementation (SUPPORT_LONGJMP=emscripten, invoke_* trampolines), which
-# Emscripten 6 still supports; wasm exceptions (SUPPORT_LONGJMP=wasm) belong to the performance work.
+# Emscripten 6 still supports; wasm exceptions (SUPPORT_LONGJMP=wasm), which the floor allows, belong to the
+# performance work.
 # (-sWASM_BIGINT is gone: BigInt integration is Emscripten 6's default, and the setting is deprecated.)
-PGLITE_CFLAGS="-m32 -fpic -sENVIRONMENT=node,web,worker -sSUPPORT_LONGJMP=emscripten -Wno-declaration-after-statement -Wno-macro-redefined -Wno-unused-function -Wno-missing-prototypes -Wno-incompatible-pointer-types"
+PGLITE_CFLAGS="-m32 -fpic -sENVIRONMENT=node,web,worker $PGLITE_BROWSER_FLOOR -sSUPPORT_LONGJMP=emscripten -Wno-declaration-after-statement -Wno-macro-redefined -Wno-unused-function -Wno-missing-prototypes -Wno-incompatible-pointer-types"
 if [ "$DEBUG" = true ]
 then
     echo "pglite: building debug version."
