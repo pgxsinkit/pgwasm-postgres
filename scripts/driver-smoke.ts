@@ -7,9 +7,10 @@
  * `pgwasm-postgres N.N.N` without one), a DDL/DML round trip with an error in the middle of it,
  * `CREATE EXTENSION amcheck` with `bt_index_check` on catalog indexes, a `LOAD` of every shared module the build
  * ships (the core modules in pglite.data's lib/postgresql, and the extension archives'), encoding conversions:
- * every default conversion once, and non-ASCII text through several, and the stack-leak check: 4,000 failing
+ * every default conversion once, and non-ASCII text through several, the stack-leak check (4,000 failing
  * statements on the session each report their own error, then a normal query runs, and the wasm's shadow stack
- * pointer is where it was. Exits 1 on the first failure.
+ * pointer is where it was), and last pg_dump (pg_dump.js and .wasm) of the round trip's table, on the session as
+ * pgxsinkit's pgwasm-pg-dump runs it. Exits 1 on the first failure.
  *
  * The artefacts default to `bun run build`'s output. Not part of validate or CI: it needs a build.
  */
@@ -20,6 +21,7 @@ import { info, runCliAsync } from "./lib/cli.ts";
 import { readUpstreamPin } from "./lib/config.ts";
 import { loadArtefacts } from "./lib/driver/artefacts.ts";
 import { initdb } from "./lib/driver/initdb.ts";
+import { runPgDump } from "./lib/driver/pg-dump.ts";
 import { PG_ROOT, Postgres } from "./lib/driver/postgres.ts";
 import {
   parseBackendMessages,
@@ -223,6 +225,26 @@ await runCliAsync(async () => {
     );
     info(
       `driver:smoke: ${STACK_LEAK_ERRORS} failing statements each reported their own error (22P02) in ${Math.round(performance.now() - leakStarted)} ms, then a query ran; the shadow stack pointer stayed at ${stackBefore}`,
+    );
+
+    // pg_dump, a program every release ships, on the session: its libpq connects over its default Unix socket,
+    // through pglitec.c's socket overrides. Last, since it leaves its read-only transaction open.
+    const dump = await runPgDump(artefacts, postgres, ["-U", "postgres", "--inserts", "-t", "public.smoke"]);
+    const script = dump.output === undefined ? "" : new TextDecoder().decode(dump.output);
+    const inserts = script.split("\n").filter((line) => line.startsWith("INSERT INTO public.smoke "));
+    expect(
+      dump.exitCode === 0 &&
+        script.includes("CREATE TABLE public.smoke (") &&
+        JSON.stringify(inserts) ===
+          JSON.stringify([
+            "INSERT INTO public.smoke VALUES (2, 'TWO');",
+            "INSERT INTO public.smoke VALUES (3, 'THREE');",
+          ]),
+      "pg_dump --inserts -t smoke dumps the table's definition and its two rows",
+      dump.exitCode === 0 ? inserts : `exit ${dump.exitCode}: ${dump.stderr}`,
+    );
+    info(
+      `driver:smoke: pg_dump --inserts -t smoke: ${script.length} bytes, CREATE TABLE and ${inserts.length} INSERTs`,
     );
   } finally {
     postgres.close();

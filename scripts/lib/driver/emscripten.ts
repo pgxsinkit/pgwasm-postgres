@@ -93,6 +93,27 @@ export interface InitdbModule extends ModuleBase {
   _pclose(stream: number): number;
 }
 
+/** `pg_dump.js`: libpq's socket reads and writes go to two functions from `addFunction` (pglitec.c). */
+export interface PgDumpModule {
+  readonly FS: EmscriptenFS;
+  readonly ENV: Record<string, string>;
+  readonly HEAPU8: Uint8Array;
+  callMain(args: string[]): number;
+  addFunction(fn: (...args: number[]) => number | void, signature: string): number;
+  _pgl_set_rw_cbs(read: number, write: number): void;
+}
+
+/** What `pg_dump.js`'s factory accepts; only the members the driver sets. */
+export interface PgDumpOverrides {
+  thisProgram: string;
+  noExitRuntime: boolean;
+  stdin: () => number | null;
+  print: (text: string) => void;
+  printErr: (text: string) => void;
+  instantiateWasm: ModuleOverrides<PgDumpModule>["instantiateWasm"];
+  preRun: ((module: PgDumpModule) => void)[];
+}
+
 export type ModuleFactory<TModule> = (overrides: ModuleOverrides<TModule>) => Promise<TModule>;
 
 interface ProcessWithExitCode {

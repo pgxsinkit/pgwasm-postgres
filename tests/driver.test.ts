@@ -9,6 +9,7 @@ import {
   VirtualClock,
 } from "../scripts/lib/driver/determinism.ts";
 import type { EmscriptenFS } from "../scripts/lib/driver/emscripten.ts";
+import { FrontendFramer } from "../scripts/lib/driver/pg-dump.ts";
 import { isUnwind, START_PARAMS } from "../scripts/lib/driver/postgres.ts";
 import {
   parseBackendMessages,
@@ -37,6 +38,21 @@ describe("isUnwind", () => {
     expect(isUnwind(new Error("unwind"))).toBe(false);
     expect(isUnwind(Object.create(null))).toBe(false);
     expect(isUnwind(null)).toBe(false);
+  });
+});
+
+describe("FrontendFramer", () => {
+  test("hands out whole messages: the startup packet, then typed ones, however libpq's writes split them", () => {
+    const startup = startupMessage({ user: "postgres" });
+    const first = queryMessage("SELECT 1");
+    const second = queryMessage("SELECT 2");
+    const stream = new Uint8Array([...startup, ...first, ...second]);
+    const framer = new FrontendFramer();
+    const cut = startup.length + 3;
+    expect(framer.push(stream.subarray(0, 2))).toEqual([]);
+    expect(framer.push(stream.subarray(2, cut))).toEqual([startup]);
+    expect(framer.push(stream.subarray(cut))).toEqual([first, second]);
+    expect(() => new FrontendFramer().push(new Uint8Array([0, 0, 0, 3]))).toThrow("invalid length");
   });
 });
 

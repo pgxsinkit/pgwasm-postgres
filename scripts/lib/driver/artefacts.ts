@@ -10,7 +10,7 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { UserError } from "../git.ts";
-import type { InitdbModule, ModuleFactory, PostgresModule } from "./emscripten.ts";
+import type { InitdbModule, ModuleFactory, PgDumpModule, PgDumpOverrides, PostgresModule } from "./emscripten.ts";
 
 /** The files the driver loads, by name. */
 export const DRIVER_FILES = ["pglite.js", "pglite.wasm", "pglite.data", "initdb.js", "initdb.wasm"] as const;
@@ -28,7 +28,11 @@ export interface Artefacts {
   readonly fsBundle: Uint8Array;
   /** An extension's archive (`<name>.tar.gz`). */
   extension(name: string): Uint8Array;
+  /** `pg_dump.js`'s factory and `pg_dump.wasm`, loaded when first asked for. */
+  pgDump(): Promise<{ readonly createModule: PgDumpFactory; readonly wasm: WebAssembly.Module }>;
 }
+
+export type PgDumpFactory = (overrides: PgDumpOverrides) => Promise<PgDumpModule>;
 
 function locate(dir: string, subdir: string, name: string): string {
   const candidates = [join(dir, subdir, name), join(dir, name)];
@@ -37,10 +41,10 @@ function locate(dir: string, subdir: string, name: string): string {
   return found;
 }
 
-async function factory<TModule>(path: string): Promise<ModuleFactory<TModule>> {
+async function factory<TFactory>(path: string): Promise<TFactory> {
   const imported = (await import(pathToFileURL(path).href)) as { default?: unknown };
   if (typeof imported.default !== "function") throw new UserError(`${path} does not export a module factory.`);
-  return imported.default as ModuleFactory<TModule>;
+  return imported.default as TFactory;
 }
 
 export async function loadArtefacts(directory: string): Promise<Artefacts> {
@@ -51,8 +55,8 @@ export async function loadArtefacts(directory: string): Promise<Artefacts> {
     string
   >;
   const [createPostgresModule, createInitdbModule, postgresWasm, initdbWasm] = await Promise.all([
-    factory<PostgresModule>(files["pglite.js"]),
-    factory<InitdbModule>(files["initdb.js"]),
+    factory<ModuleFactory<PostgresModule>>(files["pglite.js"]),
+    factory<ModuleFactory<InitdbModule>>(files["initdb.js"]),
     WebAssembly.compile(readFileSync(files["pglite.wasm"])),
     WebAssembly.compile(readFileSync(files["initdb.wasm"])),
   ]);
@@ -65,5 +69,12 @@ export async function loadArtefacts(directory: string): Promise<Artefacts> {
     initdbWasm,
     fsBundle: new Uint8Array(readFileSync(files["pglite.data"])),
     extension: (name) => new Uint8Array(readFileSync(locate(dir, "extensions", `${name}.tar.gz`))),
+    pgDump: async () => {
+      const [createModule, wasm] = await Promise.all([
+        factory<PgDumpFactory>(locate(dir, "bin", "pg_dump.js")),
+        WebAssembly.compile(readFileSync(locate(dir, "bin", "pg_dump.wasm"))),
+      ]);
+      return { createModule, wasm };
+    },
   };
 }
