@@ -22,6 +22,7 @@
     "patches:check": "bun scripts/patches-check.ts",
     "patches:export": "bun scripts/patches-export.ts",
     "patches:work": "bun scripts/patches-work.ts",
+    "poll": "bun scripts/poll.ts",
     "prepare": "git config core.hooksPath .githooks || true",
     "prepopulated": "bun scripts/prepopulated.ts",
     "readiness": "bun scripts/readiness.ts",

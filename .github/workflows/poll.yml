@@ -1,0 +1,87 @@
+name: Poll
+
+# The weekly upstream poll (ADR-0001 decisions 7 and 8): `bun run poll --lock` lists upstream's tags. The newest
+# release of the pinned major newer than the pin becomes a branch bump/<tag> from develop, made by `bun run bump`
+# (which runs the engine gate), and a pull request against develop with the bump's report as its body (an issue when
+# the series does not apply); the next major's newest tag gets `bun run readiness`'s report as a comment on the
+# "Postgres <major> readiness" issue. Each is done once: a run finds what an earlier one made and skips it. The
+# builder image comes from the lock, as in gate.yml and release.yml. Everything is in the scripts; this file only sets
+# up the runner.
+#
+# Scheduled workflows run from the default branch (main), so the schedule starts once main has this file; the poll
+# itself always works from develop (the checkout below).
+#
+# GITHUB_TOKEN: a push or a pull request made with it triggers no workflow, so the bump's pull request shows no
+# checks. Its body carries the engine gate's result, and gate.yml runs when the maintainer's fast-forward of develop
+# is pushed. The pull request is for review only: develop is fast-forwarded from the command line, never merged.
+# GITHUB_TOKEN may open a pull request only when the repository allows it (Settings → Actions → General → "Allow
+# GitHub Actions to create and approve pull requests"); without that, `gh pr create` fails after the branch is
+# pushed, and the run fails.
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Decide, and print every command that would write anything instead of running it
+        type: boolean
+        default: false
+
+permissions: {}
+
+concurrency:
+  # Two polls never overlap: a second one waits for the first.
+  group: poll
+  cancel-in-progress: false
+
+jobs:
+  poll:
+    runs-on: ubuntu-26.04
+    # A bump runs the engine gate (about 25 minutes in the published image, up to an hour more when the image is built
+    # in the job), and a readiness tag that applies is built and run through pg_regress once more.
+    timeout-minutes: 240
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      packages: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: develop
+          # The build's version is derived from the release tags of the commit's ancestors: full history and tags.
+          fetch-depth: 0
+      # No `bun-version`: setup-bun reads package.json's `packageManager`, which mise.toml matches for local work.
+      - uses: oven-sh/setup-bun@v2
+      # The runner image has podman (5.7.0 in ubuntu-26.04 20260920); install it only if a new image drops it.
+      - name: podman
+        run: |
+          command -v podman || { sudo apt-get update && sudo apt-get install --yes podman; }
+          podman --version
+      - uses: actions/cache@v6
+        with:
+          path: .cache/upstream.git
+          key: upstream-${{ hashFiles('upstream.json') }}
+      - run: bun install --frozen-lockfile
+      - name: Log in to ghcr.io
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$TOKEN" | podman login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+      # The bump's commit is the workflow's.
+      - name: git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      - run: bun run poll --lock ${{ inputs.dry_run && '--dry-run' || '' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # The reports and the bodies the poll posted, whole (a body over GitHub's size limit is cut).
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: poll-${{ github.run_id }}
+          path: .cache/poll/
+          # The path is under .cache/, which upload-artifact counts as hidden.
+          include-hidden-files: true
+          if-no-files-found: ignore
