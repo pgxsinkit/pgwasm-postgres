@@ -665,7 +665,7 @@ only version input, and `package.json`'s `0.0.0` is a placeholder. The build der
 (`scripts/lib/version.ts`): `<major>.<minor>.0` of the pinned upstream tag while there is no release tag,
 the latest release tag's revision + 1 when that tag is of the pinned major.minor, and `<major>.<minor>.0`
 otherwise. Only the tags of HEAD's strict ancestors count, so a tagged commit builds as its own tag, and tags
-that are not `N.N.N` (`builder-sources-1`) are ignored; today the candidate is `18.6.2`. Releases are GitHub
+that are not `N.N.N` (`builder-sources-1`) are ignored; today the candidate is `18.6.3`. Releases are GitHub
 release assets with a checksum manifest, not npm packages, made only by `release.yml` from the gated build (see
 [The engine gate, CI and releases](#the-engine-gate-ci-and-releases)). History is linear: changes are rebased,
 never merged, and main is fast-forwarded from the command line.
