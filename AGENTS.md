@@ -28,16 +28,26 @@ consumes the releases. Read [README.md](README.md) and
 - **podman only**, never docker. The build is `bun run build` in the image `builder/` defines (ADR-0001
   decision 9), published as `ghcr.io/pgxsinkit/pgwasm-builder` by `builder-image.yml` and pinned by digest in
   `builder/image.lock.json`, which changes only through `bun run builder:lock`, never by hand. A change to
-  `builder/` is a new image tag (`-p3`: `BUILDER_IMAGE` in `scripts/lib/builder.ts` and the Containerfile's
+  `builder/` is a new image tag (`-p2`: `BUILDER_IMAGE` in `scripts/lib/builder.ts` and the Containerfile's
   header): a published tag is never pushed again with other content. Never push an image unless the maintainer
   asks for that step. Every container this repository starts is named `pgwasm-postgres-*` and started with
   `--rm`; never remove, retag or prune an image or container this repository did not create, and never run
   `podman system prune` or `podman image prune`.
 - **mise** pins the toolchain (`mise.toml`).
 - **Latest versions, always.** Every dependency and tool goes in at its latest published version,
-  verified with a real command (`bun info <pkg> version`, `mise latest <tool>`). A non-latest pin needs a
-  demonstrated reason in a comment next to it (the builder image's pins are the documented exception:
-  Emscripten 3.1.74 until its own release, and the libraries at 0.5.8's versions).
+  verified with a real command (`bun info <pkg> version`, `mise latest <tool>`, `git ls-remote --tags` for
+  emsdk and the libraries). A non-latest pin needs a demonstrated reason in a comment next to it. The builder
+  image pins every input (the emsdk image by digest, apt by a dated snapshot, every source by checksum) at its
+  latest version when pinned, and moving a pin is a new image revision and a release.
+- **ICU moves only in a Postgres major's port, never within a major** (ADR-0001 decision 9), with the
+  overlay's `pglite/static/minimal-icu/<version>` data regenerated there: a major recreates every store through
+  its `dataFormat` change, while an ICU upgrade inside a store's life changes the collation versions recorded in
+  `pg_collation`/`pg_database` and can leave indexes on ICU collations silently wrong until reindexed. It is the
+  one standing exception to the latest-versions rule; its reason stays next to the pin.
+- **The glue serves pgxsinkit's host.** `pgwasm-c` and `pgwasm-pg-dump` drive the Emscripten modules directly:
+  what they read (the module options, the runtime members in `EXPORTED_RUNTIME_METHODS`, `pglite.data` loaded
+  before the first `preRun` callback) is kept across Emscripten releases in `build-pglite.sh`, and a change they
+  must follow is reported with the release that makes it (README, Emscripten and the browser floor).
 - **TypeScript (Bun) for scripts**, strict, covered by `bun run typecheck`; bash only where TypeScript
   cannot be made robust. oxlint and oxfmt; never eslint, prettier or biome.
 

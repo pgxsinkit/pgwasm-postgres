@@ -265,7 +265,13 @@ Postgres's own regression suite has never run on the wasm build.
      shadow stack, because nothing restored the stack pointer the error's unwind left behind, until
      `max_stack_depth` refused every statement. The driver now restores it after each unwound call.
      pgxsinkit's `pgwasm-c` host (`postgres-instance.ts`) drives the main loop the same way, without a
-     restore.
+     restore. Since step 6 `driver:smoke` guards the restore on any toolchain: 4,000 failing statements on
+     one session must each report their own error, a normal query must run after them, and the shadow stack
+     pointer must be where it was (without the restore the check fails at the 1,899th statement).
+   - The `18.6.1` build (Emscripten 6.0.10, 2026-09-28) matched the `18.6.0` baseline in every run, the gates'
+     and ten more (eight on the build before `pgl_socket`, two after it): 178 passed and 53 failed in each, no
+     backend failed, no new failure, no changed diff and no newly unstable test. The baseline was not
+     re-recorded: nothing in it had to change.
    - As built in 4b (2026-09-27), the whole engine gate is one command, `bun run gate`, which runs the same
      locally and in CI. It gates a commit: it refuses a working tree with changes, sets `SOURCE_DATE_EPOCH`
      to the commit's time, and runs `build` (which starts with the clean apply, `patches:check`),
@@ -447,6 +453,48 @@ Postgres's own regression suite has never run on the wasm build.
      with a file changed and one whose manifest differs. The image was the local `3.1.74-p2`, not yet
      published, so the dry run reported that and the missing tag instead of refusing them. The first pair,
      at `6034634`, found subscription's instability (decision 6).
+   - Emscripten 6.0.10 in `18.6.1` (order of work 6, 2026-09-28), the image `6.0.10-p1`. The emsdk image by the
+     digest of its linux/amd64 image; its base is Ubuntu 24.04, so apt comes from a noble snapshot
+     (20260928T000000Z) and `dpkg-expected.txt` is new (225 packages: gcc 13, glibc 2.39, bison, flex, pkgconf;
+     autoconf, automake and libtool went with libxml2's `autogen.sh`). zlib 1.3.2 and libxml2 2.15.4 (from
+     2.14.5, now its release tarball with the checksum download.gnome.org publishes, to be mirrored as a
+     `builder-sources-<n>` asset before the image is published), both the latest. The pin policy is now the
+     latest-versions rule with every input pinned for reproducibility (digest, snapshot, checksum), and one
+     standing exception: **ICU moves only with a Postgres major, never within one** (76.1 until then). A major
+     already recreates every store through its `dataFormat` change (decision 8), so no store ever lives across
+     an ICU change; inside a store's life an ICU upgrade would change the collation versions recorded in
+     `pg_collation` and `pg_database`, and could leave indexes on ICU collations silently wrong until reindexed.
+     The major's port regenerates the overlay's `minimal-icu` data with it. The image is 2.59 GB and builds in
+     about 10 minutes; the local default is `localhost/pgwasm-postgres-builder:6.0.10-p1`, and the lock records
+     it unpublished until the maintainer publishes it.
+   - What Emscripten 4 to 6 changed under the build, and what `build-pglite.sh` sets so that it links what
+     3.1.74 linked: `-sFAKE_DYLIBS=1` (6.0.0 links a real shared library found for `-l` dynamically, and libpq
+     is also built as `libpq.so`, which initdb, pg_dump and libpqwalreceiver would have loaded at run time);
+     `-sDEFAULT_TO_CXX=1` (since 6.0.6 only em++ links C++'s runtime, and ICU is C++); `-sUSE_PTHREADS=0` kept,
+     though deprecated, to undo the `-pthread` of libpq's links; `-Wl,--no-export-dynamic` on pglite's link
+     (the backend's `-Wl,--export-dynamic` comes last since 4.0.20, and exported all 9,649 symbols of the
+     link); `HEAP8` and `HEAPU8` in `EXPORTED_RUNTIME_METHODS` (not exported by default since 4.0.7);
+     `wasmMemory` back in pglite.js's `INCOMING_MODULE_JS_API` (dropped from the default by 6.0.2); and the
+     pre-js `pglite/scripts/loadBundleFirst.js`, which runs the file packager's loader of `pglite.data` before
+     the host's `preRun` callbacks (4.0.7 runs them in the order listed, 3.1.74 in reverse). `-sWASM_BIGINT`
+     went (the default, and deprecated). One change reached the overlay's C: 6.0's SOCKFS creates AF_INET
+     sockets only, so pg_dump's libpq could not open its default Unix socket and pg_dump failed before sending a
+     byte; `socket()` joins pglitec.c's socket overrides (`-Dsocket=pgl_socket`, a descriptor of /dev/null, since
+     the host carries the bytes). Nothing in the gate ran pg_dump, so `driver:smoke` now does, as pgxsinkit's
+     `pgwasm-pg-dump` runs it. The export list gains `_pgl_socket` (libpqwalreceiver's libpq imports it);
+     `pglite.wasm` no longer exports `__wasm_apply_data_relocs` (a main module is not relocatable since 4.0.19)
+     and imports its memory but no longer a table or base globals; `initdb.wasm` and `pg_dump.wasm` define and
+     export their memory. The driver instantiates through its host, which finds a module's memory either way,
+     and recognises the `EmscriptenSjLj` an escaped longjmp throws (3.1.74 threw a number). The README's
+     "Emscripten and the browser floor" lists what a host can rely on, for pgxsinkit's adoption.
+   - `pglite.wasm` is 949,260 bytes smaller (−9.41%: its code −520,355 and its data −415,547, a main module that
+     is not relocatable addressing its data by constants and placing it at fixed addresses in segments without
+     the zero runs), `pglite.js` −45,777, `pglite.data` −44,036 (the 28 core modules, pgxs's `Makefile.global`
+     and three pgxs test programs changed; its other 667 files are byte-identical), `initdb.wasm` −96,529,
+     `pg_dump.wasm` −48,881 and `pg_dump.js` −14,063 (no SOCKFS). `version()` reads `PostgreSQL 18.6
+     (pgwasm-postgres 18.6.1) on wasm32-unknown-emscripten, compiled by emcc (Emscripten gcc/clang-like
+     replacement + linker emulating GNU ld) 6.0.10 (d6c521a7f05449857c76bd99e396895583cf2083), 32-bit`. The
+     compatibility tuple is dataFormat 1's.
 
 10. **This repository runs its artefacts with its own minimal driver,** Bun TypeScript written against
     the Emscripten glue, importing nothing from pgxsinkit (`scripts/lib/driver/`: MEMFS, initdb via
@@ -479,7 +527,12 @@ Postgres's own regression suite has never run on the wasm build.
     identifier, times, nonce and CRC, `postmaster.pid`'s start time, the WAL's timestamps and first page
     header) and by the new binary's memory layout (raw pointers in both `pg_internal.init` files, which
     moved; different leftovers in uninitialised padding of WAL records, with their CRCs); at the old
-    epoch, only by the latter.
+    epoch, only by the latter. Regenerated for `18.6.1` (Emscripten 6.0.10, 2026-09-28): at `18.6.0`'s epoch,
+    995 of the 998 entries are byte-identical to `18.6.0`'s asset, pg_control and every relation file among
+    them; the two `pg_internal.init` files differ by raw pointers, and 1,119 of the WAL segment's 20,337 records
+    only in bytes the backend never initialises (SharedInvalidationMessage padding, and struct and alignment
+    padding in multi-insert, prune-freeze and B-tree new-root records) and in their CRCs. The new leftovers
+    compress a little worse: the asset is 4,244 bytes larger at the same epoch.
 
 11. **Browser floor: Safari/iOS 18.4, Chrome 137, Firefox 131.** 18.4 is where Safari gets standard
     wasm exceptions (`exnref`), which give wasm-native setjmp/longjmp and `PG_TRY` without legacy
@@ -487,6 +540,15 @@ Postgres's own regression suite has never run on the wasm build.
     with it. Every iOS 18 device can run 18.7, so the floor excludes no device iOS 18.0 would include.
     The build compiles with the matching `-sMIN_*_VERSION` flags, from the release that first enforces
     the floor. The C build's performance work and a multi-session C build are out of scope here.
+    As implemented in `18.6.1` (2026-09-28): every link (pglite, the tools, the shared modules) names
+    `-sMIN_SAFARI_VERSION=180400 -sMIN_CHROME_VERSION=137 -sMIN_FIREFOX_VERSION=131`, Emscripten 6.0.10's
+    encodings (Safari as MMmmVV) and its feature matrix's versions for exnref; they travel with the compiler
+    flags, as `-sENVIRONMENT` does. `-sENVIRONMENT` stays `node,web,worker` (Bun runs the artefacts as node),
+    and with it Emscripten's own node floor (`MIN_NODE_VERSION` 18.3.0). A feature must suit every target, so
+    that node floor still gates what the browser floor allows (exnref: node 24.15; extended-const: node 21), and
+    on 6.0.10 the three flags change no byte of the artefacts (pglite relinked without them gives the same
+    `pglite.wasm` and `pglite.data`). `-sSUPPORT_LONGJMP` stays `emscripten`, which 6.0.10 still supports: the
+    move to wasm exceptions, with `MIN_NODE_VERSION` raised for Bun, belongs to the performance work.
 
 12. **Repository standards.** Bun and TypeScript 7 for scripts, oxlint and oxfmt, check-default
     scripts, `bun run validate` as the pre-commit hook (it includes `patches:check`) and
@@ -532,7 +594,14 @@ Postgres's own regression suite has never run on the wasm build.
        `REL_18_6` and its three records, re-recorded after reading its report: the export list, the prepopulated
        asset and the pg_regress baseline (decisions 6, 7 and 10). Two gates from clean at the last commit gave
        identical manifests. Releasing `18.6.0` is the maintainer's, as for `18.3.0`.
-    6. The Emscripten update and the browser floor as `18.6.1`, through both gates.
+    6. The Emscripten update and the browser floor as `18.6.1`, through both gates (done 2026-09-28): the image
+       `6.0.10-p1` on Emscripten 6.0.10 with libxml2 2.15.4 and ICU kept by decision 9's policy, the build flags
+       Emscripten 6 needs, the glue kept for pgxsinkit's host (`pgl_socket` for pg_dump), the driver on the new
+       glue with its stack-leak and pg_dump checks, and the floor (decisions 9, 10 and 11). The records: the
+       export list (`_pgl_socket`) and the prepopulated asset re-recorded; the pg_regress baseline unchanged. Two
+       gates from clean at the last commit gave identical manifests. Publishing the image (libxml2's mirror,
+       `builder-image.yml`, `builder:lock`) and releasing `18.6.1` are the maintainer's; pgxsinkit adopts it with
+       `pgwasm:pin` and its contract gate.
     7. The weekly poll and the readiness issue.
     8. The `main-loop-unroll` rewrite with its token-identity proof, before any `port-19` work.
 

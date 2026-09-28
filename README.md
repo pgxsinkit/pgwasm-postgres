@@ -23,8 +23,14 @@ releases exactly the build the gate passed (step 4b); the builder image is publi
 is released. pgxsinkit's adoption follows (4c).
 
 The pin now moves to a new upstream minor through `bun run bump` (step 5, 2026-09-27): the first bump took it
-from `REL_18_3` to `REL_18_6`, the build that becomes `18.6.0` (`PostgreSQL 18.6 (pgwasm-postgres 18.6.0)`).
+from `REL_18_3` to `REL_18_6`, the build that became `18.6.0` (`PostgreSQL 18.6 (pgwasm-postgres 18.6.0)`).
 Of the 231 tests of its `parallel_schedule`, 178 pass, 49 fail the same way in every run and 4 are unstable.
+
+The C build then moved from Emscripten 3.1.74 to 6.0.10 (step 6, 2026-09-28), in the builder image `6.0.10-p1`,
+and every link names the browser floor, Safari and iOS 18.4, Chrome 137 and Firefox 131: the build that becomes
+`18.6.1` (`PostgreSQL 18.6 (pgwasm-postgres 18.6.1)`). Its compatibility tuple and its pg_regress results are
+`18.6.0`'s, its export list gains one symbol, and `pglite.wasm` is 9.4% smaller. See [Emscripten and the browser
+floor](#emscripten-and-the-browser-floor).
 
 ## Layout
 
@@ -95,24 +101,25 @@ Overlay files are edited in `overlay/` directly.
 ## Building
 
 Requirements: podman (rootless is fine) on an amd64 host, the network on the first run, and about 5 GB
-of free disk (the image is 2.65 GB; podman's layer cache and the 0.5 GB build tree take the rest).
+of free disk (the image is 2.59 GB; podman's layer cache and the 0.5 GB build tree take the rest).
 
 ```sh
 bun run builder:image [--push]            # build the builder image from builder/ (about 10 min from scratch, seconds when cached)
 bun run builder:lock                      # the published image's lock, and what the gate does with it
-bun run build [--debug] [--image <ref>]   # build the source in it (about 8 min)
+bun run build [--debug] [--image <ref>]   # build the source in it (about 7 min)
 bun run build:verify <manifest> [<dist>]  # check that a build reproduces another's manifest
 bun run exports:check [--record]          # diff the build's export list against exported_functions.txt
 ```
 
 - **`builder:image`** builds `builder/Containerfile` with podman as
-  `localhost/pgwasm-postgres-builder:3.1.74-p2`, capped at 4 CPUs and 16 GiB, with `builder/bin/make`
+  `localhost/pgwasm-postgres-builder:6.0.10-p1`, capped at 4 CPUs and 16 GiB, with `builder/bin/make`
   turning every bare `make -j` into `make -j4`, then checks the image's packages against
   `builder/dpkg-expected.txt`. The log goes to `.cache/builder-image.log`. The image builds what the core
-  links: zlib, libxml2 and ICU, at 0.5.8's versions, on Emscripten 3.1.74 (its pins are the documented
-  exception to the latest-versions rule; the reasons are next to them). A cap podman cannot apply (rootless
-  podman without the `cpu` or `memory` cgroup controller delegated, as on a CI runner) is left out; the
-  caps change no compiler input. `--push` publishes it (see [The engine gate, CI and
+  links on Emscripten 6.0.10 (Ubuntu 24.04): zlib 1.3.2 and libxml2 2.15.4, their latest releases, and ICU
+  76.1, which moves only with a Postgres major. Every input is pinned (the emsdk image by digest, apt by a
+  dated snapshot, every source by checksum), at its latest version when pinned; the reasons are next to the
+  pins. A cap podman cannot apply (rootless podman without the `cpu` or `memory` cgroup controller delegated,
+  as on a CI runner) is left out; the caps change no compiler input. `--push` publishes it (see [The engine gate, CI and
   releases](#the-engine-gate-ci-and-releases)).
 - **`builder:lock [--digest <sha256:…> --id <image id> [--content <sha256>] | --unpublished]`** shows
   `builder/image.lock.json` (the published image by tag, its digest and image id, and the content of
@@ -172,9 +179,10 @@ The driver (`scripts/lib/driver/`) runs a build's `pglite.js`/`pglite.wasm`/`pgl
 MEMFS (its own module, whose `system()`/`popen()` calls run the backend on a scratch instance), a
 single-user start on a data directory, a byte channel for the wire protocol (`exchange(bytes) → bytes`, or
 streamed, with blocking reads, for the bridge), reading and writing a data directory, mounting a host directory,
-installing an extension archive, and a clean close. After an ERROR it restores the wasm's shadow stack pointer,
-which the error's unwind leaves where the deepest abandoned frame put it (about 1.2 kB lost per ERROR
-otherwise, until `max_stack_depth` refuses everything); an exit (a FATAL) ends the session. It takes the
+installing an extension archive, pg_dump (`pg_dump.js`/`.wasm`) on a session, and a clean close. After an ERROR
+it restores the wasm's shadow stack pointer, which the error's unwind leaves where the deepest abandoned frame
+put it (about 1.2 kB lost per ERROR otherwise, until `max_stack_depth` refuses everything); an exit (a FATAL)
+ends the session. It takes the
 artefact directory as a build's `dist/` (`bin/`, `extensions/`) or a flat directory of the same files.
 
 - **`driver:smoke [--artefacts <dir>] [--from <archive>]`** runs initdb (or unpacks a data directory
@@ -182,7 +190,12 @@ artefact directory as a build's `dist/` (`bin/`, `extensions/`) or a flat direct
   manifest's version), a DDL/DML round trip that survives a unique violation, `CREATE EXTENSION amcheck`
   with `bt_index_check` on catalog indexes, a `LOAD` of every shared module the build ships (the 28 core
   modules in `pglite.data`'s `lib/postgresql` and the extension archives'), every default encoding
-  conversion once, non-ASCII round trips through 17 encodings, and dict_snowball's stemming.
+  conversion once, non-ASCII round trips through 17 encodings, and dict_snowball's stemming. Then the
+  stack-leak check: 4,000 failing statements on the session must each report their own error, a normal query
+  must run after them, and the shadow stack pointer must be where it was. It guards the restore after an
+  ERROR on any toolchain (without it the check fails at the 1,899th statement, "stack depth limit exceeded").
+  Last, `pg_dump --inserts -t smoke` on the session, as pgxsinkit's `pgwasm-pg-dump` runs it (`pg_dump.js` and
+  `.wasm` through libpq's socket overrides), must dump the table and its two rows.
 - **`prepopulated [--artefacts <dir>] [--out <file>] [--check | --record] [--compare <archive>]`** makes the
   prepopulated data directory the way ElectricSQL made `@electric-sql/pglite-prepopulatedfs` 0.5.8 (the
   build's own initdb with PGlite's arguments, a start with PGlite's start parameters, then the archive of the
@@ -259,8 +272,9 @@ bun run regress:bridge [--artefacts <dir>] [--port <n>] [--database <name>] [--s
   stack it is started with.
 
 The baseline (8 runs on the `18.6.0` build, `REL_18_6`'s tests) has 231 tests: 178 pass, 49 fail the same way in
-every run and 4 are unstable; each run reports 53 failures, and no backend fails. The failures, by group
-(`regress/baseline.json` has the full reasons):
+every run and 4 are unstable; each run reports 53 failures, and no backend fails. The `18.6.1` build (Emscripten
+6.0.10) matches it in every run, and it was not re-recorded. The failures, by group (`regress/baseline.json` has
+the full reasons):
 
 | Group                     | Tests | Why                                                                                                        |
 | ------------------------- | ----- | ---------------------------------------------------------------------------------------------------------- |
@@ -358,10 +372,10 @@ locally.
 | `release.yml`       | a tag `N.N.N` (never `builder-sources-<n>`)                                 | `release:check`, `gate --lock --published`, `release:gated`, `release:publish`: the release, only if its manifest is the gated one |
 
 The builder image is published from `builder/` by `builder-image.yml` as
-`ghcr.io/pgxsinkit/pgwasm-builder:<tag>` (`3.1.74-p2`, the local image's tag), in Docker's v2s2 format so that
+`ghcr.io/pgxsinkit/pgwasm-builder:<tag>` (`6.0.10-p1`, the local image's tag), in Docker's v2s2 format so that
 a pull by digest gives the local image's id. It publishes a content of `builder/` once per tag: when the lock
 already records it, nothing is pushed, and when the lock records the tag published from other content, it
-refuses. A change to `builder/` is therefore a new tag (`-p3`: `BUILDER_IMAGE` in `scripts/lib/builder.ts`
+refuses. A change to `builder/` is therefore a new tag (`-p2`: `BUILDER_IMAGE` in `scripts/lib/builder.ts`
 and the Containerfile's header). Until its publication is recorded, CI builds the image in the job (up to an
 hour more), and no release can be made. The job summary prints the command that records it:
 `bun run builder:lock --digest <sha256:…> --id <image id> --content <sha256>`, run on the commit the workflow
@@ -450,6 +464,68 @@ libpqwalreceiver's `WalRcvIdentifySystemLsn` and `timingsafe_bcmp`); the baselin
 | `pglite.data` |      6,293,220 |      6,290,545 | −2,675 (−0.04%)  |
 | `pglite.js`   |        380,679 |        380,859 | +180 (+0.05%)    |
 
+## Emscripten and the browser floor
+
+Since `18.6.1` the C build is compiled and linked by Emscripten 6.0.10 (ADR-0001 decisions 9 and 11); `18.3.0` and
+`18.6.0` were built by 3.1.74. The builder image `6.0.10-p1` is the emsdk image by digest, on Ubuntu 24.04 with apt
+from a 2026-09-28 snapshot, and builds zlib 1.3.2, libxml2 2.15.4 and ICU 76.1. ICU moves only with a Postgres
+major, never within one: a major recreates every store through its `dataFormat` change, so no store lives across
+an ICU change, while inside a store's life a new ICU would change the collation versions `pg_collation` and
+`pg_database` record, and could leave indexes on ICU collations silently wrong until they are reindexed. The
+major's port regenerates the overlay's `minimal-icu` data with it.
+
+**The browser floor.** Every link names Safari and iOS 18.4, Chrome 137 and Firefox 131
+(`-sMIN_SAFARI_VERSION=180400 -sMIN_CHROME_VERSION=137 -sMIN_FIREFOX_VERSION=131`), the first releases with standard
+wasm exceptions (exnref). `-sENVIRONMENT` stays `node,web,worker` (Bun runs the artefacts as node), and with it
+Emscripten's own node floor, 18.3.0, which gates the features the browser floor allows (exnref, extended-const)
+too: on 6.0.10 the three flags change no byte of the artefacts. setjmp and longjmp stay Emscripten's JavaScript
+implementation (`-sSUPPORT_LONGJMP=emscripten`); wasm exceptions belong to the performance work.
+
+**What the build sets for Emscripten 6**, so that it links what 3.1.74 linked (`build-pglite.sh` says why next to
+each):
+
+| Setting                                       | Why                                                                                                                                                       |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `-sFAKE_DYLIBS=1`, every link                 | 6.0.0 links a real shared library it finds for `-l` dynamically: libpq is also built as `libpq.so`, which initdb, pg_dump and libpqwalreceiver would load |
+| `-sDEFAULT_TO_CXX=1`, every link              | Since 6.0.6 only em++ links C++'s runtime, and ICU is C++                                                                                                 |
+| `-sUSE_PTHREADS=0`, every link                | Undoes the `-pthread` of libpq's links; deprecated, but nothing replaces its `=0`                                                                         |
+| `-Wl,--no-export-dynamic`, pglite             | The backend link's `-Wl,--export-dynamic` (configure's `LDFLAGS_EX_BE`) comes last since 4.0.20, and exported all 9,649 symbols of the link               |
+| `HEAP8`, `HEAPU8` exported, all three modules | 4.0.7 stopped exporting the heap views                                                                                                                    |
+| `wasmMemory` an incoming option, pglite       | 6.0.2 dropped it from the default `INCOMING_MODULE_JS_API`; the hosts pass their own memory                                                               |
+| `--pre-js pglite/scripts/loadBundleFirst.js`  | 4.0.7 runs `Module.preRun` in the order listed, so the file packager's loader, appended last, ran after the host's callbacks; it runs first again         |
+| `-Dsocket=pgl_socket` (pglitec.c)             | 6.0's SOCKFS creates AF_INET sockets only, and libpq's default Unix socket failed (pg_dump could not connect); the descriptor is /dev/null's now          |
+
+**What a host can rely on** (pgxsinkit's `@pgxsinkit/pgwasm-c` and `@pgxsinkit/pgwasm-pg-dump`, and this
+repository's driver). The factories take `thisProgram`, `arguments`, `noExitRuntime`, `stdin`, `print`, `printErr`,
+`instantiateWasm(imports, done)` and `preRun`, and `pglite.js` also `wasmMemory` and `getPreloadedPackage(name,
+size)`. `pglite.data` is loaded before the first `preRun` callback, and the callbacks run in the order listed
+(3.1.74 ran them in reverse). The modules expose `FS` (with MEMFS and PROXYFS, and in `pglite.js` NODEFS and IDBFS,
+whose stores keep their format), `ENV`, `HEAP8`, `HEAPU8`, `callMain`, `addFunction`, `removeFunction`,
+`UTF8ToString`, `stringToUTF8OnStack` and the exported functions. `pglite.wasm` imports its memory, while
+`initdb.wasm` and `pg_dump.wasm` now define and export their own (a main module is no longer relocatable, since
+4.0.19). An ERROR's intercepted siglongjmp still unwinds with `'unwind'`; a longjmp that escapes every setjmp throws
+an instance of the glue's `EmscriptenSjLj` class, where 3.1.74 threw a number. pg_dump's libpq connects over its
+default Unix socket as before, through `pgl_set_rw_cbs`.
+
+The sizes against `18.6.0`:
+
+| File           | 18.6.0 (bytes) | 18.6.1 (bytes) | Change            |
+| -------------- | -------------: | -------------: | ----------------- |
+| `pglite.wasm`  |     10,089,345 |      9,140,085 | −949,260 (−9.41%) |
+| `pglite.data`  |      6,290,545 |      6,246,509 | −44,036 (−0.70%)  |
+| `pglite.js`    |        380,859 |        335,082 | −45,777 (−12.02%) |
+| `initdb.wasm`  |        395,467 |        298,938 | −96,529 (−24.41%) |
+| `initdb.js`    |        109,978 |        106,390 | −3,588 (−3.26%)   |
+| `pg_dump.wasm` |        703,947 |        655,066 | −48,881 (−6.94%)  |
+| `pg_dump.js`   |        126,562 |        112,499 | −14,063 (−11.11%) |
+
+`pglite.wasm`'s code is 520,355 bytes smaller and its data section 415,547: a main module that is not relocatable
+addresses its data by constants rather than through `__memory_base` and the GOT, and places it at fixed addresses,
+in 7,578 segments that leave out the zero runs of the one relocatable segment 3.1.74 wrote. `pg_dump.js` and the
+three pgxs test programs in `pglite.data` no longer carry SOCKFS (`pgl_socket`). In `pglite.data` only the 28 core
+modules, pgxs's `Makefile.global` (the flags) and those test programs changed; its other 667 files are
+byte-identical, the timezone files among them.
+
 ## Scripts
 
 | Script                    | Does                                                                                      |
@@ -484,7 +560,7 @@ only version input, and `package.json`'s `0.0.0` is a placeholder. The build der
 (`scripts/lib/version.ts`): `<major>.<minor>.0` of the pinned upstream tag while there is no release tag,
 the latest release tag's revision + 1 when that tag is of the pinned major.minor, and `<major>.<minor>.0`
 otherwise. Only the tags of HEAD's strict ancestors count, so a tagged commit builds as its own tag, and tags
-that are not `N.N.N` (`builder-sources-1`) are ignored; today the candidate is `18.6.0`. Releases are GitHub
+that are not `N.N.N` (`builder-sources-1`) are ignored; today the candidate is `18.6.1`. Releases are GitHub
 release assets with a checksum manifest, not npm packages, made only by `release.yml` from the gated build (see
 [The engine gate, CI and releases](#the-engine-gate-ci-and-releases)). History is linear: changes are rebased,
 never merged, and main is fast-forwarded from the command line.
