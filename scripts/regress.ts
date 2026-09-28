@@ -19,7 +19,7 @@
  * failure lands in `unclassified`, which `bun test` refuses until it has a group and a reason.
  *
  * The artefacts default to `bun run build`'s output, and the builder image (where pg_regress and psql are built
- * and run) to localhost/pgwasm-postgres-builder:3.1.74-p2. The tests' regress library is left out unless
+ * and run) to localhost/pgwasm-postgres-builder:6.0.10-p1. The tests' regress library is left out unless
  * `--regress-lib` names one (see scripts/lib/regress/run.ts: the build's own cannot load), and the baseline is
  * recorded without it. A comparison writes its outcome to .cache/regress/outcome.json for `bun run gate`. It
  * needs podman and the builder image, and a run takes a minute or two, so it is not part of validate; CI runs it

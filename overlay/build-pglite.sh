@@ -20,7 +20,10 @@ emcc --clear-cache
 INSTALL_FOLDER=${INSTALL_FOLDER:-"/pglite"}
 
 # build with optimizations by default aka release
-PGLITE_CFLAGS="-m32 -sWASM_BIGINT -fpic -sENVIRONMENT=node,web,worker -sSUPPORT_LONGJMP=emscripten -Wno-declaration-after-statement -Wno-macro-redefined -Wno-unused-function -Wno-missing-prototypes -Wno-incompatible-pointer-types"
+# setjmp/longjmp stay Emscripten's JavaScript implementation (SUPPORT_LONGJMP=emscripten, invoke_* trampolines), which
+# Emscripten 6 still supports; wasm exceptions (SUPPORT_LONGJMP=wasm) belong to the performance work.
+# (-sWASM_BIGINT is gone: BigInt integration is Emscripten 6's default, and the setting is deprecated.)
+PGLITE_CFLAGS="-m32 -fpic -sENVIRONMENT=node,web,worker -sSUPPORT_LONGJMP=emscripten -Wno-declaration-after-statement -Wno-macro-redefined -Wno-unused-function -Wno-missing-prototypes -Wno-incompatible-pointer-types"
 if [ "$DEBUG" = true ]
 then
     echo "pglite: building debug version."
@@ -79,17 +82,24 @@ else
     echo "$CONFIG_STATUS exists and is newer than $REF_FILE. ./configure will NOT be run."
 fi
 
-PGLITE_LDFLAGS="-sWASM_BIGINT -sUSE_PTHREADS=0"
+# Every link resolves `-lpq`, `-lpgport`, ... to the static archive, as Emscripten did until 6.0.0 (FAKE_DYLIBS, on
+# by default until then): libpq is also built as a real shared library (libpq.so, a side module), which without it
+# would become a runtime dependency of initdb, pg_dump and libpqwalreceiver.so, none of which ships it.
+# -sUSE_PTHREADS=0 undoes the `-pthread` libpq's links carry (configure's PTHREAD_CFLAGS), which would otherwise link
+# them with shared memory; the setting is deprecated in Emscripten 6 in favour of -pthread, and nothing replaces its
+# =0 yet. -sDEFAULT_TO_CXX links libc++ and libc++abi when emcc (the build's CC) links, as it did by default until
+# Emscripten 6.0.6: ICU is C++, and the backend and initdb link it.
+PGLITE_LDFLAGS="-sFAKE_DYLIBS=1 -sDEFAULT_TO_CXX=1 -sUSE_PTHREADS=0"
 PGLITE_LDFLAGS_SL="-shared -sSIDE_MODULE=1 -Wno-unused-function"
 
 # we define here "all" emscripten flags in order to allow native builds (like libpglite)
-EXPORTED_RUNTIME_METHODS="addFunction,removeFunction,FS,MEMFS,PROXYFS,callMain,ENV,UTF8ToString,stringToNewUTF8,stringToUTF8OnStack"
+# The runtime members the hosts use (pgxsinkit's pgwasm-c and pgwasm-pg-dump, and scripts/lib/driver/): Emscripten 4
+# stopped exporting the heap views by default, so HEAP8 and HEAPU8 are listed.
+EXPORTED_RUNTIME_METHODS="addFunction,removeFunction,FS,MEMFS,PROXYFS,callMain,ENV,UTF8ToString,stringToNewUTF8,stringToUTF8OnStack,HEAP8,HEAPU8"
 PGLITE_LDFLAGS_EX="\
 -sINITIAL_MEMORY=64MB \
--sWASM_BIGINT \
 -sSUPPORT_LONGJMP=emscripten \
 -sFORCE_FILESYSTEM=1 \
--sUSE_PTHREADS=0 \
 -sEXIT_RUNTIME=1 -sENVIRONMENT=node,web,worker \
 -sMAIN_MODULE=2 -sMODULARIZE=1 -sEXPORT_ES6=1 \
 -sEXPORT_NAME=Module -sALLOW_TABLE_GROWTH -sALLOW_MEMORY_GROWTH \
@@ -174,16 +184,27 @@ PGPRELOAD="\
 --preload-file $(pwd)/pglite/static/locale-a@/pglite/locale-a \
 --preload-file $(pwd)/pglite/static/minimal-icu/76.1@/pglite/icu"
 
-PGLITE_EXPORTED_RUNTIME_METHODS="MEMFS,IDBFS,FS,PROXYFS,setValue,getValue,UTF8ToString,stringToNewUTF8,stringToUTF8OnStack,addFunction,removeFunction,callMain,ENV"
+PGLITE_EXPORTED_RUNTIME_METHODS="MEMFS,IDBFS,FS,PROXYFS,setValue,getValue,UTF8ToString,stringToNewUTF8,stringToUTF8OnStack,addFunction,removeFunction,callMain,ENV,HEAP8,HEAPU8"
+
+# The module options pglite.js reads: Emscripten's default list (settings.js, INCOMING_MODULE_JS_API) and
+# wasmMemory, which Emscripten 6.0.2 dropped from it and the hosts pass (a memory of their own, initial 128 MB).
+PGLITE_INCOMING_MODULE_JS_API="ENVIRONMENT,arguments,canvas,dynamicLibraries,elementPointerLock,instantiateWasm,locateFile,monitorRunDependencies,noExitRuntime,noInitialRun,onAbort,onExit,onRuntimeInitialized,postRun,preInit,preRun,print,printErr,setStatus,statusMessage,stderr,stdin,stdout,thisProgram,wasm,websocket,wasmMemory"
 
 # -sDYLINK_DEBUG=2 use this for debugging missing exported symbols (ex when an extension calls a pgcore function that hasn't been exported)
+# -Wl,--no-export-dynamic: pglite.wasm exports exported_functions.txt, not every symbol. The backend's link carries
+# configure's LDFLAGS_EX_BE (-Wl,--export-dynamic, for a native postgres whose modules resolve against it); Emscripten
+# up to 3.1.74 overrode it with its own --no-export-dynamic, while since 4.0.20 the command line's linker flags come
+# last, so without this the wasm exports all 9,649 symbols of the link (ICU's, libxml2's, libc++'s, ...).
 POSTGRES_PGLITE_FLAGS="\
+-Wl,--no-export-dynamic \
 -sSTACK_SIZE=8MB \
 -sINITIAL_MEMORY=128MB \
 -sIMPORTED_MEMORY=1 \
 -sEXPORTED_RUNTIME_METHODS=$PGLITE_EXPORTED_RUNTIME_METHODS \
+-sINCOMING_MODULE_JS_API=$PGLITE_INCOMING_MODULE_JS_API \
 -sEXPORTED_FUNCTIONS=@$INSTALL_FOLDER/exported_functions.txt \
 $PGPRELOAD \
+--pre-js $(pwd)/pglite/scripts/loadBundleFirst.js \
 -lnodefs.js -lidbfs.js"
 
 # Building pglite itself needs to be the last step because of the PRELOAD_FILES parameter (a list of files and folders) need to be available.

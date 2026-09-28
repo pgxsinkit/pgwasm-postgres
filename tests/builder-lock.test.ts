@@ -71,11 +71,11 @@ describe("tree digests", () => {
 
 describe("the builder image's references", () => {
   test("the published image keeps the local tag, and a digest reference is recognised", () => {
-    expect(imageTag(BUILDER_IMAGE)).toBe("3.1.74-p2");
+    expect(imageTag(BUILDER_IMAGE)).toBe("6.0.10-p1");
     expect(imageTag("localhost:5000/a/b:t")).toBe("t");
     expect(imageTag("localhost:5000/a/b")).toBeUndefined();
     expect(imageTag(`${PUBLISHED_REPOSITORY}@${DIGEST}`)).toBeUndefined();
-    expect(publishedImage()).toBe("ghcr.io/pgxsinkit/pgwasm-builder:3.1.74-p2");
+    expect(publishedImage()).toBe("ghcr.io/pgxsinkit/pgwasm-builder:6.0.10-p1");
     expect(digestReference(PUBLISHED_REPOSITORY, DIGEST)).toBe(`ghcr.io/pgxsinkit/pgwasm-builder@${DIGEST}`);
     expect(publishedDigest(`${PUBLISHED_REPOSITORY}@${DIGEST}`, [])).toBe(DIGEST);
     expect(publishedDigest(BUILDER_IMAGE, [`localhost/pgwasm-postgres-builder@sha256:${"c".repeat(64)}`])).toBeNull();
@@ -88,7 +88,7 @@ describe("the builder image's references", () => {
       "--digestfile",
       "/d",
       BUILDER_IMAGE,
-      "docker://ghcr.io/pgxsinkit/pgwasm-builder:3.1.74-p2",
+      "docker://ghcr.io/pgxsinkit/pgwasm-builder:6.0.10-p1",
     ]);
   });
 });
@@ -130,8 +130,8 @@ describe("the builder lock", () => {
     expect(changed.kind === "build" && changed.reason).toContain("builder/ changed");
     const notYet = chooseBuilder(unpublished, content);
     expect(notYet.kind === "build" && notYet.reason).toContain("not published yet");
-    const retagged = chooseBuilder(published, content, "ghcr.io/pgxsinkit/pgwasm-builder:3.1.74-p3");
-    expect(retagged.kind === "build" && retagged.reason).toContain("3.1.74-p3");
+    const retagged = chooseBuilder(published, content, "ghcr.io/pgxsinkit/pgwasm-builder:6.0.10-p2");
+    expect(retagged.kind === "build" && retagged.reason).toContain("6.0.10-p2");
   });
 
   test("a content is pushed once per tag, and a published tag never gets other content", () => {
@@ -140,7 +140,7 @@ describe("the builder lock", () => {
     expect(pushDecision(published, content, publishedImage())).toEqual({ kind: "published", digest: DIGEST });
     const refused = pushDecision(published, "d".repeat(64), publishedImage());
     expect(refused.kind === "refuse" && refused.reason).toContain("new tag");
-    expect(pushDecision(published, "d".repeat(64), "ghcr.io/pgxsinkit/pgwasm-builder:3.1.74-p3")).toEqual({
+    expect(pushDecision(published, "d".repeat(64), "ghcr.io/pgxsinkit/pgwasm-builder:6.0.10-p2")).toEqual({
       kind: "push",
     });
   });

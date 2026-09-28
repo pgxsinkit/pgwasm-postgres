@@ -10,7 +10,7 @@ describe("builder:image", () => {
     const command = imageBuildCommand(builderPaths("/repo/builder")).join(" ");
     expect(command).toContain("--format docker");
     expect(command).toContain("-v /repo/builder/bin/make:/usr/local/bin/gmake:ro");
-    expect(command).toContain("-f /repo/builder/Containerfile -t localhost/pgwasm-postgres-builder:3.1.74-p2");
+    expect(command).toContain("-f /repo/builder/Containerfile -t localhost/pgwasm-postgres-builder:6.0.10-p1");
     const expected = readFileSync(join(repoRoot, "builder", "dpkg-expected.txt"), "utf8");
     expect(sortedLines(expected).join("\n")).toBe(expected.trimEnd());
     expect(sortedLines("b=1\nB=1\na=2\n")).toEqual(["B=1", "a=2", "b=1"]);

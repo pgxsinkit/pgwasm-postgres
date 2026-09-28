@@ -10,7 +10,7 @@
  * Two builds of one commit, from any checkout, give identical manifests (`bun run build:verify <manifest>`).
  *
  * --debug  a debug build (-g, no wasm-opt), whose debug info points at the materialised source on the host.
- * --image  the builder image to build in (default localhost/pgwasm-postgres-builder:3.1.74-p2), which must be in
+ * --image  the builder image to build in (default localhost/pgwasm-postgres-builder:6.0.10-p1), which must be in
  *          podman's local storage: the published one by digest, as the gate pulls it, or any other build of builder/.
  *
  * Not part of validate: it takes minutes. CI runs it through `bun run gate`.

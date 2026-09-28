@@ -18,7 +18,7 @@
  * step ended goes to .cache/gate/<commit>.steps.json, passed or not.
  *
  * The builder image:
- *   (default)     localhost/pgwasm-postgres-builder:3.1.74-p2, which must be in podman's local storage;
+ *   (default)     localhost/pgwasm-postgres-builder:6.0.10-p1, which must be in podman's local storage;
  *   --image       another image in podman's local storage;
  *   --lock        builder/image.lock.json decides, as in CI: the published image, pulled by digest, when the lock
  *                 records builder/'s content published; otherwise the image built from builder/ here;

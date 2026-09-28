@@ -1,80 +1,68 @@
 # pgwasm-postgres builder image (ADR-0001 decision 9).
 #
-# A pinned rewrite of electricsql/pglite-builder:3.1.74-7, cut down to what the build ships. Electric built that
-# image with BuildKit on 2026-06-01 from postgres-pglite 895b2954 (its pglite/builder/Dockerfile is identical to
-# the one at b133782, the commit @electric-sql/pglite@0.5.8 pins). This file keeps Electric's steps, flags,
-# install prefix (/install/libs) and source directory names for what it still builds, because they reach the
-# artefacts: the libraries built here are linked into pglite.wasm. Its first revision (-p1) was that image with
-# every input pinned and verified, the dead URLs replaced and the build parallelism a parameter; built from it,
-# the byte-identity build reproduced PGlite 0.5.8's artefacts byte for byte (ADR-0001 decision 2, 2026-09-27).
+# Began as a pinned rewrite of electricsql/pglite-builder:3.1.74-7, cut down to what the build ships. Electric built
+# that image with BuildKit on 2026-06-01 from postgres-pglite 895b2954 (its pglite/builder/Dockerfile is identical to
+# the one at b133782, the commit @electric-sql/pglite@0.5.8 pins). Its first revision (3.1.74-p1) was that image with
+# every input pinned and verified, the dead URLs replaced and the build parallelism a parameter; built from it, the
+# byte-identity build reproduced PGlite 0.5.8's artefacts byte for byte (ADR-0001 decision 2, 2026-09-27). 3.1.74-p2
+# (18.3.0) built only what the core needs: zlib (--with-zlib), libxml2 (--with-libxml) and ICU (--with-icu).
 #
-# -p2 (18.3.0) builds only what the core needs: zlib (--with-zlib), libxml2 (--with-libxml) and ICU (--with-icu).
-# It dropped, with the third-party extensions and every contrib module but amcheck (ADR-0001 decision 3):
-#   libxslt 1.1.43       contrib/xml2 only (--with-libxslt, dropped from configure too)
-#   OpenSSL 3.0.17       pgcrypto only (configure has --with-openssl=no)
-#   OSSP uuid 1.6.2      contrib/uuid-ossp only (--with-uuid=ossp, dropped from configure too)
-#   json-c, libdeflate, libtiff, SQLite, PROJ, GEOS, GDAL   PostGIS only
-# and the symbol lists (/install/exports, /install/imports, LIB_EXPORTS_DIR, LLVM_NM) that pglite.wasm's old
-# export list subtracted: the list is now read from the shipped modules themselves (pglite/scripts/
-# exported-functions.sh in the overlay). The toolchain stage, and so the package set, is unchanged.
+# 6.0.10-p1 (18.6.1) moves the toolchain to the latest Emscripten and the libraries to their latest releases but ICU
+# (ADR-0001 decisions 9 and 11, order of work 6): Emscripten 6.0.10 on Ubuntu 24.04 (the emsdk image's base), the
+# apt snapshot of that release, zlib 1.3.2, libxml2 2.15.4 (from 2.14.5, built from its release tarball rather than
+# a GitLab archive of the tag, so autogen.sh and with it autoconf, automake and libtool are gone), and ICU 76.1
+# kept (see its pin). The steps, flags, install prefix (/install/libs) and source directory names of what it builds
+# are otherwise 3.1.74-p2's: they reach the artefacts, since the libraries built here are linked into pglite.wasm.
 #
-# PINNING POLICY. Every pin in this file is the documented exception to the always-latest rule. The build's
-# releases must be reproducible, so every input is pinned by digest, snapshot or checksum. Emscripten stays at
-# 3.1.74 in 18.3.0, the first release whose bytes are ours, so that release changes what is built and not the
-# toolchain: the latest Emscripten changes the JavaScript glue that pgxsinkit's pgwasm-c host code drives, and
-# moves in a release of its own through both gates (ADR-0001 decision 9, order of work 6). The library versions
-# stay those 0.5.8 linked for the same reason; bumping any pin is a deliberate C-build change, released and gated
-# like any other.
+# PINNING POLICY. The build's releases must be reproducible, so every input is pinned: the toolchain image by
+# digest, apt by a dated snapshot, every source by checksum. The versions are the latest at the time of pinning
+# (2026-09-28), except ICU, which moves only with a Postgres major (see its pin). A pin moves only as a deliberate
+# C-build change, in a new image revision, released and gated like any other.
 #
-# MIRRORED SOURCES. Two sources are fetched from this repository's release `builder-sources-1`, because their
-# upstream URLs are not stable byte streams: libxml2's is a GitLab `/-/archive/` tarball generated on request,
-# and zlib.net has already dropped Electric's URL. The upstream URL each one mirrors is in the comment above it.
-# The checksums are the ones the byte-for-byte rebuild used, so a mirror cannot change the bytes (ADR-0001,
-# order of work 2b). The release also holds the mirrors of the dropped libxslt, libtiff and OSSP uuid.
+# MIRRORED SOURCES. Sources whose upstream URLs are not stable byte streams are fetched from this repository's
+# release `builder-sources-<n>`; the upstream URL each one mirrors is in the comment above it, and the checksum is
+# the upstream bytes', so a mirror cannot change them (ADR-0001, order of work 2b). An asset is never replaced in
+# place: a further mirror goes into a new `builder-sources-<n>`.
 #
 # Build (amd64 only; JOBS changes speed, not output): `bun run builder:image`, which runs
-#   podman build --format docker -t localhost/pgwasm-postgres-builder:3.1.74-p2 builder
+#   podman build --format docker -t localhost/pgwasm-postgres-builder:6.0.10-p1 builder
 # capped at 4 CPUs and 16 GiB, with builder/bin/make turning every bare `make -j` into `make -j4`.
-# builder/dpkg-expected.txt is the runner stage's package set (identical to Electric's image); the script checks it.
-# Published by .github/workflows/builder-image.yml as ghcr.io/pgxsinkit/pgwasm-builder:3.1.74-p2;
+# builder/dpkg-expected.txt is the runner stage's package set; the script checks it.
+# Published by .github/workflows/builder-image.yml as ghcr.io/pgxsinkit/pgwasm-builder:6.0.10-p1;
 # builder/image.lock.json records its digest and the content of this directory it was built from, and CI builds
-# in it by digest. A change here is a new revision (-p3), never the published tag pushed again.
+# in it by digest. A change here is a new revision (-p2), never the published tag pushed again.
 
-# PIN (toolchain exception): Emscripten 3.1.74 by digest, until its own release (see PINNING POLICY). This is
-# the linux/amd64 image BuildKit recorded as a material of electricsql/pglite-builder:3.1.74-7 in its provenance
-# attestation, and the base layers of that image. Electric's file uses the mutable tag, plus
-# emsdk:3.1.74-arm64 on arm64 hosts (a different clang binary); this file builds on amd64 only.
-ARG EMSDK_IMAGE=docker.io/emscripten/emsdk:3.1.74@sha256:af45409f3199d88db4b1b03af0098532c8fb33a375ac257463eeb0a622870d06
+# PIN (toolchain): Emscripten 6.0.10, the latest release (emsdk's tags, 2026-09-28), by the digest of the
+# linux/amd64 image of docker.io/emscripten/emsdk:6.0.10 (the tag's manifest list is
+# sha256:e077d54e2b8970575ebc4f185ac1de0b95c05f2b266134d4ba27449af7aebf65; its arm64 image has a different clang
+# binary). Ubuntu 24.04 (noble) is its base. This file builds on amd64 only.
+ARG EMSDK_IMAGE=docker.io/emscripten/emsdk:6.0.10@sha256:d4d9b9a07e28f8795ebca83b4b3bf98febb65f956e1364ac32483eea3d99bd8f
 
 FROM ${EMSDK_IMAGE} AS toolchain
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-# PIN (reproducibility exception): the Ubuntu archive as it was when Electric's runner-stage layer was
-# created (2026-03-11T18:49:56Z, from the image history). Electric runs an unpinned `apt update && apt
-# upgrade -y`, so bison, flex, autotools, perl, python3 and gcc/g++ (native ICU tools) are whatever the archive
-# serves on the day of the build; bison and flex generate the parsers' C.
-ARG UBUNTU_SNAPSHOT=20260311T184956Z
-RUN sed -i -E "s#http://(archive|security)\.ubuntu\.com/ubuntu/?#https://snapshot.ubuntu.com/ubuntu/${UBUNTU_SNAPSHOT}/#" /etc/apt/sources.list \
+# PIN (reproducibility): the Ubuntu archive as snapshot.ubuntu.com served it on 2026-09-28 (the latest snapshot
+# when this revision was made), for noble, noble-updates, noble-backports and noble-security alike. Without it,
+# `apt upgrade` and the packages below (bison and flex generate the parsers' C; the host gcc builds the native ICU
+# tools and the regress client) would be whatever the archive serves on the day of the build. The base's sources
+# are deb822 (/etc/apt/sources.list.d/ubuntu.sources).
+ARG UBUNTU_SNAPSHOT=20260928T000000Z
+RUN sed -i -E "s#http://(archive|security)\.ubuntu\.com/ubuntu/?#https://snapshot.ubuntu.com/ubuntu/${UBUNTU_SNAPSHOT}/#" /etc/apt/sources.list.d/ubuntu.sources \
  && apt-get update \
  && apt-get upgrade -y \
- && apt-get install -y xz-utils autoconf libtool automake pkgconf bison flex \
+ && apt-get install -y xz-utils pkgconf bison flex \
  && rm -rf /var/lib/apt/lists/*
 
 FROM toolchain AS builder
 ARG JOBS=4
 RUN mkdir -p /install/libs
-ENV EMCC_COMMON_FLAGS="-O2 -fPIC -sWASM_BIGINT"
+# -sWASM_BIGINT is gone: BigInt integration is Emscripten 6's default, and the setting is deprecated.
+ENV EMCC_COMMON_FLAGS="-O2 -fPIC"
 
-# Every source is fetched to a file, checked, then unpacked where Electric unpacked it.
-# PIN (source exception, see PINNING POLICY) on every checksum below: they are the bytes the byte-for-byte
-# rebuild used. The sources with unstable upstream URLs come from this repository's `builder-sources-1` release
-# (see the header). Mirroring a further source means adding it to a new `builder-sources-<n>` release with the
-# same checksum, never replacing an asset in place.
+# Every source is fetched to a file, checked, then unpacked.
 
 WORKDIR /src
-# PIN (source exception): zlib 1.3.2, NOT the 1.3.1 Electric's Dockerfile names: electricsql/pglite-builder:3.1.74-7 contains zlib 1.3.2
-# (its zlib.h says 1.3.2, and 1.3.2 built with these commands in that image gives a byte-identical libz.a),
-# and the published pglite.wasm / pg_dump.wasm embed "1.3.2". Built from 1.3.1, both wasm files differ.
-# Electric's URL (www.zlib.net/zlib-1.3.1.tar.gz) returns 404 today; /fossils keeps every release.
+# PIN (source): zlib 1.3.2, the latest release. zlib.net keeps only the current release at its top level;
+# /fossils keeps every release.
 # Mirror of https://www.zlib.net/fossils/zlib-1.3.2.tar.gz
 RUN curl -fsSL -o /tmp/src.tgz https://github.com/pgxsinkit/pgwasm-postgres/releases/download/builder-sources-1/zlib-1.3.2.tar.gz \
  && echo "bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16  /tmp/src.tgz" | sha256sum -c - \
@@ -84,17 +72,23 @@ RUN CFLAGS="${EMCC_COMMON_FLAGS}" CXXFLAGS="${EMCC_COMMON_FLAGS}" emconfigure ./
 RUN emmake make -j"${JOBS}" && emmake make install
 
 WORKDIR /src
-# PIN (source exception): libxml2 v2.14.5 (GitLab-generated archive of the tag)
-# Mirror of https://gitlab.gnome.org/GNOME/libxml2/-/archive/v2.14.5/libxml2-v2.14.5.tar.gz
-RUN curl -fsSL -o /tmp/src.tgz https://github.com/pgxsinkit/pgwasm-postgres/releases/download/builder-sources-1/libxml2-v2.14.5.tar.gz \
- && echo "54968c8ab8723c2d75a38fc45810e8cf60d44991e0887661bf9905a4042ad108  /tmp/src.tgz" | sha256sum -c - \
- && tar -xzf /tmp/src.tgz && rm /tmp/src.tgz
-WORKDIR /src/libxml2-v2.14.5
-RUN ./autogen.sh --with-python=no --with-threads=no
+# PIN (source): libxml2 2.15.4, the latest release, as its release tarball (configure generated upstream). The
+# checksum is the one download.gnome.org publishes next to it (libxml2-2.15.4.sha256sum).
+# TO MIRROR before this image is published (a new builder-sources-<n>, then this URL points at it):
+#   https://download.gnome.org/sources/libxml2/2.15/libxml2-2.15.4.tar.xz
+RUN curl -fsSL -o /tmp/src.txz https://download.gnome.org/sources/libxml2/2.15/libxml2-2.15.4.tar.xz \
+ && echo "98087fd181d9070724f3fbc65c7377db03038eb92bd882374daff44940138821  /tmp/src.txz" | sha256sum -c - \
+ && tar -xJf /tmp/src.txz && rm /tmp/src.txz
+WORKDIR /src/libxml2-2.15.4
 RUN CFLAGS="${EMCC_COMMON_FLAGS}" CXXFLAGS="${EMCC_COMMON_FLAGS}" emconfigure ./configure --enable-shared=no --enable-static=yes --with-python=no --prefix=/install/libs
 RUN emmake make -j"${JOBS}" && emmake make install
 
-# PIN (source exception): ICU 76.1 (release asset). Checksum = the release's published SHASUM512.txt entry.
+# PIN (source, the documented exception to the latest-versions rule): ICU 76.1 (release asset; the checksum is the
+# release's published SHASUM512.txt entry). ICU moves only with a Postgres major, never within one: a major already
+# recreates every store through its dataFormat change, so no store ever lives across an ICU change, while inside a
+# store's life an ICU upgrade would change the collation versions recorded in pg_collation and pg_database and could
+# leave indexes on ICU collations silently wrong until reindexed. The overlay's minimal ICU data
+# (pglite/static/minimal-icu/76.1) is regenerated in the same major's port.
 WORKDIR /src
 RUN curl -fsSL -o /tmp/src.tgz https://github.com/unicode-org/icu/releases/download/release-76-1/icu4c-76_1-src.tgz \
  && echo "b702ab62fb37a1574d5f4a768326d0f8fa30d9db5b015605b5f8215b5d8547f83d84880c586d3dcc7b6c76f8d47ef34e04b0f51baa55908f737024dd79a42a6c  /tmp/src.tgz" | sha512sum -c - \

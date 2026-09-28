@@ -9,16 +9,16 @@ import { join } from "node:path";
 import { ALL_CAPS, type ResourceCaps } from "./podman.ts";
 
 /**
- * `3.1.74` is the Emscripten version (pinned until its own release, see the Containerfile); `-p2` counts
- * revisions of our pinned image on that Emscripten (`-p1` was the byte-identity image, `-p2` the amcheck-only one).
+ * `6.0.10` is the Emscripten version (see the Containerfile); `-p1` counts revisions of our pinned image on that
+ * Emscripten (on 3.1.74, `-p1` was the byte-identity image and `-p2` the amcheck-only one of 18.3.0 and 18.6.0).
  * A change to builder/ is a new revision: a published tag is never pushed again with other content.
  */
-export const BUILDER_IMAGE = "localhost/pgwasm-postgres-builder:3.1.74-p2";
+export const BUILDER_IMAGE = "localhost/pgwasm-postgres-builder:6.0.10-p1";
 
 /** Where `builder-image.yml` publishes the image, under the local image's tag. */
 export const PUBLISHED_REPOSITORY = "ghcr.io/pgxsinkit/pgwasm-builder";
 
-/** An image reference's tag (`3.1.74-p2`), or `undefined` for a digest reference or one without a tag. */
+/** An image reference's tag (`6.0.10-p1`), or `undefined` for a digest reference or one without a tag. */
 export function imageTag(reference: string): string | undefined {
   if (reference.includes("@")) return undefined;
   const name = reference.slice(reference.lastIndexOf("/") + 1);

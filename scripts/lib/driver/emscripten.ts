@@ -1,8 +1,11 @@
 /**
- * The parts of the Emscripten 3.1.74 runtime the driver calls, typed here rather than through
+ * The parts of the Emscripten 6.0.10 runtime the driver calls, typed here rather than through
  * `@types/emscripten`. Only what is used is declared; an Emscripten bump that changes any of it breaks
  * the driver's typecheck or its smoke run, which is where the change is meant to surface (ADR-0001
- * decision 9).
+ * decision 9). The build exports what is used and Emscripten no longer exports by default (`HEAPU8`, since
+ * 4.0.7), and reads the options it no longer reads by default (`wasmMemory`, since 6.0.2); its pre-js
+ * `loadBundleFirst.js` loads `pglite.data` before the `preRun` callbacks, which Emscripten 4.0.7 and later
+ * run in the order listed.
  */
 
 export interface EmscriptenStat {
@@ -43,6 +46,7 @@ export interface ModuleOverrides<TModule> {
     successCallback: (instance: WebAssembly.Instance, module: WebAssembly.Module) => void,
   ) => Record<string, never>;
   getPreloadedPackage?: (name: string, size: number) => ArrayBuffer;
+  /** Run in the order listed, after `pglite.data` is loaded (see above). */
   preRun: ((module: TModule) => void)[];
 }
 
