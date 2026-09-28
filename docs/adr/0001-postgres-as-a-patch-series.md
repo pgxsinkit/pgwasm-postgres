@@ -457,8 +457,8 @@ Postgres's own regression suite has never run on the wasm build.
      digest of its linux/amd64 image; its base is Ubuntu 24.04, so apt comes from a noble snapshot
      (20260928T000000Z) and `dpkg-expected.txt` is new (225 packages: gcc 13, glibc 2.39, bison, flex, pkgconf;
      autoconf, automake and libtool went with libxml2's `autogen.sh`). zlib 1.3.2 and libxml2 2.15.4 (from
-     2.14.5, now its release tarball with the checksum download.gnome.org publishes, to be mirrored as a
-     `builder-sources-<n>` asset before the image is published), both the latest. The pin policy is now the
+     2.14.5, now its release tarball with the checksum download.gnome.org publishes; a stable byte stream from
+     a server that keeps every release, so, like ICU's, it is not mirrored), both the latest. The pin policy is now the
      latest-versions rule with every input pinned for reproducibility (digest, snapshot, checksum), and one
      standing exception: **ICU moves only with a Postgres major, never within one** (76.1 until then). A major
      already recreates every store through its `dataFormat` change (decision 8), so no store ever lives across
@@ -599,8 +599,8 @@ Postgres's own regression suite has never run on the wasm build.
        Emscripten 6 needs, the glue kept for pgxsinkit's host (`pgl_socket` for pg_dump), the driver on the new
        glue with its stack-leak and pg_dump checks, and the floor (decisions 9, 10 and 11). The records: the
        export list (`_pgl_socket`) and the prepopulated asset re-recorded; the pg_regress baseline unchanged. Two
-       gates from clean at the last commit gave identical manifests. Publishing the image (libxml2's mirror,
-       `builder-image.yml`, `builder:lock`) and releasing `18.6.1` are the maintainer's; pgxsinkit adopts it with
+       gates from clean at the last commit gave identical manifests. Publishing the image (`builder-image.yml`,
+       `builder:lock`) and releasing `18.6.1` are the maintainer's; pgxsinkit adopts it with
        `pgwasm:pin` and its contract gate.
     7. The weekly poll and the readiness issue.
     8. The `main-loop-unroll` rewrite with its token-identity proof, before any `port-19` work.

@@ -73,9 +73,8 @@ RUN emmake make -j"${JOBS}" && emmake make install
 
 WORKDIR /src
 # PIN (source): libxml2 2.15.4, the latest release, as its release tarball (configure generated upstream). The
-# checksum is the one download.gnome.org publishes next to it (libxml2-2.15.4.sha256sum).
-# TO MIRROR before this image is published (a new builder-sources-<n>, then this URL points at it):
-#   https://download.gnome.org/sources/libxml2/2.15/libxml2-2.15.4.tar.xz
+# checksum is the one download.gnome.org publishes next to it (libxml2-2.15.4.sha256sum). Not mirrored: a release
+# tarball is a stable byte stream, and download.gnome.org keeps every release, as ICU's GitHub release does.
 RUN curl -fsSL -o /tmp/src.txz https://download.gnome.org/sources/libxml2/2.15/libxml2-2.15.4.tar.xz \
  && echo "98087fd181d9070724f3fbc65c7377db03038eb92bd882374daff44940138821  /tmp/src.txz" | sha256sum -c - \
  && tar -xJf /tmp/src.txz && rm /tmp/src.txz
