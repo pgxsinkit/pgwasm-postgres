@@ -347,6 +347,34 @@ Postgres's own regression suite has never run on the wasm build.
      longer, which moves the checkpoint and the LSN and data checksum of every page written after it.
      `version()` reads `PostgreSQL 18.6 (pgwasm-postgres 18.6.0) on wasm32-unknown-emscripten, …`.
 
+   The poll and the readiness issue, as built in step 7 (2026-09-28), are `bun run poll`, which `poll.yml` runs every
+   Monday at 06:00 UTC and on demand (with a dry run), from develop, with the builder image from the lock:
+   - `git ls-remote --tags` gives two targets: the newest release of the pinned major newer than the pin (only the
+     newest: the minors between are skipped) and the newest tag of the next major, betas before release candidates
+     before releases.
+   - The bump: from develop, a branch `bump/<tag>` and `bun run bump <tag> --lock --report <file>`; when it commits,
+     the branch is pushed and a pull request against develop opened with the report as its body, a draft titled
+     `[blocked]` when `bump` exits 1. A conflicting apply does not open the pull request described above: `bump`
+     commits nothing on a conflict, and GitHub opens no pull request without a commit, so an issue "Bump to <tag>:
+     the series does not apply" carries the conflict report instead (and bump's output, on a refusal).
+   - The readiness: `bun run readiness <tag>` applies the series onto the tag in a scratch worktree, past its
+     conflicts (a patch that conflicts is reported with the bump's conflict sections and skipped, and the next ones
+     applied without it), and once it applies builds it in a scratch copy of the repository with the pin moved (a
+     beta builds as the pre-release `19.0.0-beta.4`, never a release), then reports the tuple's new values, the
+     export list and pg_regress against the pinned major's baseline. Its report is a comment, marked
+     `<!-- readiness:<tag> -->`, on the one open "Postgres <major> readiness" issue, whose body is a table of every
+     reported tag, rebuilt from the reports' status comments.
+   - Each is done once: a `bump/<tag>` branch or an open pull request or issue naming the tag skips the bump, and a
+     comment with the tag's marker skips the readiness run. `--dry-run` runs the reads and prints every command
+     that writes.
+   - The pull request is pushed and opened with `GITHUB_TOKEN`, which triggers no workflow: it shows no checks, its
+     body carries the gate's result, and `gate.yml` runs when the maintainer's fast-forward of develop is pushed.
+     Opening it needs the repository to allow Actions to create pull requests.
+   - The first readiness report, `REL_19_BETA4` (2026-09-28): three of the five patches conflict
+     (`build-emscripten` in `src/backend/Makefile`, `startup-packet-export` in `backend_startup.c`,
+     `main-loop-unroll` in `postgres.c`); `backend-single-process` and `encoding-shim` apply with a 3-way merge.
+     Nothing was built.
+
 8. **Majors are adopted deliberately, and on-disk compatibility is guarded mechanically.** Main tracks
    one major. The trigger to move is a feature we need, or the current major coming within 12 months of
    its end of life (18: November 2030); until then the readiness issue and a `port-19` branch rebased
@@ -602,7 +630,9 @@ Postgres's own regression suite has never run on the wasm build.
        gates from clean at the last commit gave identical manifests. Publishing the image (`builder-image.yml`,
        `builder:lock`) and releasing `18.6.1` are the maintainer's; pgxsinkit adopts it with
        `pgwasm:pin` and its contract gate.
-    7. The weekly poll and the readiness issue.
+    7. The weekly poll and the readiness issue (done 2026-09-28): `bun run poll` and `poll.yml`, `bun run readiness`,
+       and the first readiness report, `REL_19_BETA4` (decisions 7 and 8). Allowing Actions to open pull requests,
+       and the schedule's start once main has `poll.yml`, are the maintainer's.
     8. The `main-loop-unroll` rewrite with its token-identity proof, before any `port-19` work.
 
 ## Considered options

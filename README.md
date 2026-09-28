@@ -32,6 +32,12 @@ and every link names the browser floor, Safari and iOS 18.4, Chrome 137 and Fire
 `18.6.0`'s, its export list gains one symbol, and `pglite.wasm` is 9.4% smaller. See [Emscripten and the browser
 floor](#emscripten-and-the-browser-floor).
 
+Upstream is now polled weekly (step 7, 2026-09-28): `poll.yml` runs `bun run bump` on a new minor of the pinned
+major and opens its pull request, and reports each new tag of the next major on the rolling "Postgres 19 readiness"
+issue through `bun run readiness`. On `REL_19_BETA4` three of the five patches conflict (`0001` in
+`src/backend/Makefile`, `0003` in `backend_startup.c`, `0005` in `postgres.c`), so nothing is built yet. See [The
+weekly poll and the next major](#the-weekly-poll-and-the-next-major).
+
 ## Layout
 
 | Path                      | What                                                                                           |
@@ -370,6 +376,7 @@ locally.
 | `builder-image.yml` | pushes to develop and main that change `builder/` (not the lock); on demand | `builder:image --push` to `ghcr.io/pgxsinkit/pgwasm-builder`; the digest and the `builder:lock` command in the job summary         |
 | `gate.yml`          | pull requests (their head commit), pushes to develop and main               | `gate --lock`; the gate directory uploaded as the artifact `gate-<commit>`; the manifest in the job summary                        |
 | `release.yml`       | a tag `N.N.N` (never `builder-sources-<n>`)                                 | `release:check`, `gate --lock --published`, `release:gated`, `release:publish`: the release, only if its manifest is the gated one |
+| `poll.yml`          | Mondays 06:00 UTC; on demand (`dry_run`)                                    | `poll --lock` from develop: a bump's branch and pull request (or issue), the readiness issue's comment and table                   |
 
 The builder image is published from `builder/` by `builder-image.yml` as
 `ghcr.io/pgxsinkit/pgwasm-builder:<tag>` (`6.0.10-p1`, the local image's tag), in Docker's v2s2 format so that
@@ -405,7 +412,7 @@ bun run bump <upstream tag> [--image <ref> | --lock] [--report <file>] [--traile
 ```
 
 A new minor release of the pinned major (`REL_18_6` on a `REL_18_3` pin) goes in through **`bump`** (ADR-0001
-decision 7), run by hand for now; the weekly poll will run it unchanged.
+decision 7), run by hand or by [the weekly poll](#the-weekly-poll-and-the-next-major), unchanged.
 
 - **It refuses** a tag of another major, a release, a beta or a release candidate alike (`REL_19_BETA4`: a new
   major is adopted deliberately, through a `port-<major>` branch rebased onto main, decision 8), anything but a
@@ -463,6 +470,63 @@ libpqwalreceiver's `WalRcvIdentifySystemLsn` and `timingsafe_bcmp`); the baselin
 | `pglite.wasm` |     10,061,242 |     10,089,345 | +28,103 (+0.28%) |
 | `pglite.data` |      6,293,220 |      6,290,545 | −2,675 (−0.04%)  |
 | `pglite.js`   |        380,679 |        380,859 | +180 (+0.05%)    |
+
+## The weekly poll and the next major
+
+Requirements: `gh` (with `GH_TOKEN`, or logged in), the network; for what it runs, as for `bump` and the engine gate.
+
+```sh
+bun run poll [--dry-run] [--image <ref> | --lock]
+bun run readiness <upstream tag> [--image <ref> | --lock] [--report <file>]
+```
+
+**`poll`** (ADR-0001 decisions 7 and 8) lists upstream's tags with `git ls-remote --tags` and acts on two targets,
+each once: a later run finds what an earlier one made and skips it. `poll.yml` runs it every Monday at 06:00 UTC
+and on demand (`dry_run`), from develop, with `--lock`.
+
+- **A bump**: the newest release of the pinned major newer than the pin (only the newest: `REL_18_4` is skipped
+  when `REL_18_6` is out). From develop, with a clean working tree, it makes the branch `bump/<tag>` and runs
+  `bun run bump <tag> --report .cache/poll/bump-<tag>.md`. If the bump committed, the branch is pushed and a pull
+  request against develop is opened with the report as its body, a draft titled `[blocked] …` when `bump` exits 1
+  because something stops it. If it did not (a conflicting apply, or a refusal) there is no commit to open a pull
+  request with, so an issue "Bump to `<tag>`: the series does not apply" carries the conflict report. HEAD goes
+  back to develop. An existing `bump/<tag>` branch on GitHub, or an open pull request or issue naming the tag,
+  skips the bump.
+- **The next major's readiness**: its newest tag (betas, then release candidates, then releases:
+  `REL_19_BETA4` today) gets `readiness`'s report as a comment marked `<!-- readiness:<tag> -->` on the open issue
+  "Postgres 19 readiness" (made when there is none), whose body is kept a table of every reported tag: apply,
+  build and pg_regress. A comment with the tag's marker skips the run; the table is still brought up to date. Never
+  a pull request, never a commit: a major is adopted through a `port-<major>` branch.
+- `--dry-run` runs only what reads (`git ls-remote`, `gh … list`, `gh api` GETs) and prints every command that
+  would write anything, locally or on GitHub. The bodies go to `.cache/poll/`, which `poll.yml` uploads as an
+  artifact: a body over GitHub's limit (65,536 characters) is cut, with a note.
+
+The bump's pull request is for review only: develop is fast-forwarded to it from the command line, never merged.
+The poll pushes and opens it with the workflow's `GITHUB_TOKEN`, which triggers no workflow, so it shows no checks:
+its body carries the engine gate's result, and `gate.yml` runs when the fast-forward of develop is pushed. The
+repository must allow Actions to open pull requests (Settings → Actions → General → "Allow GitHub Actions to create
+and approve pull requests"), or `gh pr create` fails after the branch is pushed. The schedule runs from the default
+branch, so it starts once main has `poll.yml`.
+
+**`readiness`** refuses a tag of the pinned major or an older one (a newer release of the pinned major is a bump),
+a tag upstream does not have, and a working tree with changes. It never commits to a branch:
+
+- It fetches the tag (shallow) and applies the series of HEAD onto it with `git am --3way`, patch by patch, in a
+  scratch worktree of the upstream cache, past its conflicts: a patch that conflicts is reported with the bump's
+  conflict sections (its files and hunks, the merge's conflict regions and their text; not the upstream commits,
+  whose history is not fetched), skipped, and the next ones applied without it, so a later patch can fail for want
+  of an earlier one.
+- On a clean apply it builds in a scratch copy of the repository at HEAD (a detached worktree under `.cache/`,
+  sharing the upstream cache) with the series re-exported onto the tag and the pin moved to it: `bun run build`,
+  whose version for a beta or a release candidate is the pre-release `19.0.0-beta.4` (never a release: release
+  tags are `N.N.N`). A failed build is reported with build-pglite.sh's step and its last errors.
+- Once it builds: the compatibility tuple of a fresh initdb against `data-format.json` (a major is expected to
+  change it: the report gives the new values), the export list against `exported_functions.txt`, and
+  `bun run regress` against the pinned major's baseline (the counts, and the new failures by name).
+
+The report (default `.cache/readiness/<tag>.md`, the build log next to it) starts with its status as an HTML
+comment, from which the poll keeps the issue's table. `readiness` exits 0 whenever it wrote a report, whatever the
+report says; the scratch worktrees are removed.
 
 ## Emscripten and the browser floor
 
@@ -549,6 +613,8 @@ byte-identical, the timezone files among them.
 | `regress`                 | Run pg_regress on a build and compare it with the baseline; `--record` it (in the gate)   |
 | `gate`                    | The engine gate of HEAD, from clean, and the release it would publish (`gate.yml`)        |
 | `bump`                    | Move the pin to a newer minor release: apply, re-export, commit, gate, report             |
+| `readiness`               | Apply, build and regress the series on the next major's tag in a scratch copy; report     |
+| `poll`                    | The weekly poll (`poll.yml`): a bump's pull request, the readiness issue; `--dry-run`     |
 | `release:check`           | Refuse a tag that is not HEAD's candidate version (`release.yml`)                         |
 | `release:gated`           | Download and check the gated build of a commit from `gate.yml` (`release.yml`)            |
 | `release:publish`         | Require identical manifests, then create the GitHub release; `--dry-run` (`release.yml`)  |

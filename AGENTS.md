@@ -112,6 +112,10 @@ consumes the releases. Read [README.md](README.md) and
   investigated and explained before a release.
 - A bump ends like any build change: two gates from clean at its last commit with identical manifests, then the
   release as usual (`gate.yml` on the commit, main fast-forwarded, the candidate version tagged by the maintainer).
+- **The weekly poll runs it** (`poll.yml`, `bun run poll`): a new minor becomes a branch `bump/<tag>` and a pull request
+  against develop (an issue when the series does not apply); its records are re-recorded on that branch, and develop is
+  fast-forwarded to it, never merged. The next major's tags are reported by `bun run readiness` (which never commits)
+  as comments on the "Postgres <major> readiness" issue, whose body the poll rebuilds from them: never edit it by hand.
 
 ## Directory hygiene
 
