@@ -339,9 +339,9 @@ describe("the bump in the upstream cache", () => {
       expect(others).toEqual([]);
       expect(file?.file).toBe("src/a.c");
       expect(file?.hunks).toEqual([expect.stringMatching(/^@@ -3,7 \+3,7 @@/)]);
-      expect(file?.commits.map((commit) => commit.subject)).toEqual(["Change z", "Comment a.c", "Return 3"]);
-      const touching = file?.commits
-        .filter((commit) => file.touching.includes(commit.sha))
+      expect(file?.commits?.map((commit) => commit.subject)).toEqual(["Change z", "Comment a.c", "Return 3"]);
+      const touching = (file?.commits ?? [])
+        .filter((commit) => file?.touching.includes(commit.sha))
         .map((commit) => commit.subject);
       expect(touching).toEqual(["Return 3"]);
       expect(file?.excerpts[0]).toContain("<<<<<<<");

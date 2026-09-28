@@ -45,13 +45,14 @@ import {
   type TagRef,
 } from "./lib/bump-report.ts";
 import {
+  applyLog,
   checkBumpTag,
   conflictedFiles,
+  exportRebased,
   countCommits,
   diffFiles,
   fetchTagHistory,
   lsRemoteTag,
-  patchChange,
   patchedFiles,
   rangeDiff,
   rebaseSeries,
@@ -60,10 +61,9 @@ import {
   where,
   writePin,
   type PatchChange,
-  type Rebased,
 } from "./lib/bump.ts";
 import { info, runCliAsync } from "./lib/cli.ts";
-import { checkSeries, scratchDir } from "./lib/commands.ts";
+import { checkSeries } from "./lib/commands.ts";
 import { readUpstreamPin, type UpstreamPin } from "./lib/config.ts";
 import { readDataFormat, tupleDifferences } from "./lib/data-format.ts";
 import { DRIVER_FILES } from "./lib/driver/artefacts.ts";
@@ -75,7 +75,7 @@ import { MANIFEST_FILE, readManifest, type BuildManifest } from "./lib/manifest.
 import { readPrepopulatedRecord, unpackDataDir } from "./lib/prepopulated.ts";
 import { outcomePath, readOutcome } from "./lib/regress/outcome.ts";
 import { previousRelease } from "./lib/release.ts";
-import { formatSeries, listPatches } from "./lib/series.ts";
+import { listPatches } from "./lib/series.ts";
 import { removeWorktree, resolveTag } from "./lib/upstream.ts";
 import { repositoryCandidate } from "./lib/version.ts";
 
@@ -117,19 +117,6 @@ function writeReport(file: string, text: string): void {
   writeFileSync(file, text);
 }
 
-function applyLog(patches: readonly string[], rebased: Rebased): ApplyLog {
-  const results = new Map<string, ApplyLog["patches"][number]["result"]>(
-    rebased.applied.map((entry) => [entry.patch, entry.threeWay ? "applied with a 3-way merge" : "applied cleanly"]),
-  );
-  if (rebased.failure?.patch !== undefined) results.set(rebased.failure.patch, "CONFLICT");
-  return {
-    patches: patches.map((patch) => ({ patch, result: results.get(patch) ?? "not applied" })),
-    output: [...rebased.applied.map((entry) => entry.output), rebased.failure?.output ?? ""]
-      .filter((text) => text !== "")
-      .join("\n"),
-  };
-}
-
 /** The repository's patches/ and upstream.json as they are, to put back if the bump fails before its commit. */
 function snapshot(layout: Layout): () => void {
   const pin = readFileSync(layout.upstreamFile);
@@ -146,32 +133,6 @@ function snapshot(layout: Layout): () => void {
     for (const [name, bytes] of patches) writeFileSync(join(layout.patchesDir, name), bytes);
     writeFileSync(layout.upstreamFile, pin);
   };
-}
-
-/** Replaces patches/ with the series exported from the rebased worktree; returns what changed per file. */
-function exportRebased(layout: Layout, rebased: Rebased): PatchChange[] {
-  const staging = scratchDir(layout, "bump-export");
-  try {
-    const written = formatSeries(layout, rebased.worktree, rebased.base, staging);
-    const before = listPatches(layout.patchesDir);
-    if (written.join("\n") !== before.join("\n")) {
-      throw new UserError(
-        `bump: the re-exported series is named differently (${written.join(", ")}) from patches/ (${before.join(", ")}).`,
-      );
-    }
-    const changes: PatchChange[] = [];
-    for (const name of written) {
-      const old = readFileSync(join(layout.patchesDir, name), "utf8");
-      const next = readFileSync(join(staging, name), "utf8");
-      if (old !== next) {
-        changes.push(patchChange(name, old, next));
-        writeFileSync(join(layout.patchesDir, name), next);
-      }
-    }
-    return changes;
-  } finally {
-    rmSync(staging, { recursive: true, force: true });
-  }
 }
 
 /** The previous release's manifest, downloaded read-only with gh, or why it is not available. */

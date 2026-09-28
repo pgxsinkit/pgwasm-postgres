@@ -288,7 +288,8 @@ function details(summary: string, body: readonly string[]): string[] {
   return ["<details>", `<summary>${summary}</summary>`, "", ...body, "", "</details>"];
 }
 
-function applySection(apply: ApplyLog): string[] {
+/** The apply log as a table of patches and results, with git am's output folded away. */
+export function applySection(apply: ApplyLog): string[] {
   return [
     tableRow(["Patch", "Result"]),
     tableRow(["---", "---"]),
@@ -302,22 +303,14 @@ function header(from: TagRef, to: TagRef): string {
   return `PostgreSQL ${code(to.tag)} (${code(short(to.commit))}), from the pinned ${code(from.tag)} (${code(short(from.commit))})`;
 }
 
-/** The report of a bump whose apply stopped on a conflict: nothing in the repository changed. */
-export function conflictReport(input: ConflictReportInput): string {
-  const lines = [
-    `# Bump ${input.from.tag} → ${input.to.tag}: CONFLICT`,
-    "",
-    `${header(input.from, input.to)}: ${code(`patches/${input.patch}`)} does not apply with \`git am --3way\`. Nothing in the repository changed: \`upstream.json\` and \`patches/\` are as they were, and no commit was made. ${count(input.upstreamTotal, "upstream commit")} lie between the tags.`,
-    "",
-    `To resolve it: \`bun run patches:work ${input.to.tag}\` leaves the series applied up to this patch, mid-\`git am\`, in \`work/${input.to.tag}\`; resolve the conflicts there (\`git add\`, \`git am --continue\`), set \`upstream.json\`'s tag and commit to ${code(input.to.tag)} and ${code(input.to.commit)}, then run \`bun run patches:export ${input.to.tag}\` and \`bun run patches:check\`, and commit.`,
-    "",
-    "## Apply",
-    "",
-    ...applySection(input.apply),
-    "",
-    "## Conflicts",
-  ];
-  for (const file of input.files) {
+/**
+ * The conflicting files of a failed apply, a `### file` section each: the patch's hunks, where the plain apply
+ * stopped, the 3-way merge's conflict regions with their text, and the upstream commits between the tags that changed
+ * the file (when they were looked up).
+ */
+export function conflictSections(files: readonly ConflictedFile[]): string[] {
+  const lines: string[] = [];
+  for (const file of files) {
     lines.push("", `### ${code(file.file)}`, "");
     if (file.hunks.length > 0) lines.push(`- The patch's hunks: ${file.hunks.map(code).join(", ")}`);
     if (file.rejected.length > 0) lines.push(`- Where the plain apply stopped: ${names(file.rejected)}`);
@@ -329,7 +322,9 @@ export function conflictReport(input: ConflictReportInput): string {
       lines.push("- The 3-way merge left no conflict markers (it could not run: see git am's output).");
     }
     const touching = new Set(file.touching);
-    if (file.commits.length === 0) {
+    if (file.commits === undefined) {
+      // Not looked up: another major's tag is fetched without the history since the pinned one.
+    } else if (file.commits.length === 0) {
       lines.push("- No upstream commit between the tags changed this file.");
     } else {
       lines.push(
@@ -354,8 +349,26 @@ export function conflictReport(input: ConflictReportInput): string {
       );
     });
   }
-  lines.push("");
-  return lines.join("\n");
+  return lines;
+}
+
+/** The report of a bump whose apply stopped on a conflict: nothing in the repository changed. */
+export function conflictReport(input: ConflictReportInput): string {
+  return [
+    `# Bump ${input.from.tag} → ${input.to.tag}: CONFLICT`,
+    "",
+    `${header(input.from, input.to)}: ${code(`patches/${input.patch}`)} does not apply with \`git am --3way\`. Nothing in the repository changed: \`upstream.json\` and \`patches/\` are as they were, and no commit was made. ${count(input.upstreamTotal, "upstream commit")} lie between the tags.`,
+    "",
+    `To resolve it: \`bun run patches:work ${input.to.tag}\` leaves the series applied up to this patch, mid-\`git am\`, in \`work/${input.to.tag}\`; resolve the conflicts there (\`git add\`, \`git am --continue\`), set \`upstream.json\`'s tag and commit to ${code(input.to.tag)} and ${code(input.to.commit)}, then run \`bun run patches:export ${input.to.tag}\` and \`bun run patches:check\`, and commit.`,
+    "",
+    "## Apply",
+    "",
+    ...applySection(input.apply),
+    "",
+    "## Conflicts",
+    ...conflictSections(input.files),
+    "",
+  ].join("\n");
 }
 
 function escapeCell(text: string): string {

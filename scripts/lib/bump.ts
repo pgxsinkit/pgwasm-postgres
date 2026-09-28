@@ -5,16 +5,17 @@
  * commits; then the engine gate runs and the report says what it found. This module holds the refusals and the git
  * work in the upstream cache; the report is `bump-report.ts`.
  */
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 
+import type { ApplyLog } from "./bump-report.ts";
 import { collisionError, overlayCollisions, scratchDir } from "./commands.ts";
 import { readJson, type UpstreamPin } from "./config.ts";
 import { cacheEnv, git, gitCache, gitTree, UserError } from "./git.ts";
 import { followRange, invertHunks, oldRange, parseDiffHunks, type Hunk, type LineRange } from "./hunks.ts";
 import type { Layout } from "./layout.ts";
 import { listOverlay } from "./overlay.ts";
-import { applyEach, type AmFailure, type PatchApplied } from "./series.ts";
+import { applyEach, formatSeries, listPatches, type AmFailure, type PatchApplied } from "./series.ts";
 import { addWorktree, removeWorktree } from "./upstream.ts";
 
 /** An upstream tag's major and minor: `REL_18_6` is 18 and 6; `REL_19_BETA4` is 19 and no minor. */
@@ -92,18 +93,21 @@ export function parseLsRemote(output: string, tag: string): RemoteTag | undefine
   return object === undefined ? undefined : { object, peeled };
 }
 
-/** Refuses a tag the upstream repository does not have (the network's failure is reported as such). */
-export function lsRemoteTag(layout: Layout, repository: string, tag: string): RemoteTag {
+/**
+ * Refuses a tag the upstream repository does not have (the network's failure is reported as such); `command` names
+ * the script in the messages.
+ */
+export function lsRemoteTag(layout: Layout, repository: string, tag: string, command = "bump"): RemoteTag {
   const result = git(["ls-remote", "--tags", repository, `refs/tags/${tag}`, `refs/tags/${tag}^{}`], {
     cwd: layout.root,
     env: cacheEnv(layout),
     allowFailure: true,
   });
   if (result.exitCode !== 0) {
-    throw new UserError(`bump: could not list the tags of ${repository}:\n  ${result.stderr.trim()}`);
+    throw new UserError(`${command}: could not list the tags of ${repository}:\n  ${result.stderr.trim()}`);
   }
   const found = parseLsRemote(result.stdout, tag);
-  if (found === undefined) throw new UserError(`bump: refusing ${tag}: ${repository} has no tag ${tag}.`);
+  if (found === undefined) throw new UserError(`${command}: refusing ${tag}: ${repository} has no tag ${tag}.`);
   return found;
 }
 
@@ -176,6 +180,50 @@ export function rangeDiff(layout: Layout, from: { base: string; head: string }, 
     `${from.base}..${from.head}`,
     `${to.base}..${to.head}`,
   ]).stdout.trimEnd();
+}
+
+/** How each patch of the series applied onto a tag, for a report. */
+export function applyLog(patches: readonly string[], rebased: Rebased): ApplyLog {
+  const results = new Map<string, ApplyLog["patches"][number]["result"]>(
+    rebased.applied.map((entry) => [entry.patch, entry.threeWay ? "applied with a 3-way merge" : "applied cleanly"]),
+  );
+  if (rebased.failure?.patch !== undefined) results.set(rebased.failure.patch, "CONFLICT");
+  return {
+    patches: patches.map((patch) => ({ patch, result: results.get(patch) ?? "not applied" })),
+    output: [...rebased.applied.map((entry) => entry.output), rebased.failure?.output ?? ""]
+      .filter((text) => text !== "")
+      .join("\n"),
+  };
+}
+
+/**
+ * Replaces the patch files in `patchesDir` (the repository's `patches/` by default) with the series exported from
+ * a worktree it applied cleanly in, onto that worktree's base; returns what changed per file. The names must stay
+ * the same.
+ */
+export function exportRebased(layout: Layout, rebased: Rebased, patchesDir = layout.patchesDir): PatchChange[] {
+  const staging = scratchDir(layout, "bump-export");
+  try {
+    const written = formatSeries(layout, rebased.worktree, rebased.base, staging);
+    const before = listPatches(patchesDir);
+    if (written.join("\n") !== before.join("\n")) {
+      throw new UserError(
+        `bump: the re-exported series is named differently (${written.join(", ")}) from patches/ (${before.join(", ")}).`,
+      );
+    }
+    const changes: PatchChange[] = [];
+    for (const name of written) {
+      const old = readFileSync(join(patchesDir, name), "utf8");
+      const next = readFileSync(join(staging, name), "utf8");
+      if (old !== next) {
+        changes.push(patchChange(name, old, next));
+        writeFileSync(join(patchesDir, name), next);
+      }
+    }
+    return changes;
+  } finally {
+    rmSync(staging, { recursive: true, force: true });
+  }
 }
 
 /** An upstream commit between the tags, and which of the given files it changed. */
@@ -295,8 +343,11 @@ export interface ConflictedFile {
   readonly rejected: readonly string[];
   /** Conflict regions the 3-way merge left, as lines of the merged file. */
   readonly regions: readonly LineRange[];
-  /** The upstream commits between the tags that changed the file, oldest first. */
-  readonly commits: readonly UpstreamCommit[];
+  /**
+   * The upstream commits between the tags that changed the file, oldest first; undefined when their history is not
+   * in the cache (another major's tag, fetched without it).
+   */
+  readonly commits: readonly UpstreamCommit[] | undefined;
   /** Of those, the ones that changed a line one of the patch's hunks stands on (its context or removed lines). */
   readonly touching: readonly string[];
   /** The conflict regions' text, markers included (at most 40 lines each). */
@@ -323,7 +374,8 @@ const EXCERPT_LINES = 40;
  * The conflicting files of a failed apply, each with the upstream commits between `from` and `to` that changed it
  * and those that changed the lines the failing patch's hunks stand on. The hunks' lines are the old tag's with the
  * earlier patches applied, so each range is taken back through the earlier patches to the old tag's lines, then
- * forward through the upstream commits, oldest first.
+ * forward through the upstream commits, oldest first. Without `history` (the readiness of another major, whose tag
+ * is fetched without the commits since the pinned one) the commits are not looked up.
  */
 export function conflictedFiles(
   layout: Layout,
@@ -332,6 +384,7 @@ export function conflictedFiles(
   patches: readonly string[],
   from: string,
   to: string,
+  history = true,
 ): ConflictedFile[] {
   const failing = failure.patch ?? "";
   const index = patches.indexOf(failing);
@@ -344,9 +397,9 @@ export function conflictedFiles(
       const earlierHunks = fileHunks(layout, earlier, file);
       if (earlierHunks.length > 0) ranges = ranges.map((range) => followRange(range, invertHunks(earlierHunks)).range);
     }
-    const commits = upstreamCommits(layout, from, to, [file]);
+    const commits = history ? upstreamCommits(layout, from, to, [file]) : undefined;
     const touching: string[] = [];
-    for (const commit of commits) {
+    for (const commit of commits ?? []) {
       const change = commitHunks(layout, commit.sha, file);
       if (change === undefined) {
         touching.push(commit.sha);
