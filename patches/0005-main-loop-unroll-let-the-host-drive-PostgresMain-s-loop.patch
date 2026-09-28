@@ -4,17 +4,29 @@ Date: Sun, 27 Sep 2026 12:42:23 +0800
 Subject: [PATCH] main-loop-unroll: let the host drive PostgresMain's loop
 
 Under __PGLITE__ the host drives the backend one message exchange at a
-time instead of PostgresMain looping on a socket:
+time instead of PostgresMain looping on a socket. The patch only adds
+lines: PostgresMain's loop body and its sigsetjmp error recovery stay
+where upstream has them, at upstream's indentation, and __PGLITE__
+blocks put function boundaries around them, so that a new upstream
+release rebases with small conflicts.
 
-- The body of PostgresMain's message loop moves into
-  PostgresMainLoopOnce(), its ReadyForQuery step into
-  PostgresSendReadyForQueryIfNecessary() and its sigsetjmp error
-  recovery into PostgresMainLongJmp(); PostgresMain calls them. The
-  moved code is re-indented, so the diff reads as a rewrite of the
-  function rather than a move.
+- Before the sigsetjmp handler, a __PGLITE__ block ends PostgresMain:
+  its sigsetjmp on postgresmain_sigjmp_buf calls PostgresMainLongJmp()
+  after an error, then PG_exception_stack, the initial ReadyForQuery
+  and a loop calling PostgresMainLoopOnce(). It then opens
+  PostgresMainLongJmp(), whose body is the handler's block.
+- At the loop's top, a __PGLITE__ block defines
+  PostgresSendReadyForQueryIfNecessary() and opens
+  PostgresMainLoopOnce(), whose body is the loop's; the loop's
+  `continue` becomes a `return`, and its closing brace goes.
+  PostgresSendReadyForQueryIfNecessary() is a copy of the loop's step
+  (1) as ElectricSQL wrote it: it lacks the connection-ready log that
+  18 added to step (1), and it does not follow changes to step (1).
 - postgresmain_sigjmp_buf, ignore_till_sync and send_ready_for_query
   are defined by the host code (pglite/src/pglitec/pglitec.c in the
-  overlay), so their state survives between calls.
+  overlay), and the idle-timeout flags are file-scope statics, so their
+  state survives between calls. PostgresMain keeps upstream's locals of
+  those names, which shadow them there, as before.
 - Entry points for the host: pgl_startPGlite() (a dummy Port on a
   loopback address, the HBA load and the postmaster-environment flags),
   pgl_sendConnData() (AuthenticationOk, parameter status,
@@ -24,13 +36,28 @@ time instead of PostgresMain looping on a socket:
   (pgl_setPGliteExitStatus(PGLITE_EXIT_ALIVE) and
   emscripten_exit_with_live_runtime()) instead of calling proc_exit(0).
 
+Without __PGLITE__ the file is upstream's, token for token. With it,
+`bun run patches:tokens` (ADR-0001 decision 4) finds the preprocessed
+tokens of this patch's former form, which moved the loop into new
+functions and re-indented it, with two differences:
+
+- PostgresMainLongJmp() and PostgresMain() are defined in another
+  order: PostgresMain() first, where upstream has its text, and the
+  former form defined the three functions before it. Each function's
+  tokens are the same; only their order in the object file changes.
+- Prototypes of PostgresMainLongJmp() and PostgresMainLoopOnce(), which
+  PostgresMain() now calls before their definitions. They declare the
+  definitions' functions, and generate no code.
+
+The line numbers ereport and elog record change with the layout.
+
 Derived from electric-sql/postgres-pglite b133782cd759f08b3aeb263b80a963b39c7b7af1 (PostgreSQL 18.3 fork, PostgreSQL License)
 ---
- src/backend/tcop/postgres.c | 1357 ++++++++++++++++++++---------------
- 1 file changed, 795 insertions(+), 562 deletions(-)
+ src/backend/tcop/postgres.c | 302 ++++++++++++++++++++++++++++++++++++
+ 1 file changed, 302 insertions(+)
 
 diff --git a/src/backend/tcop/postgres.c b/src/backend/tcop/postgres.c
-index 115a634c64191e3bb78d2194456646103d0c3391..e45ec0df38bce1e6fff7c7273ad4acfb21ca67f1 100644
+index 115a634c64191e3bb78d2194456646103d0c3391..c3ec691f88193974fbb83e33890fe4f7739a517c 100644
 --- a/src/backend/tcop/postgres.c
 +++ b/src/backend/tcop/postgres.c
 @@ -141,7 +141,11 @@ static bool DoingCommandRead = false;
@@ -45,36 +72,46 @@ index 115a634c64191e3bb78d2194456646103d0c3391..e45ec0df38bce1e6fff7c7273ad4acfb
  
  /*
   * If an unnamed prepared statement exists, it's stored here.
-@@ -187,6 +191,109 @@ static void log_disconnections(int code, Datum arg);
+@@ -187,6 +191,130 @@ static void log_disconnections(int code, Datum arg);
  static void enable_statement_timeout(void);
  static void disable_statement_timeout(void);
  
-+#if defined(__EMSCRIPTEN__)
-+#include <emscripten/emscripten.h>
-+#else
-+#define EMSCRIPTEN_KEEPALIVE
-+// TODO: an include for libpglite
-+#endif
-+
-+/* these must be volatile to ensure state is preserved across longjmp: */
 +#ifdef __PGLITE__
++/* ----------------------------------------------------------------
++ *		PGlite: the host drives the main loop
++ *
++ * The host (pglite/src/pglitec/pglitec.c) runs the backend one message
++ * exchange at a time instead of PostgresMain() looping on a socket.  Under
++ * __PGLITE__, PostgresMain()'s loop body is the function
++ * PostgresMainLoopOnce(), its sigsetjmp error recovery the function
++ * PostgresMainLongJmp(), and PostgresSendReadyForQueryIfNecessary() is a
++ * copy of the loop's step (1); both stay where they are in PostgresMain(),
++ * with the function boundaries in __PGLITE__ blocks.  The state the loop
++ * keeps across iterations lives at file scope or in the host, so that it
++ * survives between the host's calls.
++ * ----------------------------------------------------------------
++ */
++#include <emscripten/emscripten.h>
++
 +extern bool send_ready_for_query;
-+#else
-+bool send_ready_for_query = false;
-+#endif
 +
 +static volatile bool idle_in_transaction_timeout_enabled = false;
 +static volatile bool idle_session_timeout_enabled = false;
 +
-+#ifdef __PGLITE__
 +#define PGLITE_EXIT_ALIVE 99
 +
 +extern sigjmp_buf postgresmain_sigjmp_buf;
-+extern int pgl_sigsetjmp(sigjmp_buf env, int savesigs);
-+extern int is_pglite_active;
-+extern int pgl_setPGliteExitStatus(int status);
++extern int	pgl_sigsetjmp(sigjmp_buf env, int savesigs);
++extern int	is_pglite_active;
++extern int	pgl_setPGliteExitStatus(int status);
 +
-+void initDummyPort() {
++/* defined after PostgresMain(), where its loop is */
++extern void PostgresMainLongJmp(void);
++extern void PostgresMainLoopOnce(void);
++
++void
++initDummyPort()
++{
 +	ClientSocket s;
 +	struct sockaddr_in *addr;
 +	MemoryContext oldcontext;
@@ -97,14 +134,18 @@ index 115a634c64191e3bb78d2194456646103d0c3391..e45ec0df38bce1e6fff7c7273ad4acfb
 +	MemoryContextSwitchTo(oldcontext);
 +}
 +
-+void pgl_startPGlite() {
++void
++pgl_startPGlite()
++{
 +	initDummyPort();
 +	whereToSendOutput = DestRemote;
-+	// initdb execs postgres in single mode, which sets this to true
-+    // and this doesn't play well with out our longjmp trick
-+    // so set it to false
-+    ExitOnAnyError = false;
-+    MyBackendType = B_BACKEND;
++
++	/*
++	 * initdb runs postgres in single-user mode, which sets ExitOnAnyError;
++	 * the host's longjmp handling needs it off.
++	 */
++	ExitOnAnyError = false;
++	MyBackendType = B_BACKEND;
 +	IsPostmasterEnvironment = true;
 +	IsUnderPostmaster = true;
 +
@@ -118,1380 +159,274 @@ index 115a634c64191e3bb78d2194456646103d0c3391..e45ec0df38bce1e6fff7c7273ad4acfb
 +		/* translator: %s is a configuration file */
 +				(errmsg("could not load %s", HbaFileName)));
 +	}
-+
 +}
 +
-+void pgl_pq_flush() {
++void
++pgl_pq_flush()
++{
 +	pq_flush();
 +}
 +
-+struct Port* pgl_getMyProcPort() {
++struct Port *
++pgl_getMyProcPort()
++{
 +	return MyProcPort;
 +}
 +
-+void pgl_sendConnData() {
++void
++pgl_sendConnData()
++{
 +	ClientAuthInProgress = false;
 +
-+    {
-+        StringInfoData buf;
-+        pq_beginmessage(&buf, 'R');
-+        pq_sendint32(&buf, (int32) AUTH_REQ_OK);
-+        pq_endmessage(&buf);
-+    }
++	{
++		StringInfoData buf;
 +
-+    BeginReportingGUCOptions();
-+    pgstat_report_connect(MyDatabaseId);
-+    {
-+        StringInfoData buf;
-+        pq_beginmessage(&buf, 'K');
-+        pq_sendint32(&buf, (int32) MyProcPid);
-+        pq_sendint32(&buf, (int32) MyCancelKey);
-+        pq_endmessage(&buf);
-+    }
++		pq_beginmessage(&buf, 'R');
++		pq_sendint32(&buf, (int32) AUTH_REQ_OK);
++		pq_endmessage(&buf);
++	}
++
++	BeginReportingGUCOptions();
++	pgstat_report_connect(MyDatabaseId);
++	{
++		StringInfoData buf;
++
++		pq_beginmessage(&buf, 'K');
++		pq_sendint32(&buf, (int32) MyProcPid);
++		pq_sendint32(&buf, (int32) MyCancelKey);
++		pq_endmessage(&buf);
++	}
 +	ReadyForQuery(DestRemote);
 +}
++#endif							/* __PGLITE__ */
 +
-+#endif // ifdef __PGLITE__
  
  /* ----------------------------------------------------------------
   *		infrastructure for valgrind debugging
-@@ -4172,383 +4279,146 @@ PostgresSingleUserMain(int argc, char *argv[],
- 	PostgresMain(dbname, username);
- }
- 
-+void PostgresSendReadyForQueryIfNecessary() {
-+	/*
-+		 * (1) If we've reached idle state, tell the frontend we're ready for
-+		 * a new query.
-+		 *
-+		 * Note: this includes fflush()'ing the last of the prior output.
-+		 *
-+		 * This is also a good time to flush out collected statistics to the
-+		 * cumulative stats system, and to update the PS stats display.  We
-+		 * avoid doing those every time through the message loop because it'd
-+		 * slow down processing of batched messages, and because we don't want
-+		 * to report uncommitted updates (that confuses autovacuum).  The
-+		 * notification processor wants a call too, if we are not in a
-+		 * transaction block.
-+		 *
-+		 * Also, if an idle timeout is enabled, start the timer for that.
-+		 */
-+		if (send_ready_for_query)
-+		{
-+			if (IsAbortedTransactionBlockState())
-+			{
-+				set_ps_display("idle in transaction (aborted)");
-+				pgstat_report_activity(STATE_IDLEINTRANSACTION_ABORTED, NULL);
- 
--/* ----------------------------------------------------------------
-- * PostgresMain
-- *	   postgres main loop -- all backends, interactive or otherwise loop here
-- *
-- * dbname is the name of the database to connect to, username is the
-- * PostgreSQL user name to be used for the session.
-- *
-- * NB: Single user mode specific setup should go to PostgresSingleUserMain()
-- * if reasonably possible.
-- * ----------------------------------------------------------------
-- */
--void
--PostgresMain(const char *dbname, const char *username)
--{
--	sigjmp_buf	local_sigjmp_buf;
-+				/* Start the idle-in-transaction timer */
-+				if (IdleInTransactionSessionTimeout > 0
-+					&& (IdleInTransactionSessionTimeout < TransactionTimeout || TransactionTimeout == 0))
-+				{
-+					idle_in_transaction_timeout_enabled = true;
-+					enable_timeout_after(IDLE_IN_TRANSACTION_SESSION_TIMEOUT,
-+										 IdleInTransactionSessionTimeout);
-+				}
-+			}
-+			else if (IsTransactionOrTransactionBlock())
-+			{
-+				set_ps_display("idle in transaction");
-+				pgstat_report_activity(STATE_IDLEINTRANSACTION, NULL);
- 
--	/* these must be volatile to ensure state is preserved across longjmp: */
--	volatile bool send_ready_for_query = true;
--	volatile bool idle_in_transaction_timeout_enabled = false;
--	volatile bool idle_session_timeout_enabled = false;
-+				/* Start the idle-in-transaction timer */
-+				if (IdleInTransactionSessionTimeout > 0
-+					&& (IdleInTransactionSessionTimeout < TransactionTimeout || TransactionTimeout == 0))
-+				{
-+					idle_in_transaction_timeout_enabled = true;
-+					enable_timeout_after(IDLE_IN_TRANSACTION_SESSION_TIMEOUT,
-+										 IdleInTransactionSessionTimeout);
-+				}
-+			}
-+			else
-+			{
-+				long		stats_timeout;
- 
--	Assert(dbname != NULL);
--	Assert(username != NULL);
-+				/*
-+				 * Process incoming notifies (including self-notifies), if
-+				 * any, and send relevant messages to the client.  Doing it
-+				 * here helps ensure stable behavior in tests: if any notifies
-+				 * were received during the just-finished transaction, they'll
-+				 * be seen by the client before ReadyForQuery is.
-+				 */
-+				if (notifyInterruptPending)
-+					ProcessNotifyInterrupt(false);
- 
--	Assert(GetProcessingMode() == InitProcessing);
-+				/*
-+				 * Check if we need to report stats. If pgstat_report_stat()
-+				 * decides it's too soon to flush out pending stats / lock
-+				 * contention prevented reporting, it'll tell us when we
-+				 * should try to report stats again (so that stats updates
-+				 * aren't unduly delayed if the connection goes idle for a
-+				 * long time). We only enable the timeout if we don't already
-+				 * have a timeout in progress, because we don't disable the
-+				 * timeout below. enable_timeout_after() needs to determine
-+				 * the current timestamp, which can have a negative
-+				 * performance impact. That's OK because pgstat_report_stat()
-+				 * won't have us wake up sooner than a prior call.
-+				 */
-+				stats_timeout = pgstat_report_stat(false);
-+				if (stats_timeout > 0)
-+				{
-+					if (!get_timeout_active(IDLE_STATS_UPDATE_TIMEOUT))
-+						enable_timeout_after(IDLE_STATS_UPDATE_TIMEOUT,
-+											 stats_timeout);
-+				}
-+				else
-+				{
-+					/* all stats flushed, no need for the timeout */
-+					if (get_timeout_active(IDLE_STATS_UPDATE_TIMEOUT))
-+						disable_timeout(IDLE_STATS_UPDATE_TIMEOUT, false);
-+				}
- 
--	/*
--	 * Set up signal handlers.  (InitPostmasterChild or InitStandaloneProcess
--	 * has already set up BlockSig and made that the active signal mask.)
--	 *
--	 * Note that postmaster blocked all signals before forking child process,
--	 * so there is no race condition whereby we might receive a signal before
--	 * we have set up the handler.
--	 *
--	 * Also note: it's best not to use any signals that are SIG_IGNored in the
--	 * postmaster.  If such a signal arrives before we are able to change the
--	 * handler to non-SIG_IGN, it'll get dropped.  Instead, make a dummy
--	 * handler in the postmaster to reserve the signal. (Of course, this isn't
--	 * an issue for signals that are locally generated, such as SIGALRM and
--	 * SIGPIPE.)
--	 */
--	if (am_walsender)
--		WalSndSignals();
--	else
--	{
--		pqsignal(SIGHUP, SignalHandlerForConfigReload);
--		pqsignal(SIGINT, StatementCancelHandler);	/* cancel current query */
--		pqsignal(SIGTERM, die); /* cancel current query and exit */
-+				set_ps_display("idle");
-+				pgstat_report_activity(STATE_IDLE, NULL);
-+
-+				/* Start the idle-session timer */
-+				if (IdleSessionTimeout > 0)
-+				{
-+					idle_session_timeout_enabled = true;
-+					enable_timeout_after(IDLE_SESSION_TIMEOUT,
-+										 IdleSessionTimeout);
-+				}
-+			}
-+
-+			/* Report any recently-changed GUC options */
-+			ReportChangedGUCOptions();
-+
-+			ReadyForQuery(whereToSendOutput);
-+			send_ready_for_query = false;
-+		}
-+}
-+
-+void PostgresMainLoopOnce() {
-+
-+		int			firstchar;
-+		StringInfoData input_message;
- 
- 		/*
--		 * In a postmaster child backend, replace SignalHandlerForCrashExit
--		 * with quickdie, so we can tell the client we're dying.
--		 *
--		 * In a standalone backend, SIGQUIT can be generated from the keyboard
--		 * easily, while SIGTERM cannot, so we make both signals do die()
--		 * rather than quickdie().
-+		 * At top of loop, reset extended-query-message flag, so that any
-+		 * errors encountered in "idle" state don't provoke skip.
- 		 */
--		if (IsUnderPostmaster)
--			pqsignal(SIGQUIT, quickdie);	/* hard crash time */
--		else
--			pqsignal(SIGQUIT, die); /* cancel current query and exit */
--		InitializeTimeouts();	/* establishes SIGALRM handler */
-+		doing_extended_query_message = false;
- 
- 		/*
--		 * Ignore failure to write to frontend. Note: if frontend closes
--		 * connection, we will notice it and exit cleanly when control next
--		 * returns to outer loop.  This seems safer than forcing exit in the
--		 * midst of output during who-knows-what operation...
-+		 * For valgrind reporting purposes, the "current query" begins here.
- 		 */
--		pqsignal(SIGPIPE, SIG_IGN);
--		pqsignal(SIGUSR1, procsignal_sigusr1_handler);
--		pqsignal(SIGUSR2, SIG_IGN);
--		pqsignal(SIGFPE, FloatExceptionHandler);
-+#ifdef USE_VALGRIND
-+		old_valgrind_error_count = VALGRIND_COUNT_ERRORS;
-+#endif
- 
- 		/*
--		 * Reset some signals that are accepted by postmaster but not by
--		 * backend
-+		 * Release storage left over from prior query cycle, and create a new
-+		 * query input buffer in the cleared MessageContext.
- 		 */
--		pqsignal(SIGCHLD, SIG_DFL); /* system() requires this on some
--									 * platforms */
--	}
--
--	/* Early initialization */
--	BaseInit();
--
--	/* We need to allow SIGINT, etc during the initial transaction */
--	sigprocmask(SIG_SETMASK, &UnBlockSig, NULL);
-+		MemoryContextSwitchTo(MessageContext);
-+		MemoryContextReset(MessageContext);
- 
--	/*
--	 * Generate a random cancel key, if this is a backend serving a
--	 * connection. InitPostgres() will advertise it in shared memory.
--	 */
--	Assert(MyCancelKeyLength == 0);
--	if (whereToSendOutput == DestRemote)
--	{
--		int			len;
-+		initStringInfo(&input_message);
- 
--		len = (MyProcPort == NULL || MyProcPort->proto >= PG_PROTOCOL(3, 2))
--			? MAX_CANCEL_KEY_LENGTH : 4;
--		if (!pg_strong_random(&MyCancelKey, len))
--		{
--			ereport(ERROR,
--					(errcode(ERRCODE_INTERNAL_ERROR),
--					 errmsg("could not generate random cancel key")));
--		}
--		MyCancelKeyLength = len;
--	}
--
--	/*
--	 * General initialization.
--	 *
--	 * NOTE: if you are tempted to add code in this vicinity, consider putting
--	 * it inside InitPostgres() instead.  In particular, anything that
--	 * involves database access should be there, not here.
--	 *
--	 * Honor session_preload_libraries if not dealing with a WAL sender.
--	 */
--	InitPostgres(dbname, InvalidOid,	/* database to connect to */
--				 username, InvalidOid,	/* role to connect as */
--				 (!am_walsender) ? INIT_PG_LOAD_SESSION_LIBS : 0,
--				 NULL);			/* no out_dbname */
--
--	/*
--	 * If the PostmasterContext is still around, recycle the space; we don't
--	 * need it anymore after InitPostgres completes.
--	 */
--	if (PostmasterContext)
--	{
--		MemoryContextDelete(PostmasterContext);
--		PostmasterContext = NULL;
--	}
--
--	SetProcessingMode(NormalProcessing);
--
--	/*
--	 * Now all GUC states are fully set up.  Report them to client if
--	 * appropriate.
--	 */
--	BeginReportingGUCOptions();
--
--	/*
--	 * Also set up handler to log session end; we have to wait till now to be
--	 * sure Log_disconnections has its final value.
--	 */
--	if (IsUnderPostmaster && Log_disconnections)
--		on_proc_exit(log_disconnections, 0);
--
--	pgstat_report_connect(MyDatabaseId);
--
--	/* Perform initialization specific to a WAL sender process. */
--	if (am_walsender)
--		InitWalSender();
--
--	/*
--	 * Send this backend's cancellation info to the frontend.
--	 */
--	if (whereToSendOutput == DestRemote)
--	{
--		StringInfoData buf;
--
--		Assert(MyCancelKeyLength > 0);
--		pq_beginmessage(&buf, PqMsg_BackendKeyData);
--		pq_sendint32(&buf, (int32) MyProcPid);
--
--		pq_sendbytes(&buf, MyCancelKey, MyCancelKeyLength);
--		pq_endmessage(&buf);
--		/* Need not flush since ReadyForQuery will do it. */
--	}
--
--	/* Welcome banner for standalone case */
--	if (whereToSendOutput == DestDebug)
--		printf("\nPostgreSQL stand-alone backend %s\n", PG_VERSION);
--
--	/*
--	 * Create the memory context we will use in the main loop.
--	 *
--	 * MessageContext is reset once per iteration of the main loop, ie, upon
--	 * completion of processing of each command message from the client.
--	 */
--	MessageContext = AllocSetContextCreate(TopMemoryContext,
--										   "MessageContext",
--										   ALLOCSET_DEFAULT_SIZES);
--
--	/*
--	 * Create memory context and buffer used for RowDescription messages. As
--	 * SendRowDescriptionMessage(), via exec_describe_statement_message(), is
--	 * frequently executed for ever single statement, we don't want to
--	 * allocate a separate buffer every time.
--	 */
--	row_description_context = AllocSetContextCreate(TopMemoryContext,
--													"RowDescriptionContext",
--													ALLOCSET_DEFAULT_SIZES);
--	MemoryContextSwitchTo(row_description_context);
--	initStringInfo(&row_description_buf);
--	MemoryContextSwitchTo(TopMemoryContext);
--
--	/* Fire any defined login event triggers, if appropriate */
--	EventTriggerOnLogin();
--
--	/*
--	 * POSTGRES main processing loop begins here
--	 *
--	 * If an exception is encountered, processing resumes here so we abort the
--	 * current transaction and start a new one.
--	 *
--	 * You might wonder why this isn't coded as an infinite loop around a
--	 * PG_TRY construct.  The reason is that this is the bottom of the
--	 * exception stack, and so with PG_TRY there would be no exception handler
--	 * in force at all during the CATCH part.  By leaving the outermost setjmp
--	 * always active, we have at least some chance of recovering from an error
--	 * during error recovery.  (If we get into an infinite loop thereby, it
--	 * will soon be stopped by overflow of elog.c's internal state stack.)
--	 *
--	 * Note that we use sigsetjmp(..., 1), so that this function's signal mask
--	 * (to wit, UnBlockSig) will be restored when longjmp'ing to here.  This
--	 * is essential in case we longjmp'd out of a signal handler on a platform
--	 * where that leaves the signal blocked.  It's not redundant with the
--	 * unblock in AbortTransaction() because the latter is only called if we
--	 * were inside a transaction.
--	 */
--
--	if (sigsetjmp(local_sigjmp_buf, 1) != 0)
--	{
--		/*
--		 * NOTE: if you are tempted to add more code in this if-block,
--		 * consider the high probability that it should be in
--		 * AbortTransaction() instead.  The only stuff done directly here
--		 * should be stuff that is guaranteed to apply *only* for outer-level
--		 * error recovery, such as adjusting the FE/BE protocol status.
--		 */
--
--		/* Since not using PG_TRY, must reset error stack by hand */
--		error_context_stack = NULL;
--
--		/* Prevent interrupts while cleaning up */
--		HOLD_INTERRUPTS();
--
--		/*
--		 * Forget any pending QueryCancel request, since we're returning to
--		 * the idle loop anyway, and cancel any active timeout requests.  (In
--		 * future we might want to allow some timeout requests to survive, but
--		 * at minimum it'd be necessary to do reschedule_timeouts(), in case
--		 * we got here because of a query cancel interrupting the SIGALRM
--		 * interrupt handler.)	Note in particular that we must clear the
--		 * statement and lock timeout indicators, to prevent any future plain
--		 * query cancels from being misreported as timeouts in case we're
--		 * forgetting a timeout cancel.
--		 */
--		disable_all_timeouts(false);	/* do first to avoid race condition */
--		QueryCancelPending = false;
--		idle_in_transaction_timeout_enabled = false;
--		idle_session_timeout_enabled = false;
--
--		/* Not reading from the client anymore. */
--		DoingCommandRead = false;
--
--		/* Make sure libpq is in a good state */
--		pq_comm_reset();
--
--		/* Report the error to the client and/or server log */
--		EmitErrorReport();
--
--		/*
--		 * If Valgrind noticed something during the erroneous query, print the
--		 * query string, assuming we have one.
--		 */
--		valgrind_report_error_query(debug_query_string);
--
--		/*
--		 * Make sure debug_query_string gets reset before we possibly clobber
--		 * the storage it points at.
--		 */
--		debug_query_string = NULL;
--
--		/*
--		 * Abort the current transaction in order to recover.
--		 */
--		AbortCurrentTransaction();
--
--		if (am_walsender)
--			WalSndErrorCleanup();
--
--		PortalErrorCleanup();
--
--		/*
--		 * We can't release replication slots inside AbortTransaction() as we
--		 * need to be able to start and abort transactions while having a slot
--		 * acquired. But we never need to hold them across top level errors,
--		 * so releasing here is fine. There also is a before_shmem_exit()
--		 * callback ensuring correct cleanup on FATAL errors.
--		 */
--		if (MyReplicationSlot != NULL)
--			ReplicationSlotRelease();
--
--		/* We also want to cleanup temporary slots on error. */
--		ReplicationSlotCleanup(false);
--
--		jit_reset_after_error();
--
--		/*
--		 * Now return to normal top-level context and clear ErrorContext for
--		 * next time.
--		 */
--		MemoryContextSwitchTo(MessageContext);
--		FlushErrorState();
--
--		/*
--		 * If we were handling an extended-query-protocol message, initiate
--		 * skip till next Sync.  This also causes us not to issue
--		 * ReadyForQuery (until we get Sync).
--		 */
--		if (doing_extended_query_message)
--			ignore_till_sync = true;
--
--		/* We don't have a transaction command open anymore */
--		xact_started = false;
--
--		/*
--		 * If an error occurred while we were reading a message from the
--		 * client, we have potentially lost track of where the previous
--		 * message ends and the next one begins.  Even though we have
--		 * otherwise recovered from the error, we cannot safely read any more
--		 * messages from the client, so there isn't much we can do with the
--		 * connection anymore.
--		 */
--		if (pq_is_reading_msg())
--			ereport(FATAL,
--					(errcode(ERRCODE_PROTOCOL_VIOLATION),
--					 errmsg("terminating connection because protocol synchronization was lost")));
--
--		/* Now we can allow interrupts again */
--		RESUME_INTERRUPTS();
--	}
--
--	/* We can now handle ereport(ERROR) */
--	PG_exception_stack = &local_sigjmp_buf;
--
--	if (!ignore_till_sync)
--		send_ready_for_query = true;	/* initially, or after error */
--
--	/*
--	 * Non-error queries loop here.
--	 */
--
--	for (;;)
--	{
--		int			firstchar;
--		StringInfoData input_message;
--
--		/*
--		 * At top of loop, reset extended-query-message flag, so that any
--		 * errors encountered in "idle" state don't provoke skip.
--		 */
--		doing_extended_query_message = false;
--
--		/*
--		 * For valgrind reporting purposes, the "current query" begins here.
--		 */
--#ifdef USE_VALGRIND
--		old_valgrind_error_count = VALGRIND_COUNT_ERRORS;
--#endif
--
--		/*
--		 * Release storage left over from prior query cycle, and create a new
--		 * query input buffer in the cleared MessageContext.
--		 */
--		MemoryContextSwitchTo(MessageContext);
--		MemoryContextReset(MessageContext);
--
--		initStringInfo(&input_message);
--
--		/*
--		 * Also consider releasing our catalog snapshot if any, so that it's
--		 * not preventing advance of global xmin while we wait for the client.
--		 */
--		InvalidateCatalogSnapshotConditionally();
-+		/*
-+		 * Also consider releasing our catalog snapshot if any, so that it's
-+		 * not preventing advance of global xmin while we wait for the client.
-+		 */
-+		InvalidateCatalogSnapshotConditionally();
- 
- 		/*
- 		 * (1) If we've reached idle state, tell the frontend we're ready for
-@@ -4747,7 +4617,7 @@ PostgresMain(const char *dbname, const char *username)
- 		 * Sync.
- 		 */
- 		if (ignore_till_sync && firstchar != EOF)
--			continue;
-+			return;
- 
- 		switch (firstchar)
- 		{
-@@ -4769,259 +4639,622 @@ PostgresMain(const char *dbname, const char *username)
- 					else
- 						exec_simple_query(query_string);
- 
--					valgrind_report_error_query(query_string);
-+					valgrind_report_error_query(query_string);
-+
-+					send_ready_for_query = true;
-+				}
-+				break;
-+
-+			case PqMsg_Parse:
-+				{
-+					const char *stmt_name;
-+					const char *query_string;
-+					int			numParams;
-+					Oid		   *paramTypes = NULL;
-+
-+					forbidden_in_wal_sender(firstchar);
-+
-+					/* Set statement_timestamp() */
-+					SetCurrentStatementStartTimestamp();
-+
-+					stmt_name = pq_getmsgstring(&input_message);
-+					query_string = pq_getmsgstring(&input_message);
-+					numParams = pq_getmsgint(&input_message, 2);
-+					if (numParams > 0)
-+					{
-+						paramTypes = palloc_array(Oid, numParams);
-+						for (int i = 0; i < numParams; i++)
-+							paramTypes[i] = pq_getmsgint(&input_message, 4);
-+					}
-+					pq_getmsgend(&input_message);
-+
-+					exec_parse_message(query_string, stmt_name,
-+									   paramTypes, numParams);
-+
-+					valgrind_report_error_query(query_string);
-+				}
-+				break;
-+
-+			case PqMsg_Bind:
-+				forbidden_in_wal_sender(firstchar);
-+
-+				/* Set statement_timestamp() */
-+				SetCurrentStatementStartTimestamp();
-+
-+				/*
-+				 * this message is complex enough that it seems best to put
-+				 * the field extraction out-of-line
-+				 */
-+				exec_bind_message(&input_message);
-+
-+				/* exec_bind_message does valgrind_report_error_query */
-+				break;
-+
-+			case PqMsg_Execute:
-+				{
-+					const char *portal_name;
-+					int			max_rows;
-+
-+					forbidden_in_wal_sender(firstchar);
-+
-+					/* Set statement_timestamp() */
-+					SetCurrentStatementStartTimestamp();
-+
-+					portal_name = pq_getmsgstring(&input_message);
-+					max_rows = pq_getmsgint(&input_message, 4);
-+					pq_getmsgend(&input_message);
-+
-+					exec_execute_message(portal_name, max_rows);
-+
-+					/* exec_execute_message does valgrind_report_error_query */
-+				}
-+				break;
-+
-+			case PqMsg_FunctionCall:
-+				forbidden_in_wal_sender(firstchar);
-+
-+				/* Set statement_timestamp() */
-+				SetCurrentStatementStartTimestamp();
-+
-+				/* Report query to various monitoring facilities. */
-+				pgstat_report_activity(STATE_FASTPATH, NULL);
-+				set_ps_display("<FASTPATH>");
-+
-+				/* start an xact for this function invocation */
-+				start_xact_command();
-+
-+				/*
-+				 * Note: we may at this point be inside an aborted
-+				 * transaction.  We can't throw error for that until we've
-+				 * finished reading the function-call message, so
-+				 * HandleFunctionRequest() must check for it after doing so.
-+				 * Be careful not to do anything that assumes we're inside a
-+				 * valid transaction here.
-+				 */
-+
-+				/* switch back to message context */
-+				MemoryContextSwitchTo(MessageContext);
-+
-+				HandleFunctionRequest(&input_message);
-+
-+				/* commit the function-invocation transaction */
-+				finish_xact_command();
-+
-+				valgrind_report_error_query("fastpath function call");
-+
-+				send_ready_for_query = true;
-+				break;
-+
-+			case PqMsg_Close:
-+				{
-+					int			close_type;
-+					const char *close_target;
-+
-+					forbidden_in_wal_sender(firstchar);
-+
-+					close_type = pq_getmsgbyte(&input_message);
-+					close_target = pq_getmsgstring(&input_message);
-+					pq_getmsgend(&input_message);
-+
-+					switch (close_type)
-+					{
-+						case 'S':
-+							if (close_target[0] != '\0')
-+								DropPreparedStatement(close_target, false);
-+							else
-+							{
-+								/* special-case the unnamed statement */
-+								drop_unnamed_stmt();
-+							}
-+							break;
-+						case 'P':
-+							{
-+								Portal		portal;
-+
-+								portal = GetPortalByName(close_target);
-+								if (PortalIsValid(portal))
-+									PortalDrop(portal, false);
-+							}
-+							break;
-+						default:
-+							ereport(ERROR,
-+									(errcode(ERRCODE_PROTOCOL_VIOLATION),
-+									 errmsg("invalid CLOSE message subtype %d",
-+											close_type)));
-+							break;
-+					}
-+
-+					if (whereToSendOutput == DestRemote)
-+						pq_putemptymessage(PqMsg_CloseComplete);
-+
-+					valgrind_report_error_query("CLOSE message");
-+				}
-+				break;
-+
-+			case PqMsg_Describe:
-+				{
-+					int			describe_type;
-+					const char *describe_target;
-+
-+					forbidden_in_wal_sender(firstchar);
-+
-+					/* Set statement_timestamp() (needed for xact) */
-+					SetCurrentStatementStartTimestamp();
-+
-+					describe_type = pq_getmsgbyte(&input_message);
-+					describe_target = pq_getmsgstring(&input_message);
-+					pq_getmsgend(&input_message);
-+
-+					switch (describe_type)
-+					{
-+						case 'S':
-+							exec_describe_statement_message(describe_target);
-+							break;
-+						case 'P':
-+							exec_describe_portal_message(describe_target);
-+							break;
-+						default:
-+							ereport(ERROR,
-+									(errcode(ERRCODE_PROTOCOL_VIOLATION),
-+									 errmsg("invalid DESCRIBE message subtype %d",
-+											describe_type)));
-+							break;
-+					}
-+
-+					valgrind_report_error_query("DESCRIBE message");
-+				}
-+				break;
-+
-+			case PqMsg_Flush:
-+				pq_getmsgend(&input_message);
-+				if (whereToSendOutput == DestRemote)
-+					pq_flush();
-+				break;
-+
-+			case PqMsg_Sync:
-+				pq_getmsgend(&input_message);
-+
-+				/*
-+				 * If pipelining was used, we may be in an implicit
-+				 * transaction block. Close it before calling
-+				 * finish_xact_command.
-+				 */
-+				EndImplicitTransactionBlock();
-+				finish_xact_command();
-+				valgrind_report_error_query("SYNC message");
-+				send_ready_for_query = true;
-+				break;
-+
-+				/*
-+				 * PqMsg_Terminate means that the frontend is closing down the
-+				 * socket. EOF means unexpected loss of frontend connection.
-+				 * Either way, perform normal shutdown.
-+				 */
-+			case EOF:
-+
-+				/* for the cumulative statistics system */
-+				pgStatSessionEndCause = DISCONNECT_CLIENT_EOF;
-+
-+				/* FALLTHROUGH */
-+
-+			case PqMsg_Terminate:
-+
-+				/*
-+				 * Reset whereToSendOutput to prevent ereport from attempting
-+				 * to send any more messages to client.
-+				 */
-+				if (whereToSendOutput == DestRemote)
-+					whereToSendOutput = DestNone;
-+
-+				/*
-+				 * NOTE: if you are tempted to add more code here, DON'T!
-+				 * Whatever you had in mind to do should be set up as an
-+				 * on_proc_exit or on_shmem_exit callback, instead. Otherwise
-+				 * it will fail to be called during other backend-shutdown
-+				 * scenarios.
-+				 */
-+				#ifdef __PGLITE__
-+				if (is_pglite_active != 0) {
-+				    pgl_setPGliteExitStatus(PGLITE_EXIT_ALIVE);
-+				    emscripten_exit_with_live_runtime();
-+			    }
-+				else 
-+					proc_exit(0);
-+				#else
-+				proc_exit(0);
-+				#endif
-+
-+			case PqMsg_CopyData:
-+			case PqMsg_CopyDone:
-+			case PqMsg_CopyFail:
- 
--					send_ready_for_query = true;
--				}
-+				/*
-+				 * Accept but ignore these messages, per protocol spec; we
-+				 * probably got here because a COPY failed, and the frontend
-+				 * is still sending data.
-+				 */
- 				break;
- 
--			case PqMsg_Parse:
--				{
--					const char *stmt_name;
--					const char *query_string;
--					int			numParams;
--					Oid		   *paramTypes = NULL;
-+			default:
-+				ereport(FATAL,
-+						(errcode(ERRCODE_PROTOCOL_VIOLATION),
-+						 errmsg("invalid frontend message type %d",
-+								firstchar)));
-+		}
-+}
- 
--					forbidden_in_wal_sender(firstchar);
-+void PostgresMainLongJmp() {
-+/*
-+		 * NOTE: if you are tempted to add more code in this if-block,
-+		 * consider the high probability that it should be in
-+		 * AbortTransaction() instead.  The only stuff done directly here
-+		 * should be stuff that is guaranteed to apply *only* for outer-level
-+		 * error recovery, such as adjusting the FE/BE protocol status.
-+		 */
- 
--					/* Set statement_timestamp() */
--					SetCurrentStatementStartTimestamp();
-+		/* Since not using PG_TRY, must reset error stack by hand */
-+		error_context_stack = NULL;
- 
--					stmt_name = pq_getmsgstring(&input_message);
--					query_string = pq_getmsgstring(&input_message);
--					numParams = pq_getmsgint(&input_message, 2);
--					if (numParams > 0)
--					{
--						paramTypes = palloc_array(Oid, numParams);
--						for (int i = 0; i < numParams; i++)
--							paramTypes[i] = pq_getmsgint(&input_message, 4);
--					}
--					pq_getmsgend(&input_message);
-+		/* Prevent interrupts while cleaning up */
-+		HOLD_INTERRUPTS();
- 
--					exec_parse_message(query_string, stmt_name,
--									   paramTypes, numParams);
-+		/*
-+		 * Forget any pending QueryCancel request, since we're returning to
-+		 * the idle loop anyway, and cancel any active timeout requests.  (In
-+		 * future we might want to allow some timeout requests to survive, but
-+		 * at minimum it'd be necessary to do reschedule_timeouts(), in case
-+		 * we got here because of a query cancel interrupting the SIGALRM
-+		 * interrupt handler.)	Note in particular that we must clear the
-+		 * statement and lock timeout indicators, to prevent any future plain
-+		 * query cancels from being misreported as timeouts in case we're
-+		 * forgetting a timeout cancel.
-+		 */
-+		disable_all_timeouts(false);	/* do first to avoid race condition */
-+		QueryCancelPending = false;
-+		idle_in_transaction_timeout_enabled = false;
-+		idle_session_timeout_enabled = false;
- 
--					valgrind_report_error_query(query_string);
--				}
--				break;
-+		/* Not reading from the client anymore. */
-+		DoingCommandRead = false;
- 
--			case PqMsg_Bind:
--				forbidden_in_wal_sender(firstchar);
-+		/* Make sure libpq is in a good state */
-+		pq_comm_reset();
- 
--				/* Set statement_timestamp() */
--				SetCurrentStatementStartTimestamp();
-+		/* Report the error to the client and/or server log */
-+		EmitErrorReport();
- 
--				/*
--				 * this message is complex enough that it seems best to put
--				 * the field extraction out-of-line
--				 */
--				exec_bind_message(&input_message);
-+		/*
-+		 * If Valgrind noticed something during the erroneous query, print the
-+		 * query string, assuming we have one.
-+		 */
-+		valgrind_report_error_query(debug_query_string);
- 
--				/* exec_bind_message does valgrind_report_error_query */
--				break;
-+		/*
-+		 * Make sure debug_query_string gets reset before we possibly clobber
-+		 * the storage it points at.
-+		 */
-+		debug_query_string = NULL;
- 
--			case PqMsg_Execute:
--				{
--					const char *portal_name;
--					int			max_rows;
-+		/*
-+		 * Abort the current transaction in order to recover.
-+		 */
-+		AbortCurrentTransaction();
- 
--					forbidden_in_wal_sender(firstchar);
-+		if (am_walsender)
-+			WalSndErrorCleanup();
- 
--					/* Set statement_timestamp() */
--					SetCurrentStatementStartTimestamp();
-+		PortalErrorCleanup();
- 
--					portal_name = pq_getmsgstring(&input_message);
--					max_rows = pq_getmsgint(&input_message, 4);
--					pq_getmsgend(&input_message);
-+		/*
-+		 * We can't release replication slots inside AbortTransaction() as we
-+		 * need to be able to start and abort transactions while having a slot
-+		 * acquired. But we never need to hold them across top level errors,
-+		 * so releasing here is fine. There also is a before_shmem_exit()
-+		 * callback ensuring correct cleanup on FATAL errors.
-+		 */
-+		if (MyReplicationSlot != NULL)
-+			ReplicationSlotRelease();
- 
--					exec_execute_message(portal_name, max_rows);
-+		/* We also want to cleanup temporary slots on error. */
-+		ReplicationSlotCleanup(false);
- 
--					/* exec_execute_message does valgrind_report_error_query */
--				}
--				break;
-+		jit_reset_after_error();
- 
--			case PqMsg_FunctionCall:
--				forbidden_in_wal_sender(firstchar);
-+		/*
-+		 * Now return to normal top-level context and clear ErrorContext for
-+		 * next time.
-+		 */
-+		MemoryContextSwitchTo(MessageContext);
-+		FlushErrorState();
- 
--				/* Set statement_timestamp() */
--				SetCurrentStatementStartTimestamp();
-+		/*
-+		 * If we were handling an extended-query-protocol message, initiate
-+		 * skip till next Sync.  This also causes us not to issue
-+		 * ReadyForQuery (until we get Sync).
-+		 */
-+		if (doing_extended_query_message)
-+			ignore_till_sync = true;
- 
--				/* Report query to various monitoring facilities. */
--				pgstat_report_activity(STATE_FASTPATH, NULL);
--				set_ps_display("<FASTPATH>");
-+		/* We don't have a transaction command open anymore */
-+		xact_started = false;
- 
--				/* start an xact for this function invocation */
--				start_xact_command();
-+		/*
-+		 * If an error occurred while we were reading a message from the
-+		 * client, we have potentially lost track of where the previous
-+		 * message ends and the next one begins.  Even though we have
-+		 * otherwise recovered from the error, we cannot safely read any more
-+		 * messages from the client, so there isn't much we can do with the
-+		 * connection anymore.
-+		 */
-+		if (pq_is_reading_msg())
-+			ereport(FATAL,
-+					(errcode(ERRCODE_PROTOCOL_VIOLATION),
-+					 errmsg("terminating connection because protocol synchronization was lost")));
- 
--				/*
--				 * Note: we may at this point be inside an aborted
--				 * transaction.  We can't throw error for that until we've
--				 * finished reading the function-call message, so
--				 * HandleFunctionRequest() must check for it after doing so.
--				 * Be careful not to do anything that assumes we're inside a
--				 * valid transaction here.
--				 */
-+		/* Now we can allow interrupts again */
-+		RESUME_INTERRUPTS();
-+}
- 
--				/* switch back to message context */
--				MemoryContextSwitchTo(MessageContext);
-+/* ----------------------------------------------------------------
-+ * PostgresMain
-+ *	   postgres main loop -- all backends, interactive or otherwise loop here
-+ *
-+ * dbname is the name of the database to connect to, username is the
-+ * PostgreSQL user name to be used for the session.
-+ *
-+ * NB: Single user mode specific setup should go to PostgresSingleUserMain()
-+ * if reasonably possible.
-+ * ----------------------------------------------------------------
-+ */
-+void
-+PostgresMain(const char *dbname, const char *username)
-+{
+@@ -4187,7 +4315,9 @@ PostgresSingleUserMain(int argc, char *argv[],
+ void
+ PostgresMain(const char *dbname, const char *username)
+ {
 +#ifndef __PGLITE__
-+	sigjmp_buf	local_sigjmp_buf;
+ 	sigjmp_buf	local_sigjmp_buf;
 +#endif
-+	/* these must be volatile to ensure state is preserved across longjmp: */
-+	volatile bool send_ready_for_query = true;
-+	volatile bool idle_in_transaction_timeout_enabled = false;
-+	volatile bool idle_session_timeout_enabled = false;
  
--				HandleFunctionRequest(&input_message);
-+	Assert(dbname != NULL);
-+	Assert(username != NULL);
+ 	/* these must be volatile to ensure state is preserved across longjmp: */
+ 	volatile bool send_ready_for_query = true;
+@@ -4394,7 +4524,37 @@ PostgresMain(const char *dbname, const char *username)
+ 	 * were inside a transaction.
+ 	 */
  
--				/* commit the function-invocation transaction */
--				finish_xact_command();
-+	Assert(GetProcessingMode() == InitProcessing);
- 
--				valgrind_report_error_query("fastpath function call");
-+	/*
-+	 * Set up signal handlers.  (InitPostmasterChild or InitStandaloneProcess
-+	 * has already set up BlockSig and made that the active signal mask.)
-+	 *
-+	 * Note that postmaster blocked all signals before forking child process,
-+	 * so there is no race condition whereby we might receive a signal before
-+	 * we have set up the handler.
-+	 *
-+	 * Also note: it's best not to use any signals that are SIG_IGNored in the
-+	 * postmaster.  If such a signal arrives before we are able to change the
-+	 * handler to non-SIG_IGN, it'll get dropped.  Instead, make a dummy
-+	 * handler in the postmaster to reserve the signal. (Of course, this isn't
-+	 * an issue for signals that are locally generated, such as SIGALRM and
-+	 * SIGPIPE.)
-+	 */
-+	if (am_walsender)
-+		WalSndSignals();
-+	else
-+	{
-+		pqsignal(SIGHUP, SignalHandlerForConfigReload);
-+		pqsignal(SIGINT, StatementCancelHandler);	/* cancel current query */
-+		pqsignal(SIGTERM, die); /* cancel current query and exit */
- 
--				send_ready_for_query = true;
--				break;
-+		/*
-+		 * In a postmaster child backend, replace SignalHandlerForCrashExit
-+		 * with quickdie, so we can tell the client we're dying.
-+		 *
-+		 * In a standalone backend, SIGQUIT can be generated from the keyboard
-+		 * easily, while SIGTERM cannot, so we make both signals do die()
-+		 * rather than quickdie().
-+		 */
-+		if (IsUnderPostmaster)
-+			pqsignal(SIGQUIT, quickdie);	/* hard crash time */
-+		else
-+			pqsignal(SIGQUIT, die); /* cancel current query and exit */
-+		InitializeTimeouts();	/* establishes SIGALRM handler */
- 
--			case PqMsg_Close:
--				{
--					int			close_type;
--					const char *close_target;
-+		/*
-+		 * Ignore failure to write to frontend. Note: if frontend closes
-+		 * connection, we will notice it and exit cleanly when control next
-+		 * returns to outer loop.  This seems safer than forcing exit in the
-+		 * midst of output during who-knows-what operation...
-+		 */
-+		pqsignal(SIGPIPE, SIG_IGN);
-+		pqsignal(SIGUSR1, procsignal_sigusr1_handler);
-+		pqsignal(SIGUSR2, SIG_IGN);
-+		pqsignal(SIGFPE, FloatExceptionHandler);
++#ifdef __PGLITE__
 +
-+		/*
-+		 * Reset some signals that are accepted by postmaster but not by
-+		 * backend
-+		 */
-+		pqsignal(SIGCHLD, SIG_DFL); /* system() requires this on some
-+									 * platforms */
-+	}
- 
--					forbidden_in_wal_sender(firstchar);
-+	/* Early initialization */
-+	BaseInit();
- 
--					close_type = pq_getmsgbyte(&input_message);
--					close_target = pq_getmsgstring(&input_message);
--					pq_getmsgend(&input_message);
-+	/* We need to allow SIGINT, etc during the initial transaction */
-+	sigprocmask(SIG_SETMASK, &UnBlockSig, NULL);
- 
--					switch (close_type)
--					{
--						case 'S':
--							if (close_target[0] != '\0')
--								DropPreparedStatement(close_target, false);
--							else
--							{
--								/* special-case the unnamed statement */
--								drop_unnamed_stmt();
--							}
--							break;
--						case 'P':
--							{
--								Portal		portal;
 +	/*
-+	 * Generate a random cancel key, if this is a backend serving a
-+	 * connection. InitPostgres() will advertise it in shared memory.
++	 * PGlite: the host's longjmp (pgl_longjmp) returns to the host rather
++	 * than here, and the host calls PostgresMainLongJmp(), the recovery
++	 * below.  The rest of PostgresMain() comes first: the loop below it is
++	 * PostgresMainLoopOnce().
 +	 */
-+	Assert(MyCancelKeyLength == 0);
-+	if (whereToSendOutput == DestRemote)
-+	{
-+		int			len;
- 
--								portal = GetPortalByName(close_target);
--								if (PortalIsValid(portal))
--									PortalDrop(portal, false);
--							}
--							break;
--						default:
--							ereport(ERROR,
--									(errcode(ERRCODE_PROTOCOL_VIOLATION),
--									 errmsg("invalid CLOSE message subtype %d",
--											close_type)));
--							break;
--					}
-+		len = (MyProcPort == NULL || MyProcPort->proto >= PG_PROTOCOL(3, 2))
-+			? MAX_CANCEL_KEY_LENGTH : 4;
-+		if (!pg_strong_random(&MyCancelKey, len))
-+		{
-+			ereport(ERROR,
-+					(errcode(ERRCODE_INTERNAL_ERROR),
-+					 errmsg("could not generate random cancel key")));
-+		}
-+		MyCancelKeyLength = len;
-+	}
- 
--					if (whereToSendOutput == DestRemote)
--						pq_putemptymessage(PqMsg_CloseComplete);
-+	/*
-+	 * General initialization.
-+	 *
-+	 * NOTE: if you are tempted to add code in this vicinity, consider putting
-+	 * it inside InitPostgres() instead.  In particular, anything that
-+	 * involves database access should be there, not here.
-+	 *
-+	 * Honor session_preload_libraries if not dealing with a WAL sender.
-+	 */
-+	InitPostgres(dbname, InvalidOid,	/* database to connect to */
-+				 username, InvalidOid,	/* role to connect as */
-+				 (!am_walsender) ? INIT_PG_LOAD_SESSION_LIBS : 0,
-+				 NULL);			/* no out_dbname */
- 
--					valgrind_report_error_query("CLOSE message");
--				}
--				break;
-+	/*
-+	 * If the PostmasterContext is still around, recycle the space; we don't
-+	 * need it anymore after InitPostgres completes.
-+	 */
-+	if (PostmasterContext)
-+	{
-+		MemoryContextDelete(PostmasterContext);
-+		PostmasterContext = NULL;
-+	}
- 
--			case PqMsg_Describe:
--				{
--					int			describe_type;
--					const char *describe_target;
-+	SetProcessingMode(NormalProcessing);
- 
--					forbidden_in_wal_sender(firstchar);
-+	/*
-+	 * Now all GUC states are fully set up.  Report them to client if
-+	 * appropriate.
-+	 */
-+	BeginReportingGUCOptions();
- 
--					/* Set statement_timestamp() (needed for xact) */
--					SetCurrentStatementStartTimestamp();
-+	/*
-+	 * Also set up handler to log session end; we have to wait till now to be
-+	 * sure Log_disconnections has its final value.
-+	 */
-+	if (IsUnderPostmaster && Log_disconnections)
-+		on_proc_exit(log_disconnections, 0);
- 
--					describe_type = pq_getmsgbyte(&input_message);
--					describe_target = pq_getmsgstring(&input_message);
--					pq_getmsgend(&input_message);
-+	pgstat_report_connect(MyDatabaseId);
- 
--					switch (describe_type)
--					{
--						case 'S':
--							exec_describe_statement_message(describe_target);
--							break;
--						case 'P':
--							exec_describe_portal_message(describe_target);
--							break;
--						default:
--							ereport(ERROR,
--									(errcode(ERRCODE_PROTOCOL_VIOLATION),
--									 errmsg("invalid DESCRIBE message subtype %d",
--											describe_type)));
--							break;
--					}
-+	/* Perform initialization specific to a WAL sender process. */
-+	if (am_walsender)
-+		InitWalSender();
- 
--					valgrind_report_error_query("DESCRIBE message");
--				}
--				break;
-+	/*
-+	 * Send this backend's cancellation info to the frontend.
-+	 */
-+	if (whereToSendOutput == DestRemote)
-+	{
-+		StringInfoData buf;
- 
--			case PqMsg_Flush:
--				pq_getmsgend(&input_message);
--				if (whereToSendOutput == DestRemote)
--					pq_flush();
--				break;
-+		Assert(MyCancelKeyLength > 0);
-+		pq_beginmessage(&buf, PqMsg_BackendKeyData);
-+		pq_sendint32(&buf, (int32) MyProcPid);
- 
--			case PqMsg_Sync:
--				pq_getmsgend(&input_message);
-+		pq_sendbytes(&buf, MyCancelKey, MyCancelKeyLength);
-+		pq_endmessage(&buf);
-+		/* Need not flush since ReadyForQuery will do it. */
-+	}
- 
--				/*
--				 * If pipelining was used, we may be in an implicit
--				 * transaction block. Close it before calling
--				 * finish_xact_command.
--				 */
--				EndImplicitTransactionBlock();
--				finish_xact_command();
--				valgrind_report_error_query("SYNC message");
--				send_ready_for_query = true;
--				break;
-+	/* Welcome banner for standalone case */
-+	if (whereToSendOutput == DestDebug)
-+		printf("\nPostgreSQL stand-alone backend %s\n", PG_VERSION);
- 
--				/*
--				 * PqMsg_Terminate means that the frontend is closing down the
--				 * socket. EOF means unexpected loss of frontend connection.
--				 * Either way, perform normal shutdown.
--				 */
--			case EOF:
-+	/*
-+	 * Create the memory context we will use in the main loop.
-+	 *
-+	 * MessageContext is reset once per iteration of the main loop, ie, upon
-+	 * completion of processing of each command message from the client.
-+	 */
-+	MessageContext = AllocSetContextCreate(TopMemoryContext,
-+										   "MessageContext",
-+										   ALLOCSET_DEFAULT_SIZES);
- 
--				/* for the cumulative statistics system */
--				pgStatSessionEndCause = DISCONNECT_CLIENT_EOF;
-+	/*
-+	 * Create memory context and buffer used for RowDescription messages. As
-+	 * SendRowDescriptionMessage(), via exec_describe_statement_message(), is
-+	 * frequently executed for ever single statement, we don't want to
-+	 * allocate a separate buffer every time.
-+	 */
-+	row_description_context = AllocSetContextCreate(TopMemoryContext,
-+													"RowDescriptionContext",
-+													ALLOCSET_DEFAULT_SIZES);
-+	MemoryContextSwitchTo(row_description_context);
-+	initStringInfo(&row_description_buf);
-+	MemoryContextSwitchTo(TopMemoryContext);
- 
--				/* FALLTHROUGH */
-+	/* Fire any defined login event triggers, if appropriate */
-+	EventTriggerOnLogin();
- 
--			case PqMsg_Terminate:
-+	/*
-+	 * POSTGRES main processing loop begins here
-+	 *
-+	 * If an exception is encountered, processing resumes here so we abort the
-+	 * current transaction and start a new one.
-+	 *
-+	 * You might wonder why this isn't coded as an infinite loop around a
-+	 * PG_TRY construct.  The reason is that this is the bottom of the
-+	 * exception stack, and so with PG_TRY there would be no exception handler
-+	 * in force at all during the CATCH part.  By leaving the outermost setjmp
-+	 * always active, we have at least some chance of recovering from an error
-+	 * during error recovery.  (If we get into an infinite loop thereby, it
-+	 * will soon be stopped by overflow of elog.c's internal state stack.)
-+	 *
-+	 * Note that we use sigsetjmp(..., 1), so that this function's signal mask
-+	 * (to wit, UnBlockSig) will be restored when longjmp'ing to here.  This
-+	 * is essential in case we longjmp'd out of a signal handler on a platform
-+	 * where that leaves the signal blocked.  It's not redundant with the
-+	 * unblock in AbortTransaction() because the latter is only called if we
-+	 * were inside a transaction.
-+	 */
- 
--				/*
--				 * Reset whereToSendOutput to prevent ereport from attempting
--				 * to send any more messages to client.
--				 */
--				if (whereToSendOutput == DestRemote)
--					whereToSendOutput = DestNone;
 +	if (sigsetjmp(postgresmain_sigjmp_buf, 1) != 0)
 +	{
 +		PostgresMainLongJmp();
 +	}
- 
--				/*
--				 * NOTE: if you are tempted to add more code here, DON'T!
--				 * Whatever you had in mind to do should be set up as an
--				 * on_proc_exit or on_shmem_exit callback, instead. Otherwise
--				 * it will fail to be called during other backend-shutdown
--				 * scenarios.
--				 */
--				proc_exit(0);
++
 +	/* We can now handle ereport(ERROR) */
 +	PG_exception_stack = &postgresmain_sigjmp_buf;
- 
--			case PqMsg_CopyData:
--			case PqMsg_CopyDone:
--			case PqMsg_CopyFail:
++
 +	if (!ignore_till_sync)
 +		send_ready_for_query = true;	/* initially, or after error */
- 
--				/*
--				 * Accept but ignore these messages, per protocol spec; we
--				 * probably got here because a COPY failed, and the frontend
--				 * is still sending data.
--				 */
--				break;
-+	/*
-+	 * Non-error queries loop here.
-+	 */
- 
--			default:
--				ereport(FATAL,
--						(errcode(ERRCODE_PROTOCOL_VIOLATION),
--						 errmsg("invalid frontend message type %d",
--								firstchar)));
--		}
++
 +	for (;;)
 +	{
 +		PostgresMainLoopOnce();
++	}
++}
++
++/* PostgresMain()'s error recovery, which the host runs after an ERROR */
++void
++PostgresMainLongJmp()
++#else
+ 	if (sigsetjmp(local_sigjmp_buf, 1) != 0)
++#endif
+ 	{
+ 		/*
+ 		 * NOTE: if you are tempted to add more code in this if-block,
+@@ -4507,6 +4667,128 @@ PostgresMain(const char *dbname, const char *username)
+ 		RESUME_INTERRUPTS();
+ 	}
+ 
++#ifdef __PGLITE__
++
++/*
++ * The loop's step (1), for the host to send ReadyForQuery after the input it
++ * gave has been processed.  A copy: it does not follow changes to step (1)
++ * below by itself (it lacks the connection-ready log of 18's step (1)).
++ */
++void
++PostgresSendReadyForQueryIfNecessary()
++{
++	/*
++	 * (1) If we've reached idle state, tell the frontend we're ready for
++	 * a new query.
++	 *
++	 * Note: this includes fflush()'ing the last of the prior output.
++	 *
++	 * This is also a good time to flush out collected statistics to the
++	 * cumulative stats system, and to update the PS stats display.  We
++	 * avoid doing those every time through the message loop because it'd
++	 * slow down processing of batched messages, and because we don't want
++	 * to report uncommitted updates (that confuses autovacuum).  The
++	 * notification processor wants a call too, if we are not in a
++	 * transaction block.
++	 *
++	 * Also, if an idle timeout is enabled, start the timer for that.
++	 */
++	if (send_ready_for_query)
++	{
++		if (IsAbortedTransactionBlockState())
++		{
++			set_ps_display("idle in transaction (aborted)");
++			pgstat_report_activity(STATE_IDLEINTRANSACTION_ABORTED, NULL);
++
++			/* Start the idle-in-transaction timer */
++			if (IdleInTransactionSessionTimeout > 0
++				&& (IdleInTransactionSessionTimeout < TransactionTimeout || TransactionTimeout == 0))
++			{
++				idle_in_transaction_timeout_enabled = true;
++				enable_timeout_after(IDLE_IN_TRANSACTION_SESSION_TIMEOUT,
++									 IdleInTransactionSessionTimeout);
++			}
++		}
++		else if (IsTransactionOrTransactionBlock())
++		{
++			set_ps_display("idle in transaction");
++			pgstat_report_activity(STATE_IDLEINTRANSACTION, NULL);
++
++			/* Start the idle-in-transaction timer */
++			if (IdleInTransactionSessionTimeout > 0
++				&& (IdleInTransactionSessionTimeout < TransactionTimeout || TransactionTimeout == 0))
++			{
++				idle_in_transaction_timeout_enabled = true;
++				enable_timeout_after(IDLE_IN_TRANSACTION_SESSION_TIMEOUT,
++									 IdleInTransactionSessionTimeout);
++			}
++		}
++		else
++		{
++			long		stats_timeout;
++
++			/*
++			 * Process incoming notifies (including self-notifies), if
++			 * any, and send relevant messages to the client.  Doing it
++			 * here helps ensure stable behavior in tests: if any notifies
++			 * were received during the just-finished transaction, they'll
++			 * be seen by the client before ReadyForQuery is.
++			 */
++			if (notifyInterruptPending)
++				ProcessNotifyInterrupt(false);
++
++			/*
++			 * Check if we need to report stats. If pgstat_report_stat()
++			 * decides it's too soon to flush out pending stats / lock
++			 * contention prevented reporting, it'll tell us when we
++			 * should try to report stats again (so that stats updates
++			 * aren't unduly delayed if the connection goes idle for a
++			 * long time). We only enable the timeout if we don't already
++			 * have a timeout in progress, because we don't disable the
++			 * timeout below. enable_timeout_after() needs to determine
++			 * the current timestamp, which can have a negative
++			 * performance impact. That's OK because pgstat_report_stat()
++			 * won't have us wake up sooner than a prior call.
++			 */
++			stats_timeout = pgstat_report_stat(false);
++			if (stats_timeout > 0)
++			{
++				if (!get_timeout_active(IDLE_STATS_UPDATE_TIMEOUT))
++					enable_timeout_after(IDLE_STATS_UPDATE_TIMEOUT,
++										 stats_timeout);
++			}
++			else
++			{
++				/* all stats flushed, no need for the timeout */
++				if (get_timeout_active(IDLE_STATS_UPDATE_TIMEOUT))
++					disable_timeout(IDLE_STATS_UPDATE_TIMEOUT, false);
++			}
++
++			set_ps_display("idle");
++			pgstat_report_activity(STATE_IDLE, NULL);
++
++			/* Start the idle-session timer */
++			if (IdleSessionTimeout > 0)
++			{
++				idle_session_timeout_enabled = true;
++				enable_timeout_after(IDLE_SESSION_TIMEOUT,
++									 IdleSessionTimeout);
++			}
++		}
++
++		/* Report any recently-changed GUC options */
++		ReportChangedGUCOptions();
++
++		ReadyForQuery(whereToSendOutput);
++		send_ready_for_query = false;
++	}
++}
++
++/* One iteration of PostgresMain()'s loop, for each message the host gives */
++void
++PostgresMainLoopOnce()
++#else
++
+ 	/* We can now handle ereport(ERROR) */
+ 	PG_exception_stack = &local_sigjmp_buf;
+ 
+@@ -4518,6 +4800,7 @@ PostgresMain(const char *dbname, const char *username)
+ 	 */
+ 
+ 	for (;;)
++#endif
+ 	{
+ 		int			firstchar;
+ 		StringInfoData input_message;
+@@ -4747,7 +5030,11 @@ PostgresMain(const char *dbname, const char *username)
+ 		 * Sync.
+ 		 */
+ 		if (ignore_till_sync && firstchar != EOF)
++#ifdef __PGLITE__
++			return;
++#else
+ 			continue;
++#endif
+ 
+ 		switch (firstchar)
+ 		{
+@@ -5003,6 +5290,19 @@ PostgresMain(const char *dbname, const char *username)
+ 				 * it will fail to be called during other backend-shutdown
+ 				 * scenarios.
+ 				 */
++#ifdef __PGLITE__
++
++				/*
++				 * PGlite: while the host drives the backend, the runtime
++				 * stays alive for its next exchange.
++				 */
++				if (is_pglite_active != 0)
++				{
++					pgl_setPGliteExitStatus(PGLITE_EXIT_ALIVE);
++					emscripten_exit_with_live_runtime();
++				}
++				else
++#endif
+ 				proc_exit(0);
+ 
+ 			case PqMsg_CopyData:
+@@ -5022,7 +5322,9 @@ PostgresMain(const char *dbname, const char *username)
+ 						 errmsg("invalid frontend message type %d",
+ 								firstchar)));
+ 		}
++#ifndef __PGLITE__
  	}							/* end of input-reading loop */
++#endif
  }
  
+ /*
