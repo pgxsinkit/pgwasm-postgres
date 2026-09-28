@@ -63,6 +63,26 @@ export function git(args: readonly string[], options: GitOptions): RunResult {
   return result;
 }
 
+/** `git` whose standard output is bytes (a blob, byte for byte); it throws when git fails. */
+export function gitBytes(args: readonly string[], options: Omit<GitOptions, "stdin" | "allowFailure">): Buffer {
+  const command = ["git", ...args];
+  const proc = Bun.spawnSync(command, {
+    cwd: options.cwd,
+    env: { ...sanitisedEnv(), ...options.env },
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  if (proc.exitCode !== 0) {
+    throw new CommandError(command, options.cwd, {
+      exitCode: proc.exitCode ?? -1,
+      stdout: "",
+      stderr: proc.stderr.toString(),
+    });
+  }
+  return proc.stdout;
+}
+
 /** The committer recorded on commits `git am` makes in the cache. `patches/` never contains it. */
 export const CACHE_COMMITTER = { name: "pgwasm-postgres", email: "patches@pgwasm-postgres.invalid" } as const;
 

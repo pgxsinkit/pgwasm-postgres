@@ -21,6 +21,7 @@
     "lint:fix": "oxlint --fix -c .oxlintrc.jsonc scripts tests",
     "patches:check": "bun scripts/patches-check.ts",
     "patches:export": "bun scripts/patches-export.ts",
+    "patches:tokens": "bun scripts/patches-tokens.ts",
     "patches:work": "bun scripts/patches-work.ts",
     "poll": "bun scripts/poll.ts",
     "prepare": "git config core.hooksPath .githooks || true",
