@@ -1,10 +1,10 @@
 {
   "$comment": "The prepopulated data directory (ADR-0001 decision 10): `bun run prepopulated` on the artefacts with these sha256s, at this SOURCE_DATE_EPOCH, must give exactly this archive (`tar`) and asset (`asset`, the archive gzipped by the pinned Bun's zlib). Checked by `bun run prepopulated --check`, never by validate or CI (it needs a build); rewritten by `bun run prepopulated --record` when the build changes.",
   "kind": "prepopulated",
-  "sourceDateEpoch": 1790574668,
+  "sourceDateEpoch": 1790584640,
   "artefacts": {
     "postgres.js": "1bfb5740bd836121c0444d058593bbc7fa0de625596214a8e4805414191a23b2",
-    "postgres.wasm": "f2d217be96e05dd01c02a6b62e89110d3658ac5be6032fe1d28effc9348b15ac",
+    "postgres.wasm": "c16c3af88aecce093904810f28797e071a0196e77a783fdec09495cf593abc5c",
     "postgres.data": "012a2ed052fc0a05d50b9920afb5cb1692b3fbf9e09d486da61e4a59bb8f249a",
     "initdb.js": "a402bd734fda0faf36696b68324471f853d52bd248ab8219893a6344386f6fac",
     "initdb.wasm": "0fdc9cb46e2efe6dc1fc957c47c0c7364022c98d327eb8072af3f7fb75237d3e"
@@ -12,10 +12,10 @@
   "entries": 998,
   "tar": {
     "bytes": 40373248,
-    "sha256": "85f6d36366af1e28a0b3605f281b7889dce0f67a7fcc210a836492019c835166"
+    "sha256": "a43990bf10c22bea2b073990a7bbe1df8604dee33ba25feb9ab1d6de41e34293"
   },
   "asset": {
-    "bytes": 4404076,
-    "sha256": "0bd7baf1359725c421ef1944533321b736ac09fdd1e56eda60dddca62057f626"
+    "bytes": 4404007,
+    "sha256": "8671f56b51e40848b10be461ba63da737e3513935833657230afdac1d7b7a55a"
   }
 }
