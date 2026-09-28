@@ -2,6 +2,6 @@
   "$comment": "The builder image's lock (ADR-0001 decision 9), written by `bun run builder:lock`, never by hand. `image` is the published image by tag, `digest` and `id` what the registry stored it at and the image id a pull gives (null: not published yet), and `contentSha256` the content of builder/ (every file but this one) it was built from. The gate pulls the image by digest when builder/ still has that content, and builds it from builder/ otherwise; a release requires the published image.",
   "image": "ghcr.io/pgxsinkit/pgwasm-builder:6.0.10-p1",
   "contentSha256": "6bce4f8f41763b312d690aaaa0b4f2de2587ac591575179c000ebd35885ce6e5",
-  "digest": null,
-  "id": null
+  "digest": "sha256:0c4d5255c5f1824216d1eb347cc231a6f881574c3d5b8172796a8cbe5f9f63c8",
+  "id": "2df2520eca2401ca75e576c558e322c33010717353596d7f085c1e9702ae4682"
 }
