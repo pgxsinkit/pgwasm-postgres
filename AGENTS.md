@@ -75,7 +75,8 @@ consumes the releases. Read [README.md](README.md) and
 - **The driver's scripts need a build too.** `bun run driver:smoke`, `bun run prepopulated --check` and
   `bun run data-format:check` are not in `validate`; the gate runs them, so a change that reaches the build
   or `scripts/lib/driver/` must keep them passing. `identity/prepopulated.json` changes only through
-  `prepopulated --record`, after a deliberate build change. `data-format.json` changes only by declaring a new `dataFormat` with its new
+  `prepopulated --record`, after a deliberate build change, and after every release tag (the build's embedded
+  version moves to the next candidate, see README "Versions and releases"). `data-format.json` changes only by declaring a new `dataFormat` with its new
   tuple, never by editing the current one to match a build.
 - **So does the pg_regress gate.** `bun run regress` (a build, podman and the builder image; about two
   minutes a run) is not in `validate`; the gate runs it. Run it after any change that reaches the build or

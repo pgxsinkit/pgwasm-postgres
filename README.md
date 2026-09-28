@@ -626,10 +626,15 @@ only version input, and `package.json`'s `0.0.0` is a placeholder. The build der
 (`scripts/lib/version.ts`): `<major>.<minor>.0` of the pinned upstream tag while there is no release tag,
 the latest release tag's revision + 1 when that tag is of the pinned major.minor, and `<major>.<minor>.0`
 otherwise. Only the tags of HEAD's strict ancestors count, so a tagged commit builds as its own tag, and tags
-that are not `N.N.N` (`builder-sources-1`) are ignored; today the candidate is `18.6.1`. Releases are GitHub
+that are not `N.N.N` (`builder-sources-1`) are ignored; today the candidate is `18.6.2`. Releases are GitHub
 release assets with a checksum manifest, not npm packages, made only by `release.yml` from the gated build (see
 [The engine gate, CI and releases](#the-engine-gate-ci-and-releases)). History is linear: changes are rebased,
 never merged, and main is fast-forwarded from the command line.
+
+`pglite.wasm` embeds the version (`version()`), and `identity/prepopulated.json` names `pglite.wasm` by its
+sha256, so a release tag moves every later commit's build to the next candidate and makes the record stale:
+after each release, the next commit on develop is `bun run prepopulated --record` on a build of develop (the
+gate fails at `prepopulated --check` until then). It is a record of the new label only; nothing else changed.
 
 ## License
 
