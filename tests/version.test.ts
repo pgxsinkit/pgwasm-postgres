@@ -7,6 +7,7 @@ import {
   candidateVersion,
   formatVersion,
   parseReleaseTag,
+  prereleaseVersion,
   releaseTagsAt,
   repositoryCandidate,
   upstreamVersion,
@@ -47,6 +48,14 @@ describe("the candidate version", () => {
 
   test("refuses a pin that moved backwards onto a released version", () => {
     expect(thrown(() => candidateVersion("REL_18_3", ["18.3.0", "18.6.0"])).message).toContain("moved backwards");
+  });
+
+  test("is a pre-release for a beta or a release candidate, which is never a release tag", () => {
+    expect(prereleaseVersion("REL_19_BETA4")).toBe("19.0.0-beta.4");
+    expect(prereleaseVersion("REL_19_RC1")).toBe("19.0.0-rc.1");
+    for (const tag of ["REL_18_6", "REL_19_0", "REL_19_ALPHA1", "18.6.0"])
+      expect(prereleaseVersion(tag)).toBeUndefined();
+    expect(parseReleaseTag("19.0.0-beta.4")).toBeUndefined();
   });
 });
 
@@ -94,5 +103,7 @@ describe("the repository's tags", () => {
     run("tag", "18.3.1");
     run("switch", "--quiet", "main");
     expect(repositoryCandidate(repo, "REL_18_3")).toBe("18.3.1");
+    // A beta pin's build is a pre-release, whatever the tags.
+    expect(repositoryCandidate(repo, "REL_19_BETA4")).toBe("19.0.0-beta.4");
   });
 });

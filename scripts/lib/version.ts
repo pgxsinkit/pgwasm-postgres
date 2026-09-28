@@ -9,6 +9,10 @@
  * Only tags of the commit's strict ancestors count: a tag on the commit itself is what a release job checks
  * against the candidate, so the gated build of a commit and the build of its tag embed the same version.
  * Tags that are not `N.N.N` (`builder-sources-1`) are ignored.
+ *
+ * A pin on a beta or a release candidate of the next major (a `port-<major>` branch's, or `bun run readiness`'s
+ * scratch copy, decision 8) builds as the semver pre-release `<major>.0.0-beta.<n>` or `<major>.0.0-rc.<n>`: never a
+ * release, since releases are tagged `N.N.N` only, so `release:check` refuses it.
  */
 import { git, UserError } from "./git.ts";
 
@@ -21,6 +25,8 @@ export interface Version {
 const SEMVER_TAG = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 /** Upstream's release tags: `REL_18_3`. Betas and release candidates (`REL_19_BETA4`) have no minor. */
 const UPSTREAM_RELEASE_TAG = /^REL_(\d+)_(\d+)$/;
+/** Upstream's betas and release candidates: `REL_19_BETA4`, `REL_19_RC1`. */
+const UPSTREAM_PRERELEASE_TAG = /^REL_(\d+)_(BETA|RC)(\d+)$/;
 
 /** A release tag's version, or `undefined` when the tag is not `N.N.N`. */
 export function parseReleaseTag(tag: string): Version | undefined {
@@ -82,7 +88,14 @@ export function releaseTagsAt(root: string, commit = "HEAD"): string[] {
     .filter((tag) => parseReleaseTag(tag) !== undefined);
 }
 
+/** The version of a build of an upstream beta or release candidate (`19.0.0-beta.4`), or undefined for any other tag. */
+export function prereleaseVersion(upstreamTag: string): string | undefined {
+  const match = UPSTREAM_PRERELEASE_TAG.exec(upstreamTag);
+  if (match === null) return undefined;
+  return `${Number(match[1])}.0.0-${(match[2] ?? "").toLowerCase()}.${Number(match[3])}`;
+}
+
 /** The candidate version of the repository's HEAD for the pinned upstream tag. */
 export function repositoryCandidate(root: string, upstreamTag: string): string {
-  return formatVersion(candidateVersion(upstreamTag, ancestorTags(root)));
+  return prereleaseVersion(upstreamTag) ?? formatVersion(candidateVersion(upstreamTag, ancestorTags(root)));
 }
