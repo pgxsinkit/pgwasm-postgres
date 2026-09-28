@@ -81,12 +81,15 @@ const CANCEL_REQUEST = 80877102;
 
 /**
  * Whether `error` is how the runtime unwinds the wasm stack back to the main loop: `'unwind'` from
- * `emscripten_exit_with_live_runtime()` (an ERROR's intercepted siglongjmp, and a Terminate), or the number
- * an Emscripten-mode longjmp throws. An `ExitStatus` is not: it means the backend exited (a FATAL error,
- * `proc_exit`), after its exit callbacks tore the session down.
+ * `emscripten_exit_with_live_runtime()` (an ERROR's intercepted siglongjmp, and a Terminate), or an
+ * Emscripten-mode longjmp that no setjmp caught on its way out: an `EmscriptenSjLj` since Emscripten 6 (the glue
+ * does not export the class, but keeps its name; 3.1.74 threw a number). An `ExitStatus` is not: it means the
+ * backend exited (a FATAL error, `proc_exit`), after its exit callbacks tore the session down.
  */
-function isUnwind(error: unknown): boolean {
-  return error === "unwind" || typeof error === "number";
+export function isUnwind(error: unknown): boolean {
+  if (error === "unwind" || typeof error === "number") return true;
+  if (typeof error !== "object" || error === null) return false;
+  return (error as { constructor?: { name?: unknown } }).constructor?.name === "EmscriptenSjLj";
 }
 
 /** A backend that exited during an exchange: a FATAL error, or anything else that reached `proc_exit`. */

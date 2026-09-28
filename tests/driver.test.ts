@@ -9,7 +9,7 @@ import {
   VirtualClock,
 } from "../scripts/lib/driver/determinism.ts";
 import type { EmscriptenFS } from "../scripts/lib/driver/emscripten.ts";
-import { START_PARAMS } from "../scripts/lib/driver/postgres.ts";
+import { isUnwind, START_PARAMS } from "../scripts/lib/driver/postgres.ts";
 import {
   parseBackendMessages,
   queryMessage,
@@ -19,6 +19,26 @@ import {
 } from "../scripts/lib/driver/wire.ts";
 import { repoRoot } from "../scripts/lib/layout.ts";
 import { thrown } from "./helpers.ts";
+
+describe("isUnwind", () => {
+  test("knows the runtime's own unwinds on Emscripten 3.1.74 and 6, and nothing else", () => {
+    // The glue's classes, as Emscripten 6.0.10 declares them (not exported; the name is what is kept).
+    class EmscriptenEH {}
+    class EmscriptenSjLj extends EmscriptenEH {}
+    class ExitStatus {
+      name = "ExitStatus";
+      status = 1;
+    }
+    expect(isUnwind("unwind")).toBe(true);
+    expect(isUnwind(Infinity)).toBe(true);
+    expect(isUnwind(new EmscriptenSjLj())).toBe(true);
+    expect(isUnwind(new EmscriptenEH())).toBe(false);
+    expect(isUnwind(new ExitStatus())).toBe(false);
+    expect(isUnwind(new Error("unwind"))).toBe(false);
+    expect(isUnwind(Object.create(null))).toBe(false);
+    expect(isUnwind(null)).toBe(false);
+  });
+});
 
 describe("commandWords", () => {
   test("splits the command lines initdb hands to the host", () => {
