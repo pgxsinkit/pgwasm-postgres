@@ -104,7 +104,7 @@ describe("the baseline", () => {
     upstream: { tag: "REL_18_3", commit: "c".repeat(40) },
     schedule: "parallel_schedule",
     runs: 2,
-    recordedWith: { "pglite.wasm": "a".repeat(64) },
+    recordedWith: { "postgres.wasm": "a".repeat(64) },
   };
 
   test("runs combine: a test whose outcome or diff differs between them is unstable", () => {

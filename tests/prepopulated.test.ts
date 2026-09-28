@@ -160,9 +160,9 @@ describe("identity/prepopulated.json", () => {
     const record: PrepopulatedRecord = {
       sourceDateEpoch: 1_790_000_000,
       artefacts: {
-        "pglite.js": "a".repeat(64),
-        "pglite.wasm": "b".repeat(64),
-        "pglite.data": "c".repeat(64),
+        "postgres.js": "a".repeat(64),
+        "postgres.wasm": "b".repeat(64),
+        "postgres.data": "c".repeat(64),
         "initdb.js": "d".repeat(64),
         "initdb.wasm": "e".repeat(64),
       },

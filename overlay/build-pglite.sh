@@ -160,10 +160,10 @@ emmake make PORTNAME=emscripten install || { echo 'error: emmake make PORTNAME=e
 PGLITE_CONTRIB="amcheck"
 emmake make PORTNAME=emscripten -C contrib/ $(for module in $PGLITE_CONTRIB; do echo "$module.tar.gz"; done) || { echo 'error: emmake make PORTNAME=emscripten -C contrib/ <module>.tar.gz' ; exit 31; }
 
-# Step 4: pglite.wasm's export list. pglite.wasm is linked with -sMAIN_MODULE=2, which exports only the symbols
-# exported_functions.txt lists, and a shared module loads (and runs) only if pglite.wasm exports every symbol it
+# Step 4: postgres.wasm's export list. postgres.wasm is linked with -sMAIN_MODULE=2, which exports only the symbols
+# exported_functions.txt lists, and a shared module loads (and runs) only if postgres.wasm exports every symbol it
 # imports. So the list is pglite/static/included.pglite.exports (what the host calls) plus the imports of every
-# module the build ships: the core modules pglite.data carries (lib/postgresql/*.so) and those of the extension
+# module the build ships: the core modules postgres.data carries (lib/postgresql/*.so) and those of the extension
 # archives; less libpq's API, which the backend does not define (see the script). It is an output too:
 # pgwasm-postgres diffs it against its reference.
 SHIPPED_MODULES=$(mktemp -d)
@@ -175,7 +175,8 @@ pglite/scripts/exported-functions.sh pglite/static/included.pglite.exports src/i
     > "$INSTALL_FOLDER/exported_functions.txt" || { echo 'error: pglite/scripts/exported-functions.sh' ; exit 42; }
 rm -rf "$SHIPPED_MODULES"
 
-# Step 5: make and install pglite
+# Step 5: make and install pglite: the backend the host embeds, linked as pgwasm/postgres.js with postgres.wasm and
+# postgres.data (src/backend/Makefile's pglite target), and installed into $INSTALL_FOLDER/pgwasm
 PGROOT=/pglite
 # PG_IMPORTS_DIR=$PGROOT/imports
 PGPRELOAD="\
@@ -193,12 +194,12 @@ PGPRELOAD="\
 
 PGLITE_EXPORTED_RUNTIME_METHODS="MEMFS,IDBFS,FS,PROXYFS,setValue,getValue,UTF8ToString,stringToNewUTF8,stringToUTF8OnStack,addFunction,removeFunction,callMain,ENV,HEAP8,HEAPU8"
 
-# The module options pglite.js reads: Emscripten's default list (settings.js, INCOMING_MODULE_JS_API) and
+# The module options postgres.js reads: Emscripten's default list (settings.js, INCOMING_MODULE_JS_API) and
 # wasmMemory, which Emscripten 6.0.2 dropped from it and the hosts pass (a memory of their own, initial 128 MB).
 PGLITE_INCOMING_MODULE_JS_API="ENVIRONMENT,arguments,canvas,dynamicLibraries,elementPointerLock,instantiateWasm,locateFile,monitorRunDependencies,noExitRuntime,noInitialRun,onAbort,onExit,onRuntimeInitialized,postRun,preInit,preRun,print,printErr,setStatus,statusMessage,stderr,stdin,stdout,thisProgram,wasm,websocket,wasmMemory"
 
 # -sDYLINK_DEBUG=2 use this for debugging missing exported symbols (ex when an extension calls a pgcore function that hasn't been exported)
-# -Wl,--no-export-dynamic: pglite.wasm exports exported_functions.txt, not every symbol. The backend's link carries
+# -Wl,--no-export-dynamic: postgres.wasm exports exported_functions.txt, not every symbol. The backend's link carries
 # configure's LDFLAGS_EX_BE (-Wl,--export-dynamic, for a native postgres whose modules resolve against it); Emscripten
 # up to 3.1.74 overrode it with its own --no-export-dynamic, while since 4.0.20 the command line's linker flags come
 # last, so without this the wasm exports all 9,649 symbols of the link (ICU's, libxml2's, libc++'s, ...).

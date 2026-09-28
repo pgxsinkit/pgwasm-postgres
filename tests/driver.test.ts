@@ -1,5 +1,7 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
+import { join } from "node:path";
 
+import { DRIVER_FILES, locateDriverFiles } from "../scripts/lib/driver/artefacts.ts";
 import { commandWords } from "../scripts/lib/driver/command-line.ts";
 import {
   deterministicHost,
@@ -19,7 +21,32 @@ import {
   startupMessage,
 } from "../scripts/lib/driver/wire.ts";
 import { repoRoot } from "../scripts/lib/layout.ts";
-import { thrown } from "./helpers.ts";
+import { Fixtures, thrown, write } from "./helpers.ts";
+
+const fixtures = new Fixtures();
+afterEach(() => fixtures.cleanup());
+
+describe("the artefacts the driver loads", () => {
+  test("are found in a build's dist/, the backend's in pgwasm/ and never the build tree's bin/postgres.js", () => {
+    const dist = fixtures.dir("dist");
+    for (const name of ["postgres.js", "postgres.wasm", "postgres.data"]) write(join(dist, "pgwasm", name), name);
+    for (const name of ["initdb.js", "initdb.wasm", "postgres.js"]) write(join(dist, "bin", name), name);
+    expect(locateDriverFiles(dist)).toEqual({
+      "postgres.js": join(dist, "pgwasm", "postgres.js"),
+      "postgres.wasm": join(dist, "pgwasm", "postgres.wasm"),
+      "postgres.data": join(dist, "pgwasm", "postgres.data"),
+      "initdb.js": join(dist, "bin", "initdb.js"),
+      "initdb.wasm": join(dist, "bin", "initdb.wasm"),
+    });
+  });
+
+  test("are found in a flat directory, as a release has them", () => {
+    const flat = fixtures.dir("flat");
+    for (const name of DRIVER_FILES) write(join(flat, name), name);
+    expect(Object.values(locateDriverFiles(flat))).toEqual(DRIVER_FILES.map((name) => join(flat, name)));
+    expect(thrown(() => locateDriverFiles(fixtures.dir("empty"))).message).toContain("has no postgres.js");
+  });
+});
 
 describe("isUnwind", () => {
   test("knows the runtime's own unwinds on Emscripten 3.1.74 and 6, and nothing else", () => {

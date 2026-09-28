@@ -1,5 +1,5 @@
 /**
- * One instance of the Postgres module (`pglite.js`) and the host state around it: the byte channel the wire
+ * One instance of the Postgres module (`postgres.js`) and the host state around it: the byte channel the wire
  * protocol goes through, the external-command hooks, and the data directory in its MEMFS.
  *
  * The module runs one backend in single-user mode; the series' `main-loop-unroll` and
@@ -196,9 +196,9 @@ export class Postgres {
         return {};
       },
       getPreloadedPackage: (name, size) => {
-        if (name !== "pglite.data" || bundle.byteLength !== size) {
+        if (name !== "postgres.data" || bundle.byteLength !== size) {
           throw new Error(
-            `Unexpected filesystem package ${name} of ${size} bytes (pglite.data has ${bundle.byteLength})`,
+            `Unexpected filesystem package ${name} of ${size} bytes (postgres.data has ${bundle.byteLength})`,
           );
         }
         return bundle;

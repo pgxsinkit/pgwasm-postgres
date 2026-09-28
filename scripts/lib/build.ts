@@ -3,7 +3,7 @@
  * from any checkout:
  *
  * - the source is mounted at a fixed path, {@link SOURCE_MOUNT}, wherever the checkout is (paths reach the
- *   artefacts: pg_config's flags, pgxs's Makefile.global in pglite.data, `__FILE__` in error reports);
+ *   artefacts: pg_config's flags, pgxs's Makefile.global in postgres.data, `__FILE__` in error reports);
  * - `SOURCE_DATE_EPOCH` is the commit time of HEAD, the extension archives' member mtimes;
  * - it runs under `LC_ALL=C`, as root with umask 022 and no `TZ`, and `--unsetenv container` drops the one
  *   variable podman adds;

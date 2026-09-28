@@ -4,7 +4,7 @@
  * the driver's typecheck or its smoke run, which is where the change is meant to surface (ADR-0001
  * decision 9). The build exports what is used and Emscripten no longer exports by default (`HEAPU8`, since
  * 4.0.7), and reads the options it no longer reads by default (`wasmMemory`, since 6.0.2); its pre-js
- * `loadBundleFirst.js` loads `pglite.data` before the `preRun` callbacks, which Emscripten 4.0.7 and later
+ * `loadBundleFirst.js` loads `postgres.data` before the `preRun` callbacks, which Emscripten 4.0.7 and later
  * run in the order listed.
  */
 
@@ -46,7 +46,7 @@ export interface ModuleOverrides<TModule> {
     successCallback: (instance: WebAssembly.Instance, module: WebAssembly.Module) => void,
   ) => Record<string, never>;
   getPreloadedPackage?: (name: string, size: number) => ArrayBuffer;
-  /** Run in the order listed, after `pglite.data` is loaded (see above). */
+  /** Run in the order listed, after `postgres.data` is loaded (see above). */
   preRun: ((module: TModule) => void)[];
 }
 
@@ -70,7 +70,7 @@ export interface ModuleBase {
   _pgl_freopen(path: number, mode: number, stream: number): number;
 }
 
-/** `pglite.js`: the backend, with the host entry points the series' patches export. */
+/** `postgres.js`: the backend, with the host entry points the series' patches export. */
 export interface PostgresModule extends ModuleBase {
   _pgl_set_rw_cbs(read: number, write: number): void;
   _pgl_pq_flush(): void;

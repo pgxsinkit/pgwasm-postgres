@@ -10,7 +10,7 @@
  * the tag's `data/` and writes into the run's `results/` as a local server would. The run's `lib/` is
  * pg_regress's `--dlpath`, where the tests look for the regress library (`:libdir/regress.so`). It is empty
  * unless a library is given: the build's own `src/test/regress/regress.so` imports functions and data symbols
- * `pglite.wasm` does not export (its export list comes from the modules the build ships, which regress.so is
+ * `postgres.wasm` does not export (its export list comes from the modules the build ships, which regress.so is
  * not), so its `dlopen` fails, and in this runtime a failed `dlopen` makes every later one fail too. Without
  * the file, `CREATE FUNCTION … AS :'regresslib'` fails before any `dlopen`.
  *

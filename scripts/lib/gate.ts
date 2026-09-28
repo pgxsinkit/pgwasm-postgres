@@ -2,8 +2,8 @@
  * The engine gate's output (ADR-0001 decisions 6 and 9): everything a release publishes, in one flat directory,
  * `.cache/gate/<commit>/`, which `bun run gate` fills only when every check passed:
  *
- * - the artefacts: `pglite.{wasm,data,js}`, `initdb.{wasm,js}`, `pg_dump.{wasm,js}`, each extension archive
- *   (`amcheck.tar.gz`), and the export list pglite.wasm was linked with (`exported_functions.txt`);
+ * - the artefacts: `postgres.{wasm,data,js}`, `initdb.{wasm,js}`, `pg_dump.{wasm,js}`, each extension archive
+ *   (`amcheck.tar.gz`), and the export list postgres.wasm was linked with (`exported_functions.txt`);
  * - `prepopulated.tar.gz`, the prepopulated data directory made at the commit's SOURCE_DATE_EPOCH;
  * - `data-format.json`, the declared `dataFormat` and its compatibility tuple;
  * - `manifest.json` ({@link GateManifest}): every other file's bytes and sha256, the version, the commit and its

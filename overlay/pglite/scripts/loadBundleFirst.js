@@ -1,4 +1,4 @@
-// pre.js (pglite.js only): the filesystem bundle, pglite.data, is in place before any of the host's preRun callbacks
+// pre.js (postgres.js only): the filesystem bundle, postgres.data, is in place before any of the host's preRun callbacks
 // runs, as up to Emscripten 3.1.74.
 //
 // emcc puts the file packager's code (--preload-file) ahead of every --pre-js, and that code appends its loader to

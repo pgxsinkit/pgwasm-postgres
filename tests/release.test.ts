@@ -25,7 +25,7 @@ function manifest(): GateManifest {
   return {
     ...gateManifest([
       { name: "amcheck.tar.gz", bytes: 21_862, sha256: "1".repeat(64) },
-      { name: "pglite.wasm", bytes: 10_061_242, sha256: "2".repeat(64) },
+      { name: "postgres.wasm", bytes: 10_061_242, sha256: "2".repeat(64) },
     ]),
     commit: HEAD,
   };
@@ -157,7 +157,7 @@ describe("the release notes", () => {
     expect(first).toContain(
       "`SELECT version()` reads `PostgreSQL 18.3 (pgwasm-postgres 18.3.0) on wasm32-unknown-emscripten, …`",
     );
-    expect(first).toContain(`| \`pglite.wasm\` | 10,061,242 | \`${"2".repeat(64)}\` |`);
+    expect(first).toContain(`| \`postgres.wasm\` | 10,061,242 | \`${"2".repeat(64)}\` |`);
     expect(first).toContain("dataFormat 1: pg_control_version 1800");
     expect(first).toContain(
       "pg_regress `parallel_schedule`: 230 tests, 178 pass, 49 fail as the baseline records, 3 unstable",

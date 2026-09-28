@@ -1,5 +1,5 @@
 /**
- * pglite.wasm's export list (ADR-0001 decision 6). The build links pglite.wasm with -sMAIN_MODULE=2, which exports
+ * postgres.wasm's export list (ADR-0001 decision 6). The build links postgres.wasm with -sMAIN_MODULE=2, which exports
  * only the symbols `exported_functions.txt` lists: `pglite/static/included.pglite.exports` (the core set: what the
  * host calls) and the imports of every module the build ships (overlay `pglite/scripts/exported-functions.sh`).
  * The build writes the list into `dist/`; `exported_functions.txt` at the repository root is the reference the
@@ -53,7 +53,7 @@ export function diffExports(
 }
 
 /**
- * The listed symbols a linked pglite.wasm does not export: Emscripten links a list only if every symbol in it is
+ * The listed symbols a linked postgres.wasm does not export: Emscripten links a list only if every symbol in it is
  * defined, by the wasm or by the JavaScript glue (`_setTempRet0`, `_exit`, …), so these are the glue's. `exports`
  * are the wasm's export names, without the underscore.
  */

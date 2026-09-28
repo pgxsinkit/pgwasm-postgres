@@ -11,11 +11,15 @@ Add an "emscripten" port and the build hooks the build scripts
   src/makefiles/Makefile.emscripten define the port: unnamed POSIX
   semaphores, poll-based waits, fdatasync as the default WAL sync
   method, no inlining, and unversioned shared libraries.
-- src/backend/Makefile links the backend as pglite, with
-  POSTGRES_PGLITE_FLAGS (which carry the export list the build script
-  computes from the modules it ships), and installs
-  pglite.wasm/.js/.data; src/Makefile.shlib links shared libraries with
-  the compiler and without versioned names.
+- src/backend/Makefile's pglite target links the backend the host
+  embeds with POSTGRES_PGLITE_FLAGS (which carry the export list the
+  build script computes from the modules it ships), as
+  pgwasm/postgres.js, .wasm and .data: the glue names its wasm and its
+  file package after them, and the subdirectory keeps them apart from
+  the postgres target's own postgres.js and postgres.wasm.
+  install-pglite installs the three into pgwasm/ of the install prefix.
+  src/Makefile.shlib links shared libraries with the compiler and
+  without versioned names.
 - The initdb, pg_config, pg_ctl and pg_dump Makefiles install their
   .wasm outputs; pg_config and pg_ctl are wrapped by
   pglite/scripts/run_pg_cmd.mjs so other tools can run them.
@@ -32,7 +36,7 @@ Derived from electric-sql/postgres-pglite b133782cd759f08b3aeb263b80a963b39c7b7a
  configure                         |  2 +-
  contrib/Makefile                  |  2 ++
  src/Makefile.shlib                | 14 ++++++++++++++
- src/backend/Makefile              | 20 ++++++++++++++++++++
+ src/backend/Makefile              | 24 ++++++++++++++++++++++++
  src/bin/initdb/Makefile           |  9 +++++++++
  src/bin/pg_config/Makefile        | 21 +++++++++++++++++++++
  src/bin/pg_ctl/Makefile           | 11 +++++++++++
@@ -41,7 +45,7 @@ Derived from electric-sql/postgres-pglite b133782cd759f08b3aeb263b80a963b39c7b7a
  src/makefiles/Makefile.emscripten |  8 ++++++++
  src/template/emscripten           | 13 +++++++++++++
  src/timezone/Makefile             |  7 +++++++
- 13 files changed, 143 insertions(+), 1 deletion(-)
+ 13 files changed, 147 insertions(+), 1 deletion(-)
  create mode 100644 src/include/port/emscripten.h
  create mode 100644 src/makefiles/Makefile.emscripten
  create mode 100644 src/template/emscripten
@@ -117,7 +121,7 @@ index 3825af5b2287271fc5e3953f73879715d583fa6b..b282ced5e87eab2c7206d48692c2964b
  ##
  ## BUILD
 diff --git a/src/backend/Makefile b/src/backend/Makefile
-index c0be9410383208c85e91d1f977e45f7fba2cd6d4..ca30af5c2ee9e0d6ac5dd18654b314dd6d4fa192 100644
+index c0be9410383208c85e91d1f977e45f7fba2cd6d4..709450cc08fbb658376bc0534ecdcfe2c4f13237 100644
 --- a/src/backend/Makefile
 +++ b/src/backend/Makefile
 @@ -61,6 +61,7 @@ override LDFLAGS := $(LDFLAGS) $(LDFLAGS_EX) $(LDFLAGS_EX_BE)
@@ -128,7 +132,7 @@ index c0be9410383208c85e91d1f977e45f7fba2cd6d4..ca30af5c2ee9e0d6ac5dd18654b314dd
  ifneq ($(PORTNAME), cygwin)
  ifneq ($(PORTNAME), win32)
  
-@@ -69,6 +70,17 @@ postgres: $(OBJS)
+@@ -69,6 +70,20 @@ postgres: $(OBJS)
  
  endif
  endif
@@ -139,22 +143,26 @@ index c0be9410383208c85e91d1f977e45f7fba2cd6d4..ca30af5c2ee9e0d6ac5dd18654b314dd
 +postgres: $(OBJS)
 +	$(CC) $(CFLAGS) $(call expand_subsys,$^) $(LDFLAGS) $(LIBS) -o $@$(X)
 +
++# The backend the host embeds: postgres.js, postgres.wasm and postgres.data, linked into pgwasm/ so that they
++# stay apart from the postgres target's postgres.js and postgres.wasm.
 +pglite: $(OBJS)
-+	$(CC) $(CFLAGS) $(call expand_subsys,$^) $(LDFLAGS) $(LIBS) $(POSTGRES_PGLITE_FLAGS) -o $@$(X)
++	$(MKDIR_P) pgwasm
++	$(CC) $(CFLAGS) $(call expand_subsys,$^) $(LDFLAGS) $(LIBS) $(POSTGRES_PGLITE_FLAGS) -o pgwasm/postgres$(X)
 +
 +endif
  
  ifeq ($(PORTNAME), cygwin)
  
-@@ -214,6 +226,14 @@ ifeq ($(MAKE_EXPORTS), true)
+@@ -214,6 +229,15 @@ ifeq ($(MAKE_EXPORTS), true)
  	$(MKDIR_P) '$(DESTDIR)$(pgxsdir)/$(MKLDEXPORT_DIR)'
  endif
  
 +ifeq ($(PORTNAME), emscripten)
 +install-pglite:
-+	$(INSTALL_PROGRAM) pglite.wasm '$(DESTDIR)$(bindir)/pglite.wasm'
-+	$(INSTALL_PROGRAM) pglite.js '$(DESTDIR)$(bindir)/pglite.js'
-+	$(INSTALL_PROGRAM) pglite.data '$(DESTDIR)$(bindir)/pglite.data'
++	$(MKDIR_P) '$(DESTDIR)$(prefix)/pgwasm'
++	$(INSTALL_PROGRAM) pgwasm/postgres.wasm '$(DESTDIR)$(prefix)/pgwasm/postgres.wasm'
++	$(INSTALL_PROGRAM) pgwasm/postgres.js '$(DESTDIR)$(prefix)/pgwasm/postgres.js'
++	$(INSTALL_PROGRAM) pgwasm/postgres.data '$(DESTDIR)$(prefix)/pgwasm/postgres.data'
 +endif
 +
 +.PHONY: install-pglite

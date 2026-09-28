@@ -161,7 +161,7 @@ export function deterministicHost(sourceDateEpoch: number): DeterministicHost {
       };
     },
     /**
-     * The memory the replaced imports write into is the one the module imports (pglite.js, built with
+     * The memory the replaced imports write into is the one the module imports (postgres.js, built with
      * IMPORTED_MEMORY) or, failing that, the one it exports: since Emscripten 4.0.19 a main module (initdb.js) is
      * not relocatable and defines its own. Neither import is called before the instance exists.
      */

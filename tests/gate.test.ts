@@ -29,7 +29,7 @@ import { Fixtures, gateManifest, thrown, write } from "./helpers.ts";
 const fixtures = new Fixtures();
 afterEach(() => fixtures.cleanup());
 
-const NAMES = ["pglite.wasm", "pglite.data", "amcheck.tar.gz", "exported_functions.txt", "prepopulated.tar.gz"];
+const NAMES = ["postgres.wasm", "postgres.data", "amcheck.tar.gz", "exported_functions.txt", "prepopulated.tar.gz"];
 
 /** A gate directory as `bun run gate` writes it. */
 function gateFixture(): { dir: string; manifest: GateManifest } {
@@ -47,8 +47,8 @@ describe("the gate directory", () => {
     expect(manifest.files.map((file) => file.name)).toEqual([
       "amcheck.tar.gz",
       "exported_functions.txt",
-      "pglite.data",
-      "pglite.wasm",
+      "postgres.data",
+      "postgres.wasm",
       "prepopulated.tar.gz",
     ]);
     expect(manifest.files[0]).toEqual({
@@ -67,15 +67,15 @@ describe("the gate directory", () => {
 
   test("verification finds a changed, missing or extra file, a subdirectory and a stale SHA256SUMS", () => {
     const { dir, manifest } = gateFixture();
-    writeFileSync(join(dir, "pglite.wasm"), "tampered\n");
-    rmSync(join(dir, "pglite.data"));
+    writeFileSync(join(dir, "postgres.wasm"), "tampered\n");
+    rmSync(join(dir, "postgres.data"));
     write(join(dir, "extra.txt"), "extra\n");
     mkdirSync(join(dir, "sub"));
     const problems = verifyGateDir(dir, manifest);
-    expect(problems).toContain("pglite.data is missing");
+    expect(problems).toContain("postgres.data is missing");
     expect(problems).toContain("extra.txt is not in the manifest");
     expect(problems).toContain("sub is not a file");
-    expect(problems.find((line) => line.startsWith("pglite.wasm is 9 bytes"))).toBeDefined();
+    expect(problems.find((line) => line.startsWith("postgres.wasm is 9 bytes"))).toBeDefined();
 
     const clean = gateFixture();
     writeFileSync(join(clean.dir, SUMS_FILE), "");
@@ -128,7 +128,7 @@ describe("comparing gate manifests", () => {
     const summary = gateSummary({ ...manifest, exports: { symbols: 1121, added: ["_a"], removed: [] } });
     expect(summary).toContain("### Engine gate passed: pgwasm-postgres 18.3.0 at `111111111111`");
     expect(summary).toContain(
-      `| \`pglite.wasm\` | 12 | \`${manifest.files.find((file) => file.name === "pglite.wasm")?.sha256}\` |`,
+      `| \`postgres.wasm\` | 14 | \`${manifest.files.find((file) => file.name === "postgres.wasm")?.sha256}\` |`,
     );
     expect(summary).toContain(
       "dataFormat 1: pg_control_version 1800, catalog_version_no 202506291, WAL page magic 0xD118",

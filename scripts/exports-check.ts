@@ -1,11 +1,11 @@
 /**
  * bun run exports:check [--artefacts <dir>] [--record]
  *
- * The engine gate's export-list diff (ADR-0001 decision 6): the export list a build linked pglite.wasm with
+ * The engine gate's export-list diff (ADR-0001 decision 6): the export list a build linked postgres.wasm with
  * (`exported_functions.txt` in its `dist/`) against the reference, `exported_functions.txt` at the repository
  * root. It fails when the build's list lacks a core symbol (one of `overlay/pglite/static/included.pglite.exports`,
  * what the host calls); symbols added or removed otherwise (a shipped module's imports changed) are reported. It
- * also lists the symbols the JavaScript glue provides rather than pglite.wasm.
+ * also lists the symbols the JavaScript glue provides rather than postgres.wasm.
  *
  * --record  write the build's list as the reference (after a deliberate change, reviewed in the diff).
  *
@@ -68,7 +68,7 @@ runCli(() => {
 
   // Emscripten refuses to link a list naming a symbol the link does not define, unless the JavaScript glue
   // provides it; those are listed here, for the record.
-  const wasm = locate(dir, "bin", "pglite.wasm");
+  const wasm = locate(dir, "pgwasm", "postgres.wasm");
   const exports = WebAssembly.Module.exports(new WebAssembly.Module(readFileSync(wasm))).map((entry) => entry.name);
   const glue = notExported(build, exports);
   if (glue.length > 0)

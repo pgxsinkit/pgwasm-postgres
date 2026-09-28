@@ -428,13 +428,13 @@ function findings(overrides: Partial<GateFindings> = {}): GateFindings {
       entries: 998,
       bytes: 4_400_300,
       recorded: { entries: 998, bytes: 4_400_200 },
-      artefactsChanged: ["pglite.wasm", "pglite.data"],
+      artefactsChanged: ["postgres.wasm", "postgres.data"],
     },
     sizes: {
       previous: "18.3.0",
       rows: [
-        { name: "pglite.wasm", before: 10_061_242, after: 10_070_000 },
-        { name: "pglite.js", before: 380_679, after: 380_679 },
+        { name: "postgres.wasm", before: 10_061_242, after: 10_070_000 },
+        { name: "postgres.js", before: 380_679, after: 380_679 },
       ],
     },
     ...overrides,
@@ -505,9 +505,9 @@ describe("the bump report", () => {
     expect(report).toContain(
       "<summary><code>json</code>: its diff against the recorded one (- recorded, + this run)</summary>",
     );
-    expect(report).toContain("| `pglite.wasm` | 10,061,242 | 10,070,000 | +8,758 (+0.09%) |");
-    expect(report).toContain("| `pglite.js` | 380,679 | 380,679 | 0 |");
-    expect(report).toContain("The record is of other artefacts (`pglite.wasm`, `pglite.data`)");
+    expect(report).toContain("| `postgres.wasm` | 10,061,242 | 10,070,000 | +8,758 (+0.09%) |");
+    expect(report).toContain("| `postgres.js` | 380,679 | 380,679 | 0 |");
+    expect(report).toContain("The record is of other artefacts (`postgres.wasm`, `postgres.data`)");
   });
 
   test("a changed tuple, a missing core symbol or a failed build stops the bump", () => {

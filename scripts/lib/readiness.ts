@@ -114,8 +114,8 @@ export const BUILD_STEPS: Readonly<Record<number, { readonly short: string; read
   31: { short: "contrib", step: "the contrib modules' archives (`emmake make -C contrib/`)" },
   41: { short: "modules", step: "unpacking the shipped modules" },
   42: { short: "export list", step: "the export list (`pglite/scripts/exported-functions.sh`)" },
-  51: { short: "link", step: "linking pglite (`emmake make -C src/backend/ pglite`)" },
-  52: { short: "install-pglite", step: "installing pglite (`emmake make -C src/backend/ install-pglite`)" },
+  51: { short: "link", step: "linking the backend as postgres.js (`emmake make -C src/backend/ pglite`)" },
+  52: { short: "install-pglite", step: "installing the backend (`emmake make -C src/backend/ install-pglite`)" },
 };
 
 const ERROR_LINE = /(?:^|\s)(?:fatal )?error: |\*\*\* .*Error \d+/;

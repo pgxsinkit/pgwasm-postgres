@@ -6,7 +6,7 @@
  * the wire protocol: `SELECT version()` (which must name the build's release: its manifest's version, or any
  * `pgwasm-postgres N.N.N` without one), a DDL/DML round trip with an error in the middle of it,
  * `CREATE EXTENSION amcheck` with `bt_index_check` on catalog indexes, a `LOAD` of every shared module the build
- * ships (the core modules in pglite.data's lib/postgresql, and the extension archives'), encoding conversions:
+ * ships (the core modules in postgres.data's lib/postgresql, and the extension archives'), encoding conversions:
  * every default conversion once, and non-ASCII text through several, the stack-leak check (4,000 failing
  * statements on the session each report their own error, then a normal query runs, and the wasm's shadow stack
  * pointer is where it was), and last pg_dump (pg_dump.js and .wasm) of the round trip's table, on the session as
@@ -160,7 +160,7 @@ await runCliAsync(async () => {
       `driver:smoke: amcheck ${amcheck}: bt_index_check(…, heapallindexed) clean on ${indexes.join(", ")} and smoke_pkey`,
     );
 
-    // Every shared module the build ships: a module whose import pglite.wasm does not export fails to load
+    // Every shared module the build ships: a module whose import postgres.wasm does not export fails to load
     // (a data symbol) or throws out of the wasm when the function is called.
     const FS = postgres.module.FS;
     const modules = FS.readdir(`${PG_ROOT}/lib/postgresql`)

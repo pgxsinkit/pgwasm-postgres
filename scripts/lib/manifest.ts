@@ -17,12 +17,13 @@ export const MANIFEST_FILE = "manifest.json";
 
 /**
  * The release artefacts, relative to `dist/`, besides the extension archives (every `extensions/*.tar.gz`):
- * the backend, initdb and pg_dump, and the export list pglite.wasm was linked with.
+ * the backend (in `pgwasm/`, apart from the build tree's own `bin/postgres.js`), initdb and pg_dump, and the
+ * export list postgres.wasm was linked with.
  */
 export const RELEASE_FILES = [
-  "bin/pglite.wasm",
-  "bin/pglite.data",
-  "bin/pglite.js",
+  "pgwasm/postgres.wasm",
+  "pgwasm/postgres.data",
+  "pgwasm/postgres.js",
   "bin/initdb.wasm",
   "bin/initdb.js",
   "bin/pg_dump.wasm",

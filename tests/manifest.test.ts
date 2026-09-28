@@ -24,6 +24,8 @@ function distFixture(): { dir: string; dist: string; manifest: BuildManifest } {
   const dist = join(dir, "dist");
   for (const path of RELEASE_FILES) write(join(dist, path), `${path}\n`);
   write(join(dist, "bin", "psql.js"), "not a release file\n");
+  // The build tree's own postgres target, installed by `make install`: not the backend's glue.
+  write(join(dist, "bin", "postgres.js"), "not a release file either\n");
   const staging = join(dir, "staging");
   write(join(staging, "lib", "postgresql", "ext.so"), "so\n", 0o755);
   mkdirSync(join(dist, "extensions"));
@@ -65,10 +67,10 @@ describe("the build manifest", () => {
   test("lists the release files and the extension archives, and round-trips through its JSON", () => {
     const { dir, dist, manifest } = distFixture();
     expect(artefactPaths(dist)).toEqual([...RELEASE_FILES, "extensions/ext.tar.gz"].sort());
-    expect(manifest.artefacts.find((artefact) => artefact.path === "bin/pglite.wasm")).toEqual({
-      path: "bin/pglite.wasm",
-      bytes: 16,
-      sha256: new Bun.CryptoHasher("sha256").update("bin/pglite.wasm\n").digest("hex"),
+    expect(manifest.artefacts.find((artefact) => artefact.path === "pgwasm/postgres.wasm")).toEqual({
+      path: "pgwasm/postgres.wasm",
+      bytes: 21,
+      sha256: new Bun.CryptoHasher("sha256").update("pgwasm/postgres.wasm\n").digest("hex"),
     });
     const file = join(dist, MANIFEST_FILE);
     writeFileSync(file, formatManifest(manifest));
@@ -87,14 +89,14 @@ describe("the build manifest", () => {
     expect(moved.ok).toBe(true);
     expect(moved.notes[0]).toContain("commit");
 
-    writeFileSync(join(dist, "bin", "pglite.js"), "changed\n");
+    writeFileSync(join(dist, "pgwasm", "postgres.js"), "changed\n");
     rmSync(join(dist, "exported_functions.txt"));
     write(join(dist, "exported_functions.txt"), "exported_functions.txt\n");
     write(join(dist, "extensions", "more.tar.gz"), "more\n");
     const changed = compareBuild(manifest, { ...manifest, version: "18.3.1", artefacts: digestArtefacts(dist) });
     expect(changed.ok).toBe(false);
     const status = new Map(changed.artefacts.map((artefact) => [artefact.path, artefact.status]));
-    expect(status.get("bin/pglite.js")).toBe("DIFFERENT");
+    expect(status.get("pgwasm/postgres.js")).toBe("DIFFERENT");
     expect(status.get("exported_functions.txt")).toBe("identical");
     expect(status.get("extensions/more.tar.gz")).toBe("UNEXPECTED");
     const report = formatComparison(changed).join("\n");

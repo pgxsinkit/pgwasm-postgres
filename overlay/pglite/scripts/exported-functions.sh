@@ -1,7 +1,7 @@
 #!/bin/bash
 # exported-functions.sh <included exports> <excluded names> <shared module>...
 #
-# Prints pglite.wasm's export list, the input of -sEXPORTED_FUNCTIONS: the symbols of <included exports> (one per
+# Prints postgres.wasm's export list, the input of -sEXPORTED_FUNCTIONS: the symbols of <included exports> (one per
 # line: what the host calls) and every symbol one of the shared modules imports from the main module, less the
 # names of <excluded names>, sorted, each with the leading underscore Emscripten expects.
 #
