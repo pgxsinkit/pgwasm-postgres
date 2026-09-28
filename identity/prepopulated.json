@@ -3,19 +3,19 @@
   "kind": "prepopulated",
   "sourceDateEpoch": 1790574668,
   "artefacts": {
-    "pglite.js": "dee4f2b5d2637075569b17ddd0bdefaec2402c5058aa035e29614c48200fdb22",
-    "pglite.wasm": "364518fb464b90d34a1e2e91617db3cbcb9b7d8446a5f2a12d53db8692cc4beb",
-    "pglite.data": "b5fe3e2bbd321399458a78757ec7644b28db7c869a90d3a3f7871ffe73959734",
+    "postgres.js": "1bfb5740bd836121c0444d058593bbc7fa0de625596214a8e4805414191a23b2",
+    "postgres.wasm": "f2d217be96e05dd01c02a6b62e89110d3658ac5be6032fe1d28effc9348b15ac",
+    "postgres.data": "012a2ed052fc0a05d50b9920afb5cb1692b3fbf9e09d486da61e4a59bb8f249a",
     "initdb.js": "a402bd734fda0faf36696b68324471f853d52bd248ab8219893a6344386f6fac",
-    "initdb.wasm": "4cfd4fa9e2b11dc8a0589dd0aaefa52ff99f66b808f34448b57f38a224f0ee5e"
+    "initdb.wasm": "0fdc9cb46e2efe6dc1fc957c47c0c7364022c98d327eb8072af3f7fb75237d3e"
   },
   "entries": 998,
   "tar": {
     "bytes": 40373248,
-    "sha256": "be9043336b23283314fe52ecb975e7fa1e95c681a67549407410ce4affdcedbc"
+    "sha256": "85f6d36366af1e28a0b3605f281b7889dce0f67a7fcc210a836492019c835166"
   },
   "asset": {
     "bytes": 4404076,
-    "sha256": "a6423903d5ed451af0f51107cc21ab690787e17b4f509a74d2824c85563a5869"
+    "sha256": "0bd7baf1359725c421ef1944533321b736ac09fdd1e56eda60dddca62057f626"
   }
 }
