@@ -45,7 +45,7 @@ consumes the releases. Read [README.md](README.md) and
   `pg_collation`/`pg_database` and can leave indexes on ICU collations silently wrong until reindexed. It is the
   one standing exception to the latest-versions rule; its reason stays next to the pin.
 - **The glue serves pgxsinkit's host.** `pgwasm-c` and `pgwasm-pg-dump` drive the Emscripten modules directly:
-  what they read (the module options, the runtime members in `EXPORTED_RUNTIME_METHODS`, `pglite.data` loaded
+  what they read (the module options, the runtime members in `EXPORTED_RUNTIME_METHODS`, `postgres.data` loaded
   before the first `preRun` callback) is kept across Emscripten releases in `build-pglite.sh`, and a change they
   must follow is reported with the release that makes it (README, Emscripten and the browser floor).
 - **TypeScript (Bun) for scripts**, strict, covered by `bun run typecheck`; bash only where TypeScript

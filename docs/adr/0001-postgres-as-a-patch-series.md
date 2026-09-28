@@ -201,7 +201,7 @@ Postgres's own regression suite has never run on the wasm build.
    symbol from `included.pglite.exports` fails, anything else is reported); pg_regress against a baseline.
    The export-list diff is `bun run exports:check`: the build's list against `exported_functions.txt` at
    the repository root, rewritten only by `--record` after a deliberate change; it also lists the symbols
-   the JavaScript glue provides rather than `pglite.wasm`. The contract gate (pgxsinkit's suites on the
+   the JavaScript glue provides rather than `postgres.wasm`. The contract gate (pgxsinkit's suites on the
    pin-bump PR) lives in pgxsinkit. A release that passes the engine gate and fails the contract gate is
    superseded by a new revision, never retracted.
    The pg_regress part is `bun run regress`:
@@ -549,6 +549,35 @@ Postgres's own regression suite has never run on the wasm build.
      (pgwasm-postgres 18.6.1) on wasm32-unknown-emscripten, compiled by emcc (Emscripten gcc/clang-like
      replacement + linker emulating GNU ld) 6.0.10 (d6c521a7f05449857c76bd99e396895583cf2083), 32-bit`. The
      compatibility tuple is dataFormat 1's.
+   - The names in `18.6.2` (2026-09-28). The C build is no longer PGlite: the move from ElectricSQL's PGlite as an
+     external resource to this repository's own build is one step, for which consumers' local stores are
+     refreshed, and `18.6.2` renames what a host sees. Stores made by earlier releases are not opened by the new
+     paths; that is this release's fact, and each later release decides its own store compatibility. Entries and
+     records before this one keep the names their releases had.
+     - The backend's artefacts are `postgres.js`, `postgres.wasm` and `postgres.data` (`pglite.*` up to `18.6.1`).
+       The `build-emscripten` patch's `pglite` target links with `-o pgwasm/postgres.js`, so the glue names its
+       wasm (`postgres.wasm`) and its file package (`postgres.data`, the name `getPreloadedPackage` receives)
+       itself; the file packager keeps the link's relative path as the package's internal key
+       (`pgwasm/postgres.data`). The link goes into `src/backend/pgwasm/`, and `install-pglite` installs the three
+       into `pgwasm/` of the prefix: the backend's own `postgres` target links `postgres.js` and `postgres.wasm` in
+       `src/backend/`, and `make install` puts that `postgres.js` into `bin/`, so neither is touched. The manifest,
+       the driver (which looks for the backend's files in `pgwasm/` or a flat directory, never in `bin/`), the gate
+       directory and the release follow.
+     - The filesystem root in the module is `/pgwasm` (`/pglite` up to `18.6.1`): configure's prefix
+       (`INSTALL_FOLDER`), so the path compiled into the binaries for `share/`, `lib/` and `pkglibdir`, the
+       destination of every `--preload-file`, `contrib/dist.mk`'s staging prefix, and the driver's `PG_ROOT`, from
+       which `PGDATA` (`/pgwasm/data`) follows. The two names have one length: `postgres.wasm`, `postgres.data`,
+       `initdb.wasm` and `pg_dump.wasm` differ from the build before the renames only where the prefix is (12, 2, 3
+       and 2 places), and keep their sizes; `postgres.js` is 33 bytes longer; `initdb.js`, `pg_dump.js` and the
+       extension archive's members are unchanged (the members are relative to the prefix). What still says
+       `/pglite` in `postgres.wasm` is the build tree, not the prefix: pg_config's recorded `configure` arguments
+       and `LDFLAGS_EX` name `/build/pglite/src/pglitec/pglitec.o` and `/build/pglite/scripts/doNotSetExitCode.js`
+       (the overlay's `pglite/` directory, under the source mount), and so does pgxs's `Makefile.global` in
+       `postgres.data`.
+     - The gate showed the export list unchanged, the tuple dataFormat 1's and pg_regress matching the baseline;
+       the prepopulated asset was re-recorded (decision 10). The internal names (`__PGLITE__`, the `pgl_*` symbols,
+       `pglitec.c`, `overlay/pglite/`, `build-pglite.sh` and its `PGLITE_*` variables, the `pglite` target) are
+       renamed in the Postgres 19 port ([docs/port-checklist.md](../port-checklist.md), decision 8).
 
 10. **This repository runs its artefacts with its own minimal driver,** Bun TypeScript written against
     the Emscripten glue, importing nothing from pgxsinkit (`scripts/lib/driver/`: MEMFS, initdb via
@@ -586,7 +615,9 @@ Postgres's own regression suite has never run on the wasm build.
     them; the two `pg_internal.init` files differ by raw pointers, and 1,119 of the WAL segment's 20,337 records
     only in bytes the backend never initialises (SharedInvalidationMessage padding, and struct and alignment
     padding in multi-insert, prune-freeze and B-tree new-root records) and in their CRCs. The new leftovers
-    compress a little worse: the asset is 4,244 bytes larger at the same epoch.
+    compress a little worse: the asset is 4,244 bytes larger at the same epoch. Regenerated for `18.6.2`'s renames
+    (2026-09-28) at the record's epoch: 997 of the 998 entries are byte-identical to the previous record's asset;
+    `postmaster.pid` names the data directory, `/pgwasm/data` instead of `/pglite/data`. The asset keeps its size.
 
 11. **Browser floor: Safari/iOS 18.4, Chrome 137, Firefox 131.** 18.4 is where Safari gets standard
     wasm exceptions (`exnref`), which give wasm-native setjmp/longjmp and `PG_TRY` without legacy
@@ -664,6 +695,10 @@ Postgres's own regression suite has never run on the wasm build.
        records: the prepopulated asset re-recorded at its epoch (only the sha256s of `pglite.wasm` and of
        `pglite.js`, whose export list changed order, moved); the export list and the pg_regress baseline unchanged.
        Two gates from clean at the last commit gave identical manifests.
+    9. The user-facing names as `18.6.2` (done 2026-09-28): the artefacts `postgres.{js,wasm,data}` and the root
+       `/pgwasm` (decision 9), and the port checklist, which the poll renders into the readiness issue (decision 8).
+       The records: the prepopulated asset re-recorded; the export list and the pg_regress baseline unchanged. Two
+       gates from clean at the last commit gave identical manifests.
 
 ## Considered options
 

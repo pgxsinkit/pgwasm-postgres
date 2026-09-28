@@ -38,6 +38,12 @@ issue through `bun run readiness`. On `REL_19_BETA4` three of the five patches c
 `src/backend/Makefile`, `0003` in `backend_startup.c`, `0005` in `postgres.c`), so nothing is built yet. See [The
 weekly poll and the next major](#the-weekly-poll-and-the-next-major).
 
+The C build is no longer PGlite (2026-09-28), and `18.6.2` renames what its users see: the backend's artefacts are
+`postgres.js`, `postgres.wasm` and `postgres.data` (`pglite.*` up to `18.6.1`), and the filesystem root in the module,
+the install prefix compiled into the binaries, is `/pgwasm` (`/pglite` up to `18.6.1`). Stores made by earlier releases
+are not opened by the new paths. The internal names (`__PGLITE__`, the `pgl_*` symbols, `build-pglite.sh`,
+`overlay/pglite/`) are renamed in the Postgres 19 port, on [its checklist](docs/port-checklist.md).
+
 ## Layout
 
 | Path                      | What                                                                                           |
@@ -45,7 +51,7 @@ weekly poll and the next major](#the-weekly-poll-and-the-next-major).
 | `upstream.json`           | The pin: upstream repository, tag, and the commit the tag must resolve to                      |
 | `patches/`                | The series: `git format-patch` output, applied in order with `git am --3way`                   |
 | `overlay/`                | Files copied into the tree verbatim, mirroring tree paths; never patched                       |
-| `exported_functions.txt`  | The reference export list of `pglite.wasm`, which `exports:check` diffs a build's against      |
+| `exported_functions.txt`  | The reference export list of `postgres.wasm`, which `exports:check` diffs a build's against    |
 | `data-format.json`        | The declared `dataFormat` and its compatibility tuple, which `data-format:check` enforces      |
 | `identity/`               | The prepopulated asset's record, which `prepopulated --check` reproduces                       |
 | `regress/`                | The pg_regress baseline: every test's result, the failing tests' diffs, why each group fails   |
@@ -54,6 +60,7 @@ weekly poll and the next major](#the-weekly-poll-and-the-next-major).
 | `.github/workflows/`      | CI: `validate:full`, the builder image's publication, the engine gate, the release             |
 | `scripts/`                | The Bun scripts below                                                                          |
 | `docs/adr/`               | Decisions                                                                                      |
+| `docs/port-checklist.md`  | What adopting the next Postgres major takes; the readiness issue carries it                    |
 
 The source tree is the pinned tag, with the patches applied as commits and the overlay copied on top.
 The overlay only adds files: an upstream file changes through a patch, and no patch touches an overlay
@@ -153,13 +160,15 @@ bun run exports:check [--record]          # diff the build's export list against
   reproducibly from any checkout: the source mounted at `/build`, the candidate version of HEAD (derived
   from the tags, see [Versions and releases](#versions-and-releases)) as `PGWASM_POSTGRES_VERSION`,
   `SOURCE_DATE_EPOCH` = the commit time of HEAD (or the environment's), `LC_ALL=C`, as root with umask
-  022, under the same resource caps. It builds the core and the contrib modules of `build-pglite.sh`'s
-  `PGLITE_CONTRIB` (amcheck), each packaged as a deterministic archive (members sorted, mtimes at
-  `SOURCE_DATE_EPOCH`, owner root:0), and links `pglite.wasm` exporting `pglite/static/included.pglite.exports`
-  plus every symbol a shipped module imports (the overlay's `pglite/scripts/exported-functions.sh`). The
-  artefacts land in `.cache/build/postgres-pglite/dist/` with `manifest.json` next to them: the version,
-  commit, tree, epoch, builder image, the compatibility tuple of a fresh initdb and its `dataFormat`, and
-  every release artefact's bytes and sha256. The log goes to `.cache/build/build.log`. `--debug` makes a
+  022, under the same resource caps, with `dist/` mounted at `/pgwasm`, the install prefix. It builds the core and
+  the contrib modules of `build-pglite.sh`'s `PGLITE_CONTRIB` (amcheck), each packaged as a deterministic archive
+  (members sorted, mtimes at `SOURCE_DATE_EPOCH`, owner root:0), and links the backend as `postgres.js`,
+  `postgres.wasm` and `postgres.data`, exporting `pglite/static/included.pglite.exports` plus every symbol a shipped
+  module imports (the overlay's `pglite/scripts/exported-functions.sh`). The artefacts land in
+  `.cache/build/postgres-pglite/dist/` (the backend's in `pgwasm/`, apart from the build tree's own `bin/postgres.js`;
+  initdb's and pg_dump's in `bin/`; the extension archives in `extensions/`) with `manifest.json` next to them:
+  the version, commit, tree, epoch, builder image, the compatibility tuple of a fresh initdb and its `dataFormat`,
+  and every release artefact's bytes and sha256. The log goes to `.cache/build/build.log`. `--debug` makes a
   debug build whose debug info points at the materialised source on the host (`-ffile-prefix-map`); a
   release build never sees the host path. `--image` builds in another image of podman's local storage (the
   published one, by digest); the manifest records the reference and its id. It refuses to start without
@@ -186,6 +195,8 @@ scripts.
 `pglite.wasm` exports 1,144 symbols instead of 0.5.8's 2,093 (the export list: 1,121 instead of 2,064), and
 `pglite.js` loses a wrapper for each dropped one; `initdb` and `pg_dump` are byte-identical to 0.5.8's.
 
+The tables and records name the files as each release did: `18.6.2` renamed `pglite.*` to `postgres.*`.
+
 ## Driving the artefacts
 
 Requirements: a build (`bun run build`, or any directory holding the artefacts); no containers.
@@ -196,7 +207,7 @@ bun run prepopulated [--check]         # make the prepopulated data directory; -
 bun run data-format:check              # the data-format guard: the build's tuple against data-format.json
 ```
 
-The driver (`scripts/lib/driver/`) runs a build's `pglite.js`/`pglite.wasm`/`pglite.data` and
+The driver (`scripts/lib/driver/`) runs a build's `postgres.js`/`postgres.wasm`/`postgres.data` and
 `initdb.js`/`initdb.wasm` directly against their Emscripten glue, with nothing from pgxsinkit: initdb into
 MEMFS (its own module, whose `system()`/`popen()` calls run the backend on a scratch instance), a
 single-user start on a data directory, a byte channel for the wire protocol (`exchange(bytes) → bytes`, or
@@ -205,13 +216,13 @@ installing an extension archive, pg_dump (`pg_dump.js`/`.wasm`) on a session, an
 it restores the wasm's shadow stack pointer, which the error's unwind leaves where the deepest abandoned frame
 put it (about 1.2 kB lost per ERROR otherwise, until `max_stack_depth` refuses everything); an exit (a FATAL)
 ends the session. It takes the
-artefact directory as a build's `dist/` (`bin/`, `extensions/`) or a flat directory of the same files.
+artefact directory as a build's `dist/` (`pgwasm/`, `bin/`, `extensions/`) or a flat directory of the same files.
 
 - **`driver:smoke [--artefacts <dir>] [--from <archive>]`** runs initdb (or unpacks a data directory
   archive), boots, and over the wire checks that `SELECT version()` names the build's release (its
   manifest's version), a DDL/DML round trip that survives a unique violation, `CREATE EXTENSION amcheck`
   with `bt_index_check` on catalog indexes, a `LOAD` of every shared module the build ships (the 28 core
-  modules in `pglite.data`'s `lib/postgresql` and the extension archives'), every default encoding
+  modules in `postgres.data`'s `lib/postgresql` and the extension archives'), every default encoding
   conversion once, non-ASCII round trips through 17 encodings, and dict_snowball's stemming. Then the
   stack-leak check: 4,000 failing statements on the session must each report their own error, a normal query
   must run after them, and the shadow stack pointer must be where it was. It guards the restore after an
@@ -301,7 +312,7 @@ the full reasons):
 | Group                     | Tests | Why                                                                                                        |
 | ------------------------- | ----- | ---------------------------------------------------------------------------------------------------------- |
 | `session-authorization`   | 21    | `RESET SESSION AUTHORIZATION` does nothing in single-user mode; the test runs on as the role               |
-| `regress-library`         | 18    | The tests' C functions: the tree's `regress.so` imports symbols `pglite.wasm` does not export              |
+| `regress-library`         | 18    | The tests' C functions: the tree's `regress.so` imports symbols `postgres.wasm` does not export            |
 | `single-process`          | 3     | No checkpointer, no background or parallel workers                                                         |
 | `session-persistence`     | 3     | `\c` gets the same backend back: login triggers, `temp_buffers`, loaded libraries                          |
 | `extended-protocol-ready` | 2     | An extended-query error sends an early ReadyForQuery, which desynchronises psql (unstable)                 |
@@ -364,17 +375,17 @@ bun run release:publish <tag> --gated <dir> [--dry-run]     # identical manifest
 
 A release, and the gate directory it is made from, holds:
 
-| File                                      | What                                                                                       |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `pglite.wasm`, `pglite.data`, `pglite.js` | The backend, its filesystem bundle and its Emscripten glue                                 |
-| `initdb.wasm`, `initdb.js`                | initdb                                                                                     |
-| `pg_dump.wasm`, `pg_dump.js`              | pg_dump                                                                                    |
-| `amcheck.tar.gz`                          | The amcheck extension                                                                      |
-| `prepopulated.tar.gz`                     | The prepopulated data directory, made at the commit's `SOURCE_DATE_EPOCH`                  |
-| `exported_functions.txt`                  | The export list `pglite.wasm` was linked with                                              |
-| `data-format.json`                        | The declared `dataFormat` and its compatibility tuple                                      |
-| `manifest.json`                           | Every other file's bytes and sha256, and what they were built from and what the gate found |
-| `SHA256SUMS`                              | `sha256sum -c` lines for every file but itself                                             |
+| File                                            | What                                                                                       |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `postgres.wasm`, `postgres.data`, `postgres.js` | The backend, its filesystem bundle and its Emscripten glue                                 |
+| `initdb.wasm`, `initdb.js`                      | initdb                                                                                     |
+| `pg_dump.wasm`, `pg_dump.js`                    | pg_dump                                                                                    |
+| `amcheck.tar.gz`                                | The amcheck extension                                                                      |
+| `prepopulated.tar.gz`                           | The prepopulated data directory, made at the commit's `SOURCE_DATE_EPOCH`                  |
+| `exported_functions.txt`                        | The export list `postgres.wasm` was linked with                                            |
+| `data-format.json`                              | The declared `dataFormat` and its compatibility tuple                                      |
+| `manifest.json`                                 | Every other file's bytes and sha256, and what they were built from and what the gate found |
+| `SHA256SUMS`                                    | `sha256sum -c` lines for every file but itself                                             |
 
 `manifest.json` records the version, the commit, its tree and its time (the `SOURCE_DATE_EPOCH`), the
 upstream tag and commit, the `dataFormat` and tuple, the builder image (the reference the build ran, its id,
@@ -572,23 +583,31 @@ each):
 | `-sFAKE_DYLIBS=1`, every link                 | 6.0.0 links a real shared library it finds for `-l` dynamically: libpq is also built as `libpq.so`, which initdb, pg_dump and libpqwalreceiver would load |
 | `-sDEFAULT_TO_CXX=1`, every link              | Since 6.0.6 only em++ links C++'s runtime, and ICU is C++                                                                                                 |
 | `-sUSE_PTHREADS=0`, every link                | Undoes the `-pthread` of libpq's links; deprecated, but nothing replaces its `=0`                                                                         |
-| `-Wl,--no-export-dynamic`, pglite             | The backend link's `-Wl,--export-dynamic` (configure's `LDFLAGS_EX_BE`) comes last since 4.0.20, and exported all 9,649 symbols of the link               |
+| `-Wl,--no-export-dynamic`, the backend        | The backend link's `-Wl,--export-dynamic` (configure's `LDFLAGS_EX_BE`) comes last since 4.0.20, and exported all 9,649 symbols of the link               |
 | `HEAP8`, `HEAPU8` exported, all three modules | 4.0.7 stopped exporting the heap views                                                                                                                    |
-| `wasmMemory` an incoming option, pglite       | 6.0.2 dropped it from the default `INCOMING_MODULE_JS_API`; the hosts pass their own memory                                                               |
+| `wasmMemory` an incoming option, the backend  | 6.0.2 dropped it from the default `INCOMING_MODULE_JS_API`; the hosts pass their own memory                                                               |
 | `--pre-js pglite/scripts/loadBundleFirst.js`  | 4.0.7 runs `Module.preRun` in the order listed, so the file packager's loader, appended last, ran after the host's callbacks; it runs first again         |
 | `-Dsocket=pgl_socket` (pglitec.c)             | 6.0's SOCKFS creates AF_INET sockets only, and libpq's default Unix socket failed (pg_dump could not connect); the descriptor is /dev/null's now          |
 
 **What a host can rely on** (pgxsinkit's `@pgxsinkit/pgwasm-c` and `@pgxsinkit/pgwasm-pg-dump`, and this
 repository's driver). The factories take `thisProgram`, `arguments`, `noExitRuntime`, `stdin`, `print`, `printErr`,
-`instantiateWasm(imports, done)` and `preRun`, and `pglite.js` also `wasmMemory` and `getPreloadedPackage(name,
-size)`. `pglite.data` is loaded before the first `preRun` callback, and the callbacks run in the order listed
-(3.1.74 ran them in reverse). The modules expose `FS` (with MEMFS and PROXYFS, and in `pglite.js` NODEFS and IDBFS,
+`instantiateWasm(imports, done)` and `preRun`, and `postgres.js` also `wasmMemory` and `getPreloadedPackage(name,
+size)`. `postgres.data` is loaded before the first `preRun` callback, and the callbacks run in the order listed
+(3.1.74 ran them in reverse). The modules expose `FS` (with MEMFS and PROXYFS, and in `postgres.js` NODEFS and IDBFS,
 whose stores keep their format), `ENV`, `HEAP8`, `HEAPU8`, `callMain`, `addFunction`, `removeFunction`,
-`UTF8ToString`, `stringToUTF8OnStack` and the exported functions. `pglite.wasm` imports its memory, while
+`UTF8ToString`, `stringToUTF8OnStack` and the exported functions. `postgres.wasm` imports its memory, while
 `initdb.wasm` and `pg_dump.wasm` now define and export their own (a main module is no longer relocatable, since
 4.0.19). An ERROR's intercepted siglongjmp still unwinds with `'unwind'`; a longjmp that escapes every setjmp throws
 an instance of the glue's `EmscriptenSjLj` class, where 3.1.74 threw a number. pg_dump's libpq connects over its
 default Unix socket as before, through `pgl_set_rw_cbs`.
+
+**What `18.6.2` renames for a host.** The backend's files are `postgres.js`, `postgres.wasm` and `postgres.data`
+(`pglite.*` up to `18.6.1`), and the glue names them itself: it fetches `postgres.wasm` (or asks `locateFile` for it),
+and `getPreloadedPackage` receives the name `postgres.data`. The filesystem root is `/pgwasm` (`/pglite` up to
+`18.6.1`): `bin/initdb`, `bin/postgres`, `share/postgresql`, `lib/postgresql`, `icu`, `locale-a`, `password`,
+`pgstdin` and `pgstdout` are under it, and a host's data directory (`/pgwasm/data`) and its storage mounts go there
+too. Stores made by earlier releases are not opened by the new paths. The `pgl_*` exports keep their names until the
+Postgres 19 port.
 
 The sizes against `18.6.0`:
 
@@ -651,7 +670,7 @@ release assets with a checksum manifest, not npm packages, made only by `release
 [The engine gate, CI and releases](#the-engine-gate-ci-and-releases)). History is linear: changes are rebased,
 never merged, and main is fast-forwarded from the command line.
 
-`pglite.wasm` embeds the version (`version()`), and `identity/prepopulated.json` names `pglite.wasm` by its
+`postgres.wasm` embeds the version (`version()`), and `identity/prepopulated.json` names `postgres.wasm` by its
 sha256, so a release tag moves every later commit's build to the next candidate and makes the record stale:
 after each release, the next commit on develop is `bun run prepopulated --record` on a build of develop (the
 gate fails at `prepopulated --check` until then). It is a record of the new label only; nothing else changed.
