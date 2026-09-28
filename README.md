@@ -512,9 +512,10 @@ and on demand (`dry_run`), from develop, with `--lock`.
   skips the bump.
 - **The next major's readiness**: its newest tag (betas, then release candidates, then releases:
   `REL_19_BETA4` today) gets `readiness`'s report as a comment marked `<!-- readiness:<tag> -->` on the open issue
-  "Postgres 19 readiness" (made when there is none), whose body is kept a table of every reported tag: apply,
-  build and pg_regress. A comment with the tag's marker skips the run; the table is still brought up to date. Never
-  a pull request, never a commit: a major is adopted through a `port-<major>` branch.
+  "Postgres 19 readiness" (made when there is none), whose body is kept a table of every reported tag (apply,
+  build and pg_regress) and, under it, the section "Port checklist": [docs/port-checklist.md](docs/port-checklist.md),
+  read each time the body is rendered. A comment with the tag's marker skips the run; the body is still brought up to
+  date. Never a pull request, never a commit: a major is adopted through a `port-<major>` branch.
 - `--dry-run` runs only what reads (`git ls-remote`, `gh … list`, `gh api` GETs) and prints every command that
   would write anything, locally or on GitHub. The bodies go to `.cache/poll/`, which `poll.yml` uploads as an
   artifact: a body over GitHub's limit (65,536 characters) is cut, with a note.

@@ -3,7 +3,8 @@
  * upstream-tags.ts): the newest newer release of the pinned major, which `bun run bump` moves the pin to on a branch
  * `bump/<tag>` from develop, opened as a pull request for review (or, when the bump could not commit, an issue); and
  * the newest tag of the next major, which `bun run readiness` reports as a comment on the one open "Postgres
- * <major> readiness" issue, whose body is a table of every reported tag. Everything it does is idempotent, so a
+ * <major> readiness" issue, whose body is a table of every reported tag and the port checklist (`docs/port-checklist.md`,
+ * read when the body is rendered). Everything it does is idempotent, so a
  * weekly run never duplicates anything: an existing `bump/<tag>` branch, or an open pull request or issue naming
  * the tag, skips the bump; a comment carrying `<!-- readiness:<tag> -->` skips the readiness run.
  *
@@ -216,8 +217,19 @@ export function readinessRows(comments: readonly Comment[]): ReadinessRow[] {
 
 const cell = (text: string): string => text.replaceAll("|", "\\|").replaceAll("\n", " ");
 
-/** The readiness issue's body: what it is, and a table of every reported tag. */
-export function readinessIssueBody(major: number, rows: readonly ReadinessRow[]): string {
+/** The port checklist (ADR-0001 decision 8), which the readiness issue's body carries under its table. */
+export const PORT_CHECKLIST = "docs/port-checklist.md";
+
+/** The body's "Port checklist" section: the checklist's text, less its title, under the section's heading. */
+export function portChecklistSection(checklist: string): string[] {
+  const lines = checklist.replaceAll("\r\n", "\n").trimEnd().split("\n");
+  const text = lines[0]?.startsWith("# ") ? lines.slice(1) : lines;
+  while (text[0]?.trim() === "") text.shift();
+  return ["## Port checklist", "", ...text];
+}
+
+/** The readiness issue's body: what it is, a table of every reported tag, and the port checklist's text. */
+export function readinessIssueBody(major: number, rows: readonly ReadinessRow[], checklist: string): string {
   const lines = [
     `The series' readiness for PostgreSQL ${major} (ADR-0001 decision 8). The weekly poll (\`poll.yml\`, \`bun run poll\`) runs \`bun run readiness\` on each new tag of PostgreSQL ${major}: it applies the series onto the tag in a scratch copy, builds it once it applies, and runs pg_regress against the pinned major's baseline once it builds. Each tag's report is a comment below; this table is kept from them. Nothing here is a pull request or a commit: a major is adopted deliberately, through a \`port-${major}\` branch rebased onto main.`,
     "",
@@ -234,7 +246,7 @@ export function readinessIssueBody(major: number, rows: readonly ReadinessRow[])
       ),
     );
   }
-  lines.push("");
+  lines.push("", ...portChecklistSection(checklist), "");
   return lines.join("\n");
 }
 
@@ -505,6 +517,13 @@ class Poll {
     ];
   }
 
+  /** The port checklist's text, read at each render, so that the body carries the checklist as committed. */
+  checklist(): string {
+    const path = join(this.context.layout.root, PORT_CHECKLIST);
+    if (!existsSync(path)) throw new PollError(`${PORT_CHECKLIST} is missing: the readiness issue's body carries it.`);
+    return readFileSync(path, "utf8");
+  }
+
   async readiness(tag: string, major: number, issues: readonly Issue[]): Promise<void> {
     const { github } = this.context;
     const repo = github.repository;
@@ -525,11 +544,11 @@ class Poll {
         "--title",
         title,
         "--body-file",
-        this.file(`readiness-${major}.body.md`, readinessIssueBody(major, [])),
+        this.file(`readiness-${major}.body.md`, readinessIssueBody(major, [], this.checklist())),
       ]);
       const match = /\/issues\/(\d+)/.exec(created ?? "");
       number = match?.[1] ?? "<the new issue>";
-      body = readinessIssueBody(major, []);
+      body = readinessIssueBody(major, [], this.checklist());
       if (created !== undefined && match === null)
         throw new PollError(`gh issue create printed no issue URL: ${created}`);
     } else {
@@ -585,7 +604,7 @@ class Poll {
       ]);
       return;
     }
-    const table = readinessIssueBody(major, readinessRows(comments));
+    const table = readinessIssueBody(major, readinessRows(comments), this.checklist());
     if (table === body) {
       this.log(`poll: readiness: issue #${number}'s table is up to date`);
       return;

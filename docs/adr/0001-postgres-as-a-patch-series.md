@@ -420,6 +420,10 @@ Postgres's own regression suite has never run on the wasm build.
    runs it, for a major and equally for our own flag changes (a wasm64 build turns on `FLOAT8_BYVAL`).
    pgxsinkit carries the declared `dataFormat` into the build's identity. How existing stores cross a
    `dataFormat` change is a pgwasm decision, still open; it blocks the first major, not the patch work.
+   The port's checklist is [`docs/port-checklist.md`](../port-checklist.md) (2026-09-28): the series on a
+   `port-<major>` branch, the rename of the internal PGlite names (`__PGLITE__`, the `pgl_*` symbols, `pglitec.c`,
+   `overlay/pglite/`, `build-pglite.sh`, the `pglite` target), ICU, the new `dataFormat`, the records, the release's
+   store compatibility and pgxsinkit's adoption. The poll renders it into the readiness issue, under the table.
 
 9. **Our own builder image, and every release reproducible.** The builder image is defined in
    `builder/` at the repository root (its `Containerfile`, the runner stage's package set, and the

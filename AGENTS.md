@@ -88,6 +88,9 @@ consumes the releases. Read [README.md](README.md) and
   whose instability the record missed, recorded with `--record` over enough runs to show it (8 found
   subscription's, 4 had not). The gate's bridge runs on a raised native stack (256 MiB); keep it raised.
 - Never commit PostgreSQL source, build outputs or the contents of `.cache/` or `work/`.
+- Renames of the internal PGlite names (`__PGLITE__`, the `pgl_*` symbols, `pglitec.c`, `overlay/pglite/`,
+  `build-pglite.sh` and its `PGLITE_*` variables, the `pglite` target) wait for the Postgres 19 port
+  ([docs/port-checklist.md](docs/port-checklist.md)).
 
 ## The bump
 

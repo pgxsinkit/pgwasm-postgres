@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import type { RunResult } from "../scripts/lib/git.ts";
-import { layoutFor, type Layout } from "../scripts/lib/layout.ts";
+import { layoutFor, repoRoot, type Layout } from "../scripts/lib/layout.ts";
 import {
   bounded,
   bumpIssue,
@@ -14,6 +14,8 @@ import {
   GitHub,
   mentionsTag,
   poll,
+  PORT_CHECKLIST,
+  portChecklistSection,
   readinessIssueBody,
   readinessMarker,
   readinessRows,
@@ -23,7 +25,7 @@ import {
   type Runner,
 } from "../scripts/lib/poll.ts";
 import { formatStatus, type ReadinessStatus } from "../scripts/lib/readiness.ts";
-import { Fixtures } from "./helpers.ts";
+import { Fixtures, write } from "./helpers.ts";
 
 const fixtures = new Fixtures();
 afterEach(() => fixtures.cleanup());
@@ -49,6 +51,10 @@ function reportOf(tag: string, apply: string): string {
 }
 
 const ok = (stdout = ""): RunResult => ({ exitCode: 0, stdout, stderr: "" });
+
+/** A port checklist as docs/port-checklist.md has it: a title, a paragraph and items. */
+const CHECKLIST =
+  "# Port checklist: the next Postgres major\n\nWhat it takes.\n\n- **Port the series** first.\n- **Records** last.\n";
 
 /** A GitHub repository and an upstream, as the poll's runner sees them; every command is recorded. */
 class World {
@@ -161,7 +167,9 @@ class World {
 }
 
 function world(): World {
-  return new World(layoutFor(fixtures.dir("poll")));
+  const layout = layoutFor(fixtures.dir("poll"));
+  write(join(layout.root, PORT_CHECKLIST), CHECKLIST);
+  return new World(layout);
 }
 
 describe("the poll's decisions", () => {
@@ -226,13 +234,44 @@ describe("the poll's decisions", () => {
       ["REL_19_RC1", "c4"],
       ["REL_19_BETA3", "c1"],
     ]);
-    const body = readinessIssueBody(19, rows);
+    const body = readinessIssueBody(19, rows, CHECKLIST);
     expect(body).toContain("a `port-19` branch rebased onto main");
     expect(body).toContain("| Tag | Series | Apply | Build | pg_regress | Report |");
     expect(body).toContain(
       "| `REL_19_RC1` | `cccccccccccc` (REL_18_6) | applies \\| 3-way | not run | not run | [comment](c4) |",
     );
-    expect(readinessIssueBody(19, [])).toContain("No tag reported yet.");
+    expect(readinessIssueBody(19, [], CHECKLIST)).toContain("No tag reported yet.");
+  });
+
+  test("the port checklist is a section of its own under the table, without the file's title", () => {
+    const rows = readinessRows([
+      { id: 1, url: "c1", body: `${readinessMarker("REL_19_BETA4")}\n${reportOf("REL_19_BETA4", "applies")}` },
+    ]);
+    const body = readinessIssueBody(19, rows, CHECKLIST);
+    expect(body.indexOf("| Tag | Series |")).toBeLessThan(body.indexOf("## Port checklist"));
+    expect(body).toEndWith(
+      "## Port checklist\n\nWhat it takes.\n\n- **Port the series** first.\n- **Records** last.\n",
+    );
+    expect(body).not.toContain("# Port checklist: the next Postgres major");
+    expect(readinessIssueBody(19, [], CHECKLIST)).toContain("No tag reported yet.\n\n## Port checklist\n");
+    expect(portChecklistSection("- one\r\n- two\r\n")).toEqual(["## Port checklist", "", "- one", "- two"]);
+  });
+
+  test("the committed checklist renders with every step of a port", () => {
+    const section = portChecklistSection(readFileSync(join(repoRoot, PORT_CHECKLIST), "utf8")).join("\n");
+    for (const step of [
+      "**Port the series**",
+      "**Rename the internal PGlite names**",
+      "**ICU**",
+      "**dataFormat**",
+      "**Records**",
+      "**Store compatibility**",
+      "**pgxsinkit**",
+    ]) {
+      expect(section).toContain(`- ${step}`);
+    }
+    expect(section).not.toMatch(/^# /m);
+    expect(section).not.toMatch(/\]\((?!https?:)/);
   });
 
   test("a body over GitHub's limit is cut at a line, its fence and details closed, with a note", () => {
@@ -383,9 +422,35 @@ describe("the poll", () => {
     expect(again.logs).toContain(`poll: readiness of REL_19_BETA4: already reported (${comment?.url})`);
   });
 
+  test("an issue whose body lacks the port checklist gets it on the next run, and nothing else is written", async () => {
+    const w = world();
+    const beta4 = `${readinessMarker("REL_19_BETA4")}\n${reportOf("REL_19_BETA4", "conflict in `0001`")}`;
+    w.comments.set(5, [{ id: 1, url: "c1", body: beta4 }]);
+    const table = readinessIssueBody(19, readinessRows(w.comments.get(5) ?? []), CHECKLIST);
+    const before = table.slice(0, table.indexOf("## Port checklist"));
+    w.issues = [{ number: 5, title: "Postgres 19 readiness", url: "u5", body: before }];
+    expect((await w.poll("REL_18_6", false)).failures).toEqual([]);
+    expect(w.writes()).toEqual([`gh issue edit 5 --repo ${REPO} --body-file .cache/poll/readiness-19.body.md`]);
+    expect(w.issues[0]?.body).toBe(table);
+    expect(w.issues[0]?.body).toContain("## Port checklist\n\nWhat it takes.");
+  });
+
+  test("a missing port checklist is a failure, and the body is left as it is", async () => {
+    const w = world();
+    rmSync(join(w.layout.root, PORT_CHECKLIST));
+    w.comments.set(5, [
+      { id: 1, url: "c1", body: `${readinessMarker("REL_19_BETA4")}\n${reportOf("REL_19_BETA4", "applies")}` },
+    ]);
+    w.issues = [{ number: 5, title: "Postgres 19 readiness", url: "u5", body: "stale" }];
+    expect((await w.poll("REL_18_6", false)).failures).toEqual([
+      "docs/port-checklist.md is missing: the readiness issue's body carries it.",
+    ]);
+    expect(w.writes()).toEqual([]);
+  });
+
   test("readiness that writes no report is a failure, and nothing is posted", async () => {
     const w = world();
-    w.issues = [{ number: 5, title: "Postgres 19 readiness", url: "u5", body: readinessIssueBody(19, []) }];
+    w.issues = [{ number: 5, title: "Postgres 19 readiness", url: "u5", body: readinessIssueBody(19, [], CHECKLIST) }];
     w.readiness = () => ({ exitCode: 1, stdout: "", stderr: "readiness: could not list the tags" });
     const result = await w.poll("REL_18_6", false);
     expect(result.failures).toEqual(["readiness of REL_19_BETA4: `bun run readiness` exited 1 without a report."]);
