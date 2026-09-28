@@ -159,6 +159,28 @@ Postgres's own regression suite has never run on the wasm build.
    step. Any residual difference is listed and justified in the patch's message, with pgxsinkit's suite
    as the backstop. The oracle is the current patch applied to whichever 18.x is pinned; 19 has none.
 
+   As built in step 8 (2026-09-28), the patch adds 302 lines and changes none, where the former form changed 1,357.
+   Before the handler, a `__PGLITE__` block ends `PostgresMain()` and opens `PostgresMainLongJmp()`, whose body is
+   the handler's block; at the loop's top, another defines `PostgresSendReadyForQueryIfNecessary()` and opens
+   `PostgresMainLoopOnce()`, whose body is the loop's (its `continue` becomes a `return`). The first is a copy of
+   the loop's step (1), as ElectricSQL's was: it lacks 18's connection-ready log and does not follow upstream's
+   changes to step (1). Without `__PGLITE__`, postgres.c preprocesses to upstream's tokens.
+   - The check is `bun run patches:tokens [--against <revision>]`: the series of a revision (default: the latest
+     release tag among HEAD's ancestors) against the working series, both applied onto their pinned tag, and
+     refused on two different tags. It never configures a tree: it takes the build's compile command from `make -n`
+     in the last build's configured tree (`.cache/build/postgres-pglite`), and runs it in the builder image with
+     each side's postgres.c mounted over the tree's and `-c -o postgres.o` replaced by the flags above. It compares
+     the token streams by top-level item, so that a function defined elsewhere reads as moved, and takes about
+     4 seconds.
+   - Against the former form on `REL_18_6` (`c818678`), two differences, both from the loop staying in place:
+     `PostgresMainLongJmp()` and `PostgresMain()` are defined in another order (`PostgresMain()` first, where
+     upstream has its text), and two prototypes let `PostgresMain()` call the functions defined after it. No
+     item's tokens changed. On `REL_19_BETA4` the patch applies cleanly, where the former form conflicted in 274
+     lines of postgres.c.
+   - The gate runs it after its build and reports, never fails: its summary says whether postgres.c's token stream
+     is the latest release's (when both pin one upstream tag) or lists where it differs, since a later deliberate
+     change to postgres.c is legitimate. It is neither a gate step nor in the manifest.
+
 5. **Release identity.** Tags are `<pg major>.<pg minor>.<revision>`, unprefixed (`18.3.0`, `18.3.1`,
    `18.6.0`), and are the only version input; nothing in the repository is hand-edited for a release.
    The `configure` label becomes `(pgwasm-postgres 18.6.0)`, so `SELECT version()` names the exact
@@ -633,7 +655,11 @@ Postgres's own regression suite has never run on the wasm build.
     7. The weekly poll and the readiness issue (done 2026-09-28): `bun run poll` and `poll.yml`, `bun run readiness`,
        and the first readiness report, `REL_19_BETA4` (decisions 7 and 8). Allowing Actions to open pull requests,
        and the schedule's start once main has `poll.yml`, are the maintainer's.
-    8. The `main-loop-unroll` rewrite with its token-identity proof, before any `port-19` work.
+    8. The `main-loop-unroll` rewrite with its token-identity proof, before any `port-19` work (done 2026-09-28):
+       patch 5 in its minimal-surface form, `bun run patches:tokens`, and its report in the gate (decision 4). The
+       records: the prepopulated asset re-recorded at its epoch (only the sha256s of `pglite.wasm` and of
+       `pglite.js`, whose export list changed order, moved); the export list and the pg_regress baseline unchanged.
+       Two gates from clean at the last commit gave identical manifests.
 
 ## Considered options
 

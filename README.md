@@ -69,6 +69,10 @@ The patches, one per topic:
 | `encoding-shim`          | pg_dump.c, pg_backup_archiver.c, fe-exec.c                                | libpgcommon's encoding functions in the statically linked tools                                                 |
 | `main-loop-unroll`       | postgres.c                                                                | PostgresMain's loop split into functions the host calls once per message exchange, plus the host's entry points |
 
+`main-loop-unroll` only adds lines: PostgresMain's loop body and its error handler stay where upstream has them,
+at upstream's indentation, and `__PGLITE__` blocks put the function boundaries around them, so that a new upstream
+release rebases with small conflicts (ADR-0001 decision 4). Without `__PGLITE__`, postgres.c is upstream's.
+
 ## Working on the series
 
 Requirements: git, [mise](https://mise.jdx.dev) (`mise install` installs the pinned Bun), and
@@ -78,6 +82,7 @@ Requirements: git, [mise](https://mise.jdx.dev) (`mise install` installs the pin
 bun run patches:check            # prove the series: apply, round-trip export
 bun run patches:work [<tag>]     # materialise work/<tag> with the series as commits
 bun run patches:export [<tag>]   # write work/<tag>'s commits back to patches/
+bun run patches:tokens [--against <revision>]   # postgres.c's preprocessed tokens against a revision's
 ```
 
 - **`patches:check`** fetches the pinned tag into `.cache/upstream.git` (a gitignored, shallow, bare
@@ -97,6 +102,17 @@ bun run patches:export [<tag>]   # write work/<tag>'s commits back to patches/
   files. The worktree must be clean and must be on the pinned tag; commits that touch an overlay path are
   refused. Output is deterministic: no commit ids, no git version, full blob ids, no rename detection,
   no `n/N` numbering, and none of your git config.
+- **`patches:tokens [--against <revision>] [--image <ref>] [--summary <file>]`** is ADR-0001 decision 4's
+  token-identity check: postgres.c as the series of `<revision>` (default: the latest release tag among HEAD's
+  ancestors) makes it, against postgres.c as the working series (`patches/` as it is) makes it. Both series are
+  applied onto their pinned tag in scratch worktrees of the cache; two series on different upstream tags are
+  refused. Each side is preprocessed in the builder image with the build's own compile command, taken from
+  `make -n` in the last build's configured tree (`.cache/build/postgres-pglite`: run `bun run build` first; it
+  never configures a tree of its own), with `-c -o postgres.o` replaced by
+  `-E -P -D__PGLITE__ -D__LINE__=0 -Wno-builtin-macro-redefined`, so that only the code is compared, not the
+  line numbers `ereport` records. The token streams are compared by top-level item: `identical`, or the items
+  that moved (the same tokens elsewhere), changed (each differing range in its context) or are on one side only.
+  It exits 0 whatever it finds, in about 4 seconds; the gate runs it after its build, report-only.
 
 To change a patch: `bun run patches:work`, then edit and commit in `work/REL_18_6` (`git commit --fixup`
 and `git rebase -i --autosquash REL_18_6` work as usual; a new topic is a new commit), then
@@ -326,8 +342,10 @@ bun run release:publish <tag> --gated <dir> [--dry-run]     # identical manifest
   `driver:smoke`, `exports:check`, `data-format:check`, `prepopulated` (at that epoch),
   `prepopulated --check` and `regress`, stopping at the first that fails, whose own message says why;
   `--keep-going` runs every step all the same (but after a failed build) and then fails on all that did, which is
-  what `bump` runs. Then it writes `.cache/gate/<commit>/`, which exists only for a commit whose gate passed: the
-  release. How each step ended goes to `.cache/gate/<commit>.steps.json`, passed or not. The builder
+  what `bump` runs. After the build it runs `patches:tokens`, report-only: the summary says whether postgres.c's
+  token stream is the latest release's, or where it differs, and the gate never fails on it. Then it writes
+  `.cache/gate/<commit>/`, which exists only for a commit whose gate passed: the release. How each step ended
+  goes to `.cache/gate/<commit>.steps.json`, passed or not. The builder
   image is the local one by default, or `--image`; `--lock` lets `builder/image.lock.json` decide, as CI does:
   the published image, pulled by digest, when the lock records `builder/`'s content published, and otherwise
   the image built from `builder/` in the job; `--published` (the release) accepts only the published image.
@@ -601,6 +619,7 @@ byte-identical, the timezone files among them.
 | `check`                   | typecheck + lint + test                                                                   |
 | `validate`                | format + check + `patches:check`: the pre-commit hook                                     |
 | `validate:full`           | The same, for now: what `ci.yml` runs on pushes to develop and main and on pull requests  |
+| `patches:tokens`          | postgres.c's preprocessed tokens against another revision's (in the gate, report-only)    |
 | `builder:image`           | Build the builder image from `builder/` and check its package set; `--push` publishes it  |
 | `builder:lock`            | Show the published image's lock against `builder/`; record a publication                  |
 | `build`                   | Build the materialised source in the builder image, with its manifest (in the gate)       |
