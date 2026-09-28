@@ -29,7 +29,7 @@ export const BUILD_CONTAINER = `${CONTAINER_PREFIX}build`;
 export const SOURCE_MOUNT = "/build";
 
 /** `build-pglite.sh`'s output folder (its `INSTALL_FOLDER` default), where the build's `dist/` is mounted. */
-export const OUTPUT_MOUNT = "/pglite";
+export const OUTPUT_MOUNT = "/pgwasm";
 
 /** Where `builder/bin/make` goes: ahead of `/usr/bin/make` on the image's PATH. */
 export const MAKE_MOUNT = "/usr/local/bin/make";

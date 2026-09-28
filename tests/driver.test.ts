@@ -85,8 +85,8 @@ describe("FrontendFramer", () => {
 
 describe("commandWords", () => {
   test("splits the command lines initdb hands to the host", () => {
-    expect(commandWords('"/pglite/bin/postgres" --boot -X 1048576 -F -c log_checkpoints=false')).toEqual([
-      "/pglite/bin/postgres",
+    expect(commandWords('"/pgwasm/bin/postgres" --boot -X 1048576 -F -c log_checkpoints=false')).toEqual([
+      "/pgwasm/bin/postgres",
       "--boot",
       "-X",
       "1048576",
@@ -95,9 +95,9 @@ describe("commandWords", () => {
       "log_checkpoints=false",
     ]);
     expect(
-      commandWords('"/pglite/bin/postgres" --single -F -O -j -c search_path=pg_catalog template1 >"/dev/null"'),
-    ).toEqual(["/pglite/bin/postgres", "--single", "-F", "-O", "-j", "-c", "search_path=pg_catalog", "template1"]);
-    expect(commandWords('"/pglite/bin/postgres" -V')).toEqual(["/pglite/bin/postgres", "-V"]);
+      commandWords('"/pgwasm/bin/postgres" --single -F -O -j -c search_path=pg_catalog template1 >"/dev/null"'),
+    ).toEqual(["/pgwasm/bin/postgres", "--single", "-F", "-O", "-j", "-c", "search_path=pg_catalog", "template1"]);
+    expect(commandWords('"/pgwasm/bin/postgres" -V')).toEqual(["/pgwasm/bin/postgres", "-V"]);
   });
 
   test("honours quoting and escapes, and stops at the first operator", () => {

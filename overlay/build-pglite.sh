@@ -17,7 +17,7 @@ export PGWASM_POSTGRES_VERSION SOURCE_DATE_EPOCH
 emcc --clear-cache
 
 # final output folder
-INSTALL_FOLDER=${INSTALL_FOLDER:-"/pglite"}
+INSTALL_FOLDER=${INSTALL_FOLDER:-"/pgwasm"}
 
 # The browser floor (ADR-0001 decision 11): Safari and iOS 18.4, Chrome 137, Firefox 131, the first releases with
 # standard wasm exceptions (exnref). Emscripten encodes Safari's version as MMmmVV. Bun runs the artefacts as `node`
@@ -177,20 +177,20 @@ rm -rf "$SHIPPED_MODULES"
 
 # Step 5: make and install pglite: the backend the host embeds, linked as pgwasm/postgres.js with postgres.wasm and
 # postgres.data (src/backend/Makefile's pglite target), and installed into $INSTALL_FOLDER/pgwasm
-PGROOT=/pglite
+PGROOT=/pgwasm
 # PG_IMPORTS_DIR=$PGROOT/imports
 PGPRELOAD="\
 --preload-file $(pwd)/pglite/static/PGPASSFILE@/home/postgres/.pgpass \
---preload-file $(pwd)/pglite/static/empty@/pglite/bin/initdb \
---preload-file $(pwd)/pglite/static/empty@/pglite/bin/pg_dump \
---preload-file $(pwd)/pglite/static/empty@/pglite/bin/postgres \
---preload-file $PGROOT/share/postgresql@/pglite/share/postgresql \
---preload-file $PGROOT/lib/postgresql@/pglite/lib/postgresql \
---preload-file $(pwd)/pglite/static/password@/pglite/password \
---preload-file $(pwd)/pglite/static/empty@/pglite/pgstdin \
---preload-file $(pwd)/pglite/static/empty@/pglite/pgstdout \
---preload-file $(pwd)/pglite/static/locale-a@/pglite/locale-a \
---preload-file $(pwd)/pglite/static/minimal-icu/76.1@/pglite/icu"
+--preload-file $(pwd)/pglite/static/empty@/pgwasm/bin/initdb \
+--preload-file $(pwd)/pglite/static/empty@/pgwasm/bin/pg_dump \
+--preload-file $(pwd)/pglite/static/empty@/pgwasm/bin/postgres \
+--preload-file $PGROOT/share/postgresql@/pgwasm/share/postgresql \
+--preload-file $PGROOT/lib/postgresql@/pgwasm/lib/postgresql \
+--preload-file $(pwd)/pglite/static/password@/pgwasm/password \
+--preload-file $(pwd)/pglite/static/empty@/pgwasm/pgstdin \
+--preload-file $(pwd)/pglite/static/empty@/pgwasm/pgstdout \
+--preload-file $(pwd)/pglite/static/locale-a@/pgwasm/locale-a \
+--preload-file $(pwd)/pglite/static/minimal-icu/76.1@/pgwasm/icu"
 
 PGLITE_EXPORTED_RUNTIME_METHODS="MEMFS,IDBFS,FS,PROXYFS,setValue,getValue,UTF8ToString,stringToNewUTF8,stringToUTF8OnStack,addFunction,removeFunction,callMain,ENV,HEAP8,HEAPU8"
 

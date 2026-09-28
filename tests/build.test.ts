@@ -32,7 +32,7 @@ describe("the build command", () => {
       "-e DEBUG=false -e PGWASM_POSTGRES_VERSION=18.3.0 -e SOURCE_DATE_EPOCH=1790501297 -e LC_ALL=C",
       `--workdir=${SOURCE_MOUNT}`,
       "-v /repo/.cache/build/postgres-pglite:/build:rw",
-      "-v /repo/.cache/build/postgres-pglite/dist:/pglite:rw",
+      "-v /repo/.cache/build/postgres-pglite/dist:/pgwasm:rw",
       "-v /repo/builder/bin/make:/usr/local/bin/make:ro",
     ]) {
       expect(joined).toContain(part);

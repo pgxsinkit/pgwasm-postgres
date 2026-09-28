@@ -11,7 +11,7 @@ import { realHost, type Host } from "./determinism.ts";
 import { preservingExitCode, type ModuleOverrides, type PostgresModule } from "./emscripten.ts";
 
 /** The artefacts hardcode this root: `bin/`, `share/` and `lib/` of the filesystem bundle live under it. */
-export const PG_ROOT = "/pglite";
+export const PG_ROOT = "/pgwasm";
 export const PGDATA = `${PG_ROOT}/data`;
 export const INITDB_PATH = `${PG_ROOT}/bin/initdb`;
 export const POSTGRES_PATH = `${PG_ROOT}/bin/postgres`;

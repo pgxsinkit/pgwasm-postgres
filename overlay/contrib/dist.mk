@@ -4,9 +4,9 @@
 # in the filesystem's directory order), their mtimes at $SOURCE_DATE_EPOCH (not the moment of `make install`),
 # owned by root:0, and gzip's header without a name or mtime (tar pipes into gzip).
 
-prefix ?= /pglite
+prefix ?= /pgwasm
 CONTRIB_BUILD_ROOT := /tmp/extensions/build
-ARCHIVE_DIR := /pglite/extensions
+ARCHIVE_DIR := /pgwasm/extensions
 
 CONTRIBS := $(SUBDIRS)
 

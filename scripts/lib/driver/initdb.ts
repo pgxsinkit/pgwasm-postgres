@@ -1,8 +1,8 @@
 /**
  * initdb, run the way PGlite 0.5.8 ran it: its own wasm module, whose `system()`/`popen()` calls to
- * `/pglite/bin/postgres` run the backend's `main` on a scratch Postgres instance (`--boot`, `--single`,
+ * `/pgwasm/bin/postgres` run the backend's `main` on a scratch Postgres instance (`--boot`, `--single`,
  * `-V`), with the heap reset to its pristine state before each run. initdb sees that instance's
- * filesystem through PROXYFS, so the cluster lands in the instance's `/pglite/data`, which is read back.
+ * filesystem through PROXYFS, so the cluster lands in the instance's `/pgwasm/data`, which is read back.
  */
 import type { Artefacts } from "./artefacts.ts";
 import { commandWords } from "./command-line.ts";
