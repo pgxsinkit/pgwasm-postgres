@@ -5,10 +5,27 @@
 import { closeSync, mkdirSync, openSync, readFileSync, rmSync } from "node:fs";
 import { join, relative } from "node:path";
 
-import { builderPaths, diffPackages, DPKG_QUERY, imageBuildCommand, imagePushCommand, sortedLines } from "./builder.ts";
+import { builderContent, chooseBuilder, readLock } from "./builder-lock.ts";
+import {
+  BUILDER_IMAGE,
+  builderPaths,
+  diffPackages,
+  DPKG_QUERY,
+  imageBuildCommand,
+  imagePushCommand,
+  sortedLines,
+} from "./builder.ts";
 import { UserError } from "./git.ts";
 import type { Layout } from "./layout.ts";
-import { CONTAINER_PREFIX, imageId, podman, removeContainer, type ResourceCaps } from "./podman.ts";
+import {
+  CONTAINER_PREFIX,
+  imageId,
+  podman,
+  pullImage,
+  removeContainer,
+  resourceCaps,
+  type ResourceCaps,
+} from "./podman.ts";
 
 type Log = (line: string) => void;
 
@@ -100,4 +117,46 @@ export async function pushBuilderImage(layout: Layout, local: string, published:
     throw new UserError(`builder:image: podman push wrote no digest to ${relative(layout.root, digestFile)}.`);
   }
   return digest;
+}
+
+/** Which builder image a script runs in: `--image`, or `--lock` (with `--published`: the published image or nothing). */
+export interface ImageOptions {
+  readonly image: string | undefined;
+  readonly lock: boolean;
+  readonly published: boolean;
+}
+
+/**
+ * The builder image for `options` (the default: the local image). With `--lock`, builder/image.lock.json decides,
+ * as in CI: the published image, pulled by digest and checked against the lock's id, when the lock records
+ * builder/'s content published; otherwise the image built from builder/ here, which `--published` refuses.
+ * `command` names the script in the messages.
+ */
+export async function chooseBuilderImage(
+  layout: Layout,
+  options: ImageOptions,
+  command: string,
+  log: Log,
+): Promise<string> {
+  if (!options.lock) return options.image ?? BUILDER_IMAGE;
+  const choice = chooseBuilder(readLock(layout.builderDir, layout.root), builderContent(layout.builderDir));
+  if (choice.kind === "build") {
+    if (options.published) {
+      throw new UserError(
+        `${command}: a release is built in the published builder image, by digest, but ${choice.reason}. Publish builder/ (builder-image.yml), record it with \`bun run builder:lock\`, and release a commit whose lock records builder/'s content.`,
+      );
+    }
+    log(`${command}: building the builder image from builder/: ${choice.reason}.`);
+    await buildBuilderImage(layout, BUILDER_IMAGE, resourceCaps(log), log);
+    return BUILDER_IMAGE;
+  }
+  log(`${command}: pulling the published builder image ${choice.reference}`);
+  pullImage(choice.reference);
+  const pulled = imageId(choice.reference);
+  if (pulled !== choice.id) {
+    throw new UserError(
+      `${command}: ${choice.reference} has the id ${pulled ?? "(none)"}, but the lock records ${choice.id}.`,
+    );
+  }
+  return choice.reference;
 }

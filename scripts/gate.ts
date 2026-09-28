@@ -32,9 +32,9 @@
 import { appendFileSync, copyFileSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join, relative } from "node:path";
 
-import { buildBuilderImage } from "./lib/builder-image.ts";
-import { builderContent, chooseBuilder, readLock } from "./lib/builder-lock.ts";
-import { BUILDER_IMAGE, publishedDigest } from "./lib/builder.ts";
+import { chooseBuilderImage } from "./lib/builder-image.ts";
+import { builderContent } from "./lib/builder-lock.ts";
+import { publishedDigest } from "./lib/builder.ts";
 import { info, runCliAsync } from "./lib/cli.ts";
 import { readUpstreamPin } from "./lib/config.ts";
 import { DRIVER_FILES } from "./lib/driver/artefacts.ts";
@@ -57,7 +57,7 @@ import {
 import { git, UserError } from "./lib/git.ts";
 import { layoutFor, repoRoot } from "./lib/layout.ts";
 import { artefactPaths, MANIFEST_FILE, readManifest } from "./lib/manifest.ts";
-import { imageId, pullImage, refuseOtherContainers, repoDigests, requirePodman, resourceCaps } from "./lib/podman.ts";
+import { imageId, refuseOtherContainers, repoDigests, requirePodman } from "./lib/podman.ts";
 import { baselineDigest, readOutcome } from "./lib/regress/outcome.ts";
 
 const USAGE = "Usage: bun run gate [--image <reference> | --lock [--published]] [--keep-going] [--summary <file>]";
@@ -124,30 +124,7 @@ await runCliAsync(async () => {
 
   // The builder image.
   const content = builderContent(layout.builderDir);
-  let image = args.image ?? BUILDER_IMAGE;
-  if (args.lock) {
-    const choice = chooseBuilder(readLock(layout.builderDir, layout.root), content);
-    if (choice.kind === "build") {
-      if (args.published) {
-        throw new UserError(
-          `gate: a release is built in the published builder image, by digest, but ${choice.reason}. Publish builder/ (builder-image.yml), record it with \`bun run builder:lock\`, and release a commit whose lock records builder/'s content.`,
-        );
-      }
-      info(`gate: building the builder image from builder/: ${choice.reason}.`);
-      await buildBuilderImage(layout, BUILDER_IMAGE, resourceCaps(info), info);
-      image = BUILDER_IMAGE;
-    } else {
-      info(`gate: pulling the published builder image ${choice.reference}`);
-      pullImage(choice.reference);
-      const pulled = imageId(choice.reference);
-      if (pulled !== choice.id) {
-        throw new UserError(
-          `gate: ${choice.reference} has the id ${pulled ?? "(none)"}, but the lock records ${choice.id}.`,
-        );
-      }
-      image = choice.reference;
-    }
-  }
+  const image = await chooseBuilderImage(layout, args, "gate", info);
   const id = imageId(image);
   if (id === undefined) {
     throw new UserError(
