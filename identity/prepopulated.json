@@ -3,8 +3,8 @@
   "kind": "prepopulated",
   "sourceDateEpoch": 1790574668,
   "artefacts": {
-    "pglite.js": "ec547c04cc571ceedbe0affa7133534a33bfa7579a44be513ba0777216c4a138",
-    "pglite.wasm": "4114e17685656f732fd9cfe4d13c67c95a38b7949136f57656c1e627c3a8dda7",
+    "pglite.js": "dee4f2b5d2637075569b17ddd0bdefaec2402c5058aa035e29614c48200fdb22",
+    "pglite.wasm": "364518fb464b90d34a1e2e91617db3cbcb9b7d8446a5f2a12d53db8692cc4beb",
     "pglite.data": "b5fe3e2bbd321399458a78757ec7644b28db7c869a90d3a3f7871ffe73959734",
     "initdb.js": "a402bd734fda0faf36696b68324471f853d52bd248ab8219893a6344386f6fac",
     "initdb.wasm": "4cfd4fa9e2b11dc8a0589dd0aaefa52ff99f66b808f34448b57f38a224f0ee5e"
