@@ -6,8 +6,10 @@
  * the wire protocol: `SELECT version()` (which must name the build's release: its manifest's version, or any
  * `pgwasm-postgres N.N.N` without one), a DDL/DML round trip with an error in the middle of it,
  * `CREATE EXTENSION amcheck` with `bt_index_check` on catalog indexes, a `LOAD` of every shared module the build
- * ships (the core modules in pglite.data's lib/postgresql, and the extension archives'), and encoding
- * conversions: every default conversion once, and non-ASCII text through several. Exits 1 on the first failure.
+ * ships (the core modules in pglite.data's lib/postgresql, and the extension archives'), encoding conversions:
+ * every default conversion once, and non-ASCII text through several, and the stack-leak check: 4,000 failing
+ * statements on the session each report their own error, then a normal query runs, and the wasm's shadow stack
+ * pointer is where it was. Exits 1 on the first failure.
  *
  * The artefacts default to `bun run build`'s output. Not part of validate or CI: it needs a build.
  */
@@ -57,6 +59,12 @@ const ROUND_TRIPS: readonly (readonly [encoding: string, text: string])[] = [
   ["ISO_8859_5", "привет"],
   ["WIN1250", "zażółć"],
 ];
+
+/**
+ * The stack-leak check's failing statements: more than twice the ERRORs after which a session whose shadow stack
+ * pointer is not restored refused everything (about 1,700 at about 1.2 kB each, against max_stack_depth's 2 MB).
+ */
+const STACK_LEAK_ERRORS = 4000;
 
 function options(args: readonly string[]): { artefacts: string | undefined; from: string | undefined } {
   const usage = "Usage: bun run driver:smoke [--artefacts <dir>] [--from <data dir archive>]";
@@ -182,6 +190,40 @@ await runCliAsync(async () => {
     const stems = value("SELECT to_tsvector('english', 'The running dogs')");
     expect(stems === "'dog':3 'run':2", "dict_snowball stems English", stems);
     info(`driver:smoke: to_tsvector('english', 'The running dogs') = ${stems}`);
+
+    // The shadow stack across ERRORs, on any toolchain: an ERROR unwinds the wasm stack with a throw that skips the
+    // epilogue of every frame it abandons, and the driver puts the stack pointer back after it (scripts/lib/driver/
+    // postgres.ts, ShadowStack). Without that, every ERROR leaked the abandoned frames' stack until max_stack_depth
+    // refused every statement ("stack depth limit exceeded"), then ran past the stack's end.
+    const stackBefore = postgres.shadowStackPointer;
+    const leakStarted = performance.now();
+    for (let index = 0; index < STACK_LEAK_ERRORS; index += 1) {
+      const input = `stack-leak-${index}`;
+      let failure: ServerError | undefined;
+      try {
+        query(`SELECT '${input}'::integer`);
+      } catch (error) {
+        if (!(error instanceof ServerError)) throw error;
+        failure = error;
+      }
+      const message = `invalid input syntax for type integer: "${input}"`;
+      expect(
+        failure?.fields["C"] === "22P02" && failure.fields["M"] === message,
+        `failing statement ${index + 1} of ${STACK_LEAK_ERRORS} reports its own error (22P02, ${message})`,
+        failure?.message,
+      );
+    }
+    const stackAfter = postgres.shadowStackPointer;
+    const after = value("SELECT 'the session survived'");
+    expect(after === "the session survived", `a normal query runs after ${STACK_LEAK_ERRORS} ERRORs`, after);
+    expect(
+      stackAfter === stackBefore,
+      `the shadow stack pointer is where it was before ${STACK_LEAK_ERRORS} ERRORs (${stackBefore})`,
+      stackAfter,
+    );
+    info(
+      `driver:smoke: ${STACK_LEAK_ERRORS} failing statements each reported their own error (22P02) in ${Math.round(performance.now() - leakStarted)} ms, then a query ran; the shadow stack pointer stayed at ${stackBefore}`,
+    );
   } finally {
     postgres.close();
   }

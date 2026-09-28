@@ -288,6 +288,14 @@ export class Postgres {
     return this.#recentLines.join("\n");
   }
 
+  /**
+   * The wasm's shadow stack pointer now. Between exchanges it is where every exchange starts and ends, whatever
+   * the exchange unwound: a drift means a leak (see {@link ShadowStack}).
+   */
+  get shadowStackPointer(): number {
+    return this.#stack.save();
+  }
+
   /** `callMain`, leaving the host's exit code alone. */
   callMain(args: string[]): number {
     return preservingExitCode(() => this.module.callMain(args));
