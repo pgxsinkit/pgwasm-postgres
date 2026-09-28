@@ -894,6 +894,7 @@ _pgl_send
 _pgl_sendConnData
 _pgl_setPGliteActive
 _pgl_setsockopt
+_pgl_socket
 _pgl_startPGlite
 _post_parse_analyze_hook
 _pow
