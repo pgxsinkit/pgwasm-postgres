@@ -136,7 +136,16 @@ describe("comparing gate manifests", () => {
     expect(summary).toContain("230 tests, 178 pass, 49 fail as the baseline records, 3 unstable");
     expect(summary).toContain("1,121 symbols; against `exported_functions.txt` at the commit: 1 added (`_a`)");
     expect(summary).toContain("the published image by digest");
+    expect(summary).not.toContain("token stream");
     expect(symbolList(["_a", "_b", "_c"], 2)).toBe("`_a` `_b` and 1 more");
+  });
+
+  test("the report-only token check's Markdown follows the other lines when it ran", () => {
+    const { manifest } = gateFixture();
+    const tokens = "- postgres.c's token stream (`patches:tokens`, report-only): identical to 18.3.0's (3 tokens).\n";
+    const summary = gateSummary(manifest, tokens);
+    expect(summary).toContain(`the published image by digest\n${tokens}`);
+    expect(summary.endsWith("\n")).toBe(true);
   });
 });
 

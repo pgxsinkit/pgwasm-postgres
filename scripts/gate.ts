@@ -6,6 +6,8 @@
  * SOURCE_DATE_EPOCH at the commit's time, and stops at the first that fails, whose own message says why:
  *
  *   build                  patches:check, then the build from scratch, in the builder image
+ *   (patches:tokens)       report-only, never fails the gate: postgres.c's token stream against the latest
+ *                          release's (ADR-0001 decision 4), into the summary
  *   driver:smoke           initdb, boot, the wire protocol, every shipped module and conversion
  *   exports:check          the export list against exported_functions.txt
  *   data-format:check      the compatibility tuple against data-format.json
@@ -29,7 +31,16 @@
  *
  * It takes about 12 minutes (the build 8, pg_regress 2), more when the image is built. Not part of validate.
  */
-import { appendFileSync, copyFileSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { basename, join, relative } from "node:path";
 
 import { chooseBuilderImage } from "./lib/builder-image.ts";
@@ -49,6 +60,7 @@ import {
   gateStaging,
   gateStepsFile,
   gateSummary,
+  gateTokensFile,
   SUMS_FILE,
   verifyGateDir,
   type GateManifest,
@@ -139,9 +151,11 @@ await runCliAsync(async () => {
   const final = gateDir(layout, commit);
   const staging = gateStaging(layout, commit);
   const stepsFile = gateStepsFile(layout, commit);
+  const tokensFile = gateTokensFile(layout, commit);
   rmSync(final, { recursive: true, force: true });
   rmSync(staging, { recursive: true, force: true });
   rmSync(stepsFile, { force: true });
+  rmSync(tokensFile, { force: true });
   mkdirSync(staging, { recursive: true });
 
   const steps: readonly (readonly [name: string, script: string, args: readonly string[]])[] = [
@@ -156,6 +170,34 @@ await runCliAsync(async () => {
   const timings: [string, number][] = [];
   const ran: GateStep[] = [];
   const env = { ...process.env, SOURCE_DATE_EPOCH: String(epoch) };
+
+  // postgres.c's token stream against the latest release's (ADR-0001 decision 4), in the build's configured tree:
+  // it reports and never fails the gate (later deliberate changes to postgres.c are legitimate), so it is neither a
+  // step of steps.json nor in the manifest; its Markdown goes into the summary.
+  const reportTokens = async (): Promise<void> => {
+    info("\ngate: ── patches:tokens (report-only) ──");
+    const started = Date.now();
+    const script = join(layout.root, "scripts", "patches-tokens.ts");
+    const exitCode = await Bun.spawn([process.execPath, script, "--image", image, "--summary", tokensFile], {
+      cwd: layout.root,
+      env,
+      stdin: "ignore",
+      stdout: "inherit",
+      stderr: "inherit",
+    }).exited;
+    timings.push(["patches:tokens", Date.now() - started]);
+    if (exitCode === 0) return;
+    info(`gate: patches:tokens did not compare (exit ${exitCode}); it only reports, so the gate goes on.`);
+    if (!existsSync(tokensFile)) {
+      writeFileSync(
+        tokensFile,
+        `- postgres.c's token stream (\`patches:tokens\`, report-only): not compared: it exited with ${exitCode}; its message is in the job log.\n`,
+      );
+    }
+  };
+  const tokensMarkdown = (): string | undefined =>
+    existsSync(tokensFile) ? readFileSync(tokensFile, "utf8") : undefined;
+
   for (const [name, script, stepArgs] of steps) {
     info(`\ngate: ── ${name} ──`);
     const started = Date.now();
@@ -170,6 +212,7 @@ await runCliAsync(async () => {
     ran.push({ name, exitCode, seconds: Math.round((Date.now() - started) / 1000) });
     // A failed build leaves nothing to check; with --keep-going, any other failed step lets the rest run.
     if (exitCode !== 0 && (!args.keepGoing || name === "build")) break;
+    if (name === "build") await reportTokens();
   }
   const skipped = steps.slice(ran.length).map(([name]) => ({ name, exitCode: null, seconds: 0 }));
   writeFileSync(stepsFile, formatGateSteps({ commit, keepGoing: args.keepGoing, steps: [...ran, ...skipped] }));
@@ -177,7 +220,7 @@ await runCliAsync(async () => {
   if (failed.length > 0) {
     const names = failed.map((step) => step.name);
     summarise(
-      `### Engine gate FAILED at ${names.map((name) => `\`${name}\``).join(", ")} (\`${commit.slice(0, 12)}\`)\n\nEach step's own message is in the job log.\n\n`,
+      `### Engine gate FAILED at ${names.map((name) => `\`${name}\``).join(", ")} (\`${commit.slice(0, 12)}\`)\n\nEach step's own message is in the job log.\n\n${tokensMarkdown() ?? ""}`,
     );
     if (skipped.length > 0) info(`\ngate: not run: ${skipped.map((step) => step.name).join(", ")}`);
     throw new UserError(
@@ -253,5 +296,5 @@ await runCliAsync(async () => {
   }
   info(`gate: ${timings.map(([name, ms]) => `${name} ${seconds(ms)}`).join(", ")}`);
   info(`gate: passed: pgwasm-postgres ${manifest.version} at ${commit.slice(0, 12)}; the release is ${where(final)}.`);
-  summarise(gateSummary(manifest));
+  summarise(gateSummary(manifest, tokensMarkdown()));
 });

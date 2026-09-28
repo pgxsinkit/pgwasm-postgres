@@ -61,6 +61,14 @@ export function gateStepsFile(layout: Layout, commit: string): string {
   return `${gateDir(layout, commit)}.steps.json`;
 }
 
+/**
+ * The Markdown `patches:tokens` wrote for the gate's summary (ADR-0001 decision 4): report-only, so it is neither a
+ * step nor in the manifest.
+ */
+export function gateTokensFile(layout: Layout, commit: string): string {
+  return `${gateDir(layout, commit)}.tokens.md`;
+}
+
 export function formatGateSteps(steps: GateSteps): string {
   return `${JSON.stringify(steps, null, 2)}\n`;
 }
@@ -366,8 +374,8 @@ export function builderLine(builder: GateManifest["builder"]): string {
     : `builder image \`${builder.image}\` (id \`${builder.id.slice(0, 12)}\`), the published image by digest`;
 }
 
-/** The job summary of a passed gate. */
-export function gateSummary(manifest: GateManifest): string {
+/** The job summary of a passed gate, with the report-only token check's Markdown when it ran. */
+export function gateSummary(manifest: GateManifest, tokens?: string): string {
   return [
     `### Engine gate passed: pgwasm-postgres ${manifest.version} at \`${manifest.commit.slice(0, 12)}\``,
     "",
@@ -379,6 +387,7 @@ export function gateSummary(manifest: GateManifest): string {
     `- ${regressLine(manifest.regress)}`,
     `- ${exportsLine(manifest.exports)}`,
     `- ${builderLine(manifest.builder)}`,
+    ...(tokens === undefined ? [] : [tokens.trimEnd()]),
     "",
   ].join("\n");
 }
