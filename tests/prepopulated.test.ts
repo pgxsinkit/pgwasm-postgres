@@ -179,5 +179,11 @@ describe("identity/prepopulated.json", () => {
       formatPrepopulatedRecord({ ...record, artefacts: { ...record.artefacts, "initdb.js": "x" } }),
     );
     expect(thrown(() => readPrepopulatedRecord(layout)).message).toContain('artefacts["initdb.js"]');
+    write(layout.prepopulatedRecord, formatPrepopulatedRecord({ ...record, artefacts: {} }));
+    expect(thrown(() => readPrepopulatedRecord(layout)).message).toContain("`artefacts` names no file");
+    // A record made before 18.6.2 names the artefacts as they were then: it reads, and is of other artefacts.
+    const before = { ...record, artefacts: { "pglite.js": "a".repeat(64), "initdb.js": "d".repeat(64) } };
+    write(layout.prepopulatedRecord, formatPrepopulatedRecord(before));
+    expect(readPrepopulatedRecord(layout)).toEqual(before);
   });
 });

@@ -127,8 +127,11 @@ export function digestOf(bytes: Uint8Array): Digest {
 /** What `identity/prepopulated.json` records: the inputs of a generation and what they gave. */
 export interface PrepopulatedRecord {
   readonly sourceDateEpoch: number;
-  /** sha256 of each file the driver loads. */
-  readonly artefacts: Readonly<Record<DriverFile, string>>;
+  /**
+   * sha256 of each file the driver loaded, by the name the build gave it then: a record made before a rename (18.6.2's
+   * `pglite.*` → `postgres.*`) still reads, and is of other artefacts than any later build's.
+   */
+  readonly artefacts: Readonly<Record<string, string>>;
   readonly entries: number;
   readonly tar: Digest;
   readonly asset: Digest;
@@ -150,14 +153,20 @@ function count(json: Json, path: string, name: string): number {
   return value;
 }
 
-/** `artefacts[<file>]`: the file names hold dots, which `field`'s paths separate. */
-function artefactDigest(json: Json, file: DriverFile, name: string): string {
+/** `artefacts`: file names (which hold dots, so `field`'s paths cannot name them) to sha256s. */
+function recordedArtefacts(json: Json, name: string): Record<string, string> {
   const artefacts = field(json, "artefacts", name);
-  const value = typeof artefacts === "object" && artefacts !== null ? (artefacts as Json)[file] : undefined;
-  if (typeof value !== "string" || !SHA256.test(value)) {
-    throw new UserError(`${name}: \`artefacts["${file}"]\` must be a sha256.`);
+  if (typeof artefacts !== "object" || artefacts === null || Array.isArray(artefacts)) {
+    throw new UserError(`${name}: \`artefacts\` must map file names to sha256s.`);
   }
-  return value;
+  const entries = Object.entries(artefacts as Record<string, unknown>);
+  if (entries.length === 0) throw new UserError(`${name}: \`artefacts\` names no file.`);
+  for (const [file, value] of entries) {
+    if (typeof value !== "string" || !SHA256.test(value)) {
+      throw new UserError(`${name}: \`artefacts["${file}"]\` must be a sha256.`);
+    }
+  }
+  return Object.fromEntries(entries) as Record<string, string>;
 }
 
 /** Reads `identity/prepopulated.json`, or `undefined` when there is none. */
@@ -168,10 +177,7 @@ export function readPrepopulatedRecord(layout: Layout): PrepopulatedRecord | und
     throw new UserError(`${name}: \`kind\` must be "${IDENTITY_KINDS.prepopulated}".`);
   return {
     sourceDateEpoch: count(json, "sourceDateEpoch", name),
-    artefacts: Object.fromEntries(DRIVER_FILES.map((file) => [file, artefactDigest(json, file, name)])) as Record<
-      DriverFile,
-      string
-    >,
+    artefacts: recordedArtefacts(json, name),
     entries: count(json, "entries", name),
     tar: { bytes: count(json, "tar.bytes", name), sha256: stringField(json, "tar.sha256", name, SHA256) },
     asset: { bytes: count(json, "asset.bytes", name), sha256: stringField(json, "asset.sha256", name, SHA256) },
