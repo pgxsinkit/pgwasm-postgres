@@ -3,9 +3,13 @@ import { describe, expect, test } from "bun:test";
 import { FrontendBuffer, sqlLiteral, splitOptions, startupSettings } from "../scripts/lib/bridge/frontend.ts";
 import { createMailboxBuffer, Mailbox, MAILBOX_CAPACITY, MailboxWriter } from "../scripts/lib/bridge/mailbox.ts";
 import {
+  bindMessage,
   copyFailMessage,
   errorResponseMessage,
+  executeMessage,
+  flushMessage,
   parseBackendMessages,
+  parseMessage,
   parseStartupPacket,
   queryMessage,
   readyStatus,
@@ -54,6 +58,20 @@ describe("startup packets", () => {
 });
 
 describe("the bridge's messages", () => {
+  test("extended queries frame unnamed statements and text/null parameters", () => {
+    const parse = parseMessage("SELECT $1", [23]);
+    expect(String.fromCharCode(parse[0] ?? 0)).toBe("P");
+    expect(new DataView(parse.buffer).getInt32(1)).toBe(parse.length - 1);
+    expect(text(parse.subarray(5, parse.length - 6))).toBe("\0SELECT $1\0");
+    expect(new DataView(parse.buffer).getUint16(parse.length - 6)).toBe(1);
+    expect(new DataView(parse.buffer).getUint32(parse.length - 4)).toBe(23);
+    expect(Array.from(bindMessage([null, "é"]))).toEqual([
+      0x42, 0, 0, 0, 22, 0, 0, 0, 0, 0, 2, 255, 255, 255, 255, 0, 0, 0, 2, 0xc3, 0xa9, 0, 0,
+    ]);
+    expect(Array.from(executeMessage())).toEqual([0x45, 0, 0, 0, 9, 0, 0, 0, 0, 0]);
+    expect(Array.from(flushMessage())).toEqual([0x48, 0, 0, 0, 4]);
+  });
+
   test("Sync, CopyFail and an ErrorResponse are framed as the protocol says", () => {
     expect(Array.from(syncMessage())).toEqual([0x53, 0, 0, 0, 4]);
     const fail = copyFailMessage("gone");

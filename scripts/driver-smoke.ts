@@ -22,7 +22,8 @@ import { readUpstreamPin } from "./lib/config.ts";
 import { loadArtefacts } from "./lib/driver/artefacts.ts";
 import { initdb } from "./lib/driver/initdb.ts";
 import { runPgDump } from "./lib/driver/pg-dump.ts";
-import { PG_ROOT, Postgres } from "./lib/driver/postgres.ts";
+import { PG_ROOT, Postgres, type DataDirEntry } from "./lib/driver/postgres.ts";
+import { assertExtendedQueryRecovery } from "./lib/driver/recovery-smoke.ts";
 import {
   parseBackendMessages,
   queryMessage,
@@ -98,8 +99,19 @@ await runCliAsync(async () => {
   const release = existsSync(manifestFile) ? readManifest(manifestFile, layout.root).version : undefined;
   const expectedVersion = serverVersionPattern(pin.tag, release);
 
-  const cluster =
-    args.from === undefined ? await initdb(artefacts) : unpackDataDir(new Uint8Array(readFileSync(resolve(args.from))));
+  // A fresh cluster must not inherit the developer's timezone through initdb.
+  const hostTimezone = process.env["TZ"];
+  let cluster: DataDirEntry[];
+  try {
+    if (args.from === undefined) process.env["TZ"] = "America/New_York";
+    cluster =
+      args.from === undefined
+        ? await initdb(artefacts)
+        : unpackDataDir(new Uint8Array(readFileSync(resolve(args.from))));
+  } finally {
+    if (hostTimezone === undefined) delete process.env["TZ"];
+    else process.env["TZ"] = hostTimezone;
+  }
   info(
     `driver:smoke: ${args.from === undefined ? "initdb made" : `${args.from} holds`} ${cluster.length} entries (${elapsed()})`,
   );
@@ -132,6 +144,33 @@ await runCliAsync(async () => {
     const version = value("SELECT version()");
     expect(expectedVersion.test(version ?? ""), `version() matches ${String(expectedVersion)}`, version);
     info(`driver:smoke: ${version}`);
+
+    const timezone = value("SHOW TimeZone");
+    const logTimezone = value("SHOW log_timezone");
+    if (args.from === undefined) {
+      const config = new TextDecoder().decode(cluster.find((entry) => entry.path === "/postgresql.conf")?.data);
+      expect(
+        timezone === "UTC" &&
+          logTimezone === "UTC" &&
+          /^timezone = 'UTC'/m.test(config) &&
+          /^log_timezone = 'UTC'/m.test(config),
+        "initdb writes UTC defaults under a non-UTC host timezone",
+        { timezone, logTimezone },
+      );
+    }
+    const timestamps = query(
+      "SELECT '2024-01-15 12:00:00'::timestamptz = '2024-01-15 12:00:00+00'::timestamptz, " +
+        "'2024-07-15 12:00:00'::timestamptz = '2024-07-15 12:00:00+00'::timestamptz",
+    )[0]?.rows;
+    expect(
+      JSON.stringify(timestamps) === JSON.stringify([["t", "t"]]),
+      "offset-free winter and summer timestamps use UTC",
+      timestamps,
+    );
+    info(`driver:smoke: UTC timestamp defaults across DST (TimeZone ${timezone}, log_timezone ${logTimezone})`);
+
+    assertExtendedQueryRecovery(postgres);
+    info("driver:smoke: Parse/Bind/Execute errors wait for Sync, recover once, and preserve transaction status");
 
     // Exercise the packaged ICU collation data, rather than merely linking ICU or accepting an initdb.
     query("CREATE COLLATION smoke_icu (provider = icu, locale = 'und')");

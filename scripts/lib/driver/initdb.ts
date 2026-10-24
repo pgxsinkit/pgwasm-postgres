@@ -113,6 +113,7 @@ async function runInitdb(
             LOGNAME: "postgres",
             ICU_DATA: `${PG_ROOT}/icu`,
             LANG: "en_US.UTF-8",
+            TZ: "UTC",
           });
           module.onRuntimeInitialized = () => {
             module._pgwasm_set_system_fn(

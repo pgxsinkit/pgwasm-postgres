@@ -52,12 +52,19 @@ functions and re-indented it, with two differences:
 The line numbers ereport and elog record change with the layout.
 
 Derived from electric-sql/postgres-pglite b133782cd759f08b3aeb263b80a963b39c7b7af1 (PostgreSQL 18.3 fork, PostgreSQL License)
+
+Schedule ReadyForQuery only after error cleanup has established ignore_till_sync.
+Extended-query failures stay silent until Sync; simple-query failures still
+announce readiness after recovery. The host longjmp wrapper must not schedule
+readiness from the pre-recovery state.
+
+Recovery fix derived from electric-sql/postgres-pglite 29b6424aa312ec3556247db069939006dd27f878 (PostgreSQL License).
 ---
- src/backend/tcop/postgres.c | 302 ++++++++++++++++++++++++++++++++++++
- 1 file changed, 302 insertions(+)
+ src/backend/tcop/postgres.c | 307 ++++++++++++++++++++++++++++++++++++
+ 1 file changed, 307 insertions(+)
 
 diff --git a/src/backend/tcop/postgres.c b/src/backend/tcop/postgres.c
-index dbef734a93f15420f772e7fc1e0506d0576315c6..b36676d533ccbaa4cba6d86d4d4a442ed95245b5 100644
+index dbef734a93f15420f772e7fc1e0506d0576315c6..ff45e2c194ecd5d8ff81ea41dbc4c66413c74637 100644
 --- a/src/backend/tcop/postgres.c
 +++ b/src/backend/tcop/postgres.c
 @@ -155,7 +155,11 @@ static bool DoingCommandRead = false;
@@ -251,10 +258,17 @@ index dbef734a93f15420f772e7fc1e0506d0576315c6..b36676d533ccbaa4cba6d86d4d4a442e
  	{
  		/*
  		 * NOTE: if you are tempted to add more code in this if-block,
-@@ -4593,6 +4753,128 @@ PostgresMain(const char *dbname, const char *username)
- 		RESUME_INTERRUPTS();
- 	}
+@@ -4591,7 +4751,134 @@ PostgresMain(const char *dbname, const char *username)
  
+ 		/* Now we can allow interrupts again */
+ 		RESUME_INTERRUPTS();
++#ifdef __PGWASM__
++		/* Error cleanup above establishes whether Sync is still required. */
++		if (!ignore_till_sync)
++			send_ready_for_query = true;
++#endif
++	}
++
 +#ifdef __PGWASM__
 +
 +/*
@@ -369,18 +383,17 @@ index dbef734a93f15420f772e7fc1e0506d0576315c6..b36676d533ccbaa4cba6d86d4d4a442e
 +
 +		ReadyForQuery(whereToSendOutput);
 +		send_ready_for_query = false;
-+	}
+ 	}
 +}
 +
 +/* One iteration of PostgresMain()'s loop, for each message the host gives */
 +void
 +PostgresMainLoopOnce()
 +#else
-+
+ 
  	/* We can now handle ereport(ERROR) */
  	PG_exception_stack = &local_sigjmp_buf;
- 
-@@ -4604,6 +4886,7 @@ PostgresMain(const char *dbname, const char *username)
+@@ -4604,6 +4891,7 @@ PostgresMain(const char *dbname, const char *username)
  	 */
  
  	for (;;)
@@ -388,7 +401,7 @@ index dbef734a93f15420f772e7fc1e0506d0576315c6..b36676d533ccbaa4cba6d86d4d4a442e
  	{
  		int			firstchar;
  		StringInfoData input_message;
-@@ -4833,7 +5116,11 @@ PostgresMain(const char *dbname, const char *username)
+@@ -4833,7 +5121,11 @@ PostgresMain(const char *dbname, const char *username)
  		 * Sync.
  		 */
  		if (ignore_till_sync && firstchar != EOF)
@@ -400,7 +413,7 @@ index dbef734a93f15420f772e7fc1e0506d0576315c6..b36676d533ccbaa4cba6d86d4d4a442e
  
  		switch (firstchar)
  		{
-@@ -5089,6 +5376,19 @@ PostgresMain(const char *dbname, const char *username)
+@@ -5089,6 +5381,19 @@ PostgresMain(const char *dbname, const char *username)
  				 * it will fail to be called during other backend-shutdown
  				 * scenarios.
  				 */
@@ -420,7 +433,7 @@ index dbef734a93f15420f772e7fc1e0506d0576315c6..b36676d533ccbaa4cba6d86d4d4a442e
  				proc_exit(0);
  
  			case PqMsg_CopyData:
-@@ -5108,7 +5408,9 @@ PostgresMain(const char *dbname, const char *username)
+@@ -5108,7 +5413,9 @@ PostgresMain(const char *dbname, const char *username)
  						 errmsg("invalid frontend message type %d",
  								firstchar)));
  		}

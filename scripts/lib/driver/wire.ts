@@ -31,6 +31,47 @@ export function queryMessage(sql: string): Uint8Array {
   return frame("Q", encoder.encode(`${sql}\0`));
 }
 
+/** Parse (`P`) into the unnamed statement, with optional parameter type OIDs. */
+export function parseMessage(sql: string, parameterTypes: readonly number[] = []): Uint8Array {
+  const text = encoder.encode(`\0${sql}\0`);
+  const body = new Uint8Array(text.length + 2 + 4 * parameterTypes.length);
+  body.set(text);
+  const view = new DataView(body.buffer);
+  view.setUint16(text.length, parameterTypes.length);
+  parameterTypes.forEach((oid, index) => view.setUint32(text.length + 2 + 4 * index, oid));
+  return frame("P", body);
+}
+
+/** Bind (`B`) text parameters to the unnamed portal and statement, returning text results. */
+export function bindMessage(parameters: readonly (string | null)[] = []): Uint8Array {
+  const values = parameters.map((value) => (value === null ? null : encoder.encode(value)));
+  const body = new Uint8Array(8 + values.reduce((length, value) => length + 4 + (value?.length ?? 0), 0));
+  const view = new DataView(body.buffer);
+  // Two empty names, zero format codes (all text), then the parameter count.
+  view.setUint16(4, values.length);
+  let offset = 6;
+  for (const value of values) {
+    view.setInt32(offset, value?.length ?? -1);
+    offset += 4;
+    if (value !== null) {
+      body.set(value, offset);
+      offset += value.length;
+    }
+  }
+  // The remaining UInt16 is zero result format codes (all text).
+  return frame("B", body);
+}
+
+/** Execute (`E`) the unnamed portal without a row limit. */
+export function executeMessage(): Uint8Array {
+  return frame("E", new Uint8Array(5));
+}
+
+/** Flush (`H`) queued output without ending an extended-query batch. */
+export function flushMessage(): Uint8Array {
+  return frame("H", new Uint8Array(0));
+}
+
 /** Sync (`S`): ends an extended-query batch, and any skip-till-Sync after an error in one. */
 export function syncMessage(): Uint8Array {
   return frame("S", new Uint8Array(0));

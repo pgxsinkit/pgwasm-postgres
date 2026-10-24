@@ -82,9 +82,6 @@ volatile bool send_ready_for_query = false;
 */
 void EMSCRIPTEN_KEEPALIVE pgwasm_longjmp(jmp_buf env, int val) {
     if (is_pgwasm_active && memcmp(env, (void*)postgresmain_sigjmp_buf, sizeof(jmp_buf)) == 0) {
-        // reset this as it is expected
-        if (!ignore_till_sync)
-		    send_ready_for_query = true;	/* initially, or after error */
         pgwasm_exit_status = POSTGRES_MAIN_LONGJMP;
         emscripten_exit_with_live_runtime();
     }
