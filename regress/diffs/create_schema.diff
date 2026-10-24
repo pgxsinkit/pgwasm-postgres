@@ -1,7 +1,7 @@
 diff -U3 expected/create_schema.out results/create_schema.out
 --- expected/create_schema.out
 +++ results/create_schema.out
-@@ -81,7 +81,7 @@
+@@ -111,7 +111,7 @@
   id     | integer |           |          | 
  
  DROP SCHEMA regress_create_schema_role CASCADE;

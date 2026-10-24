@@ -16,7 +16,7 @@ diff -U3 expected/create_view.out results/create_view.out
 +ERROR:  function interpt_pp(path, path) does not exist
 +LINE 3:  interpt_pp(ih.thepath, r.thepath) AS exit
 +         ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
  CREATE VIEW toyemp AS
     SELECT name, age, location, 12*salary AS annualsal
     FROM emp;

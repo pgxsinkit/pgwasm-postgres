@@ -1,7 +1,7 @@
 diff -U3 expected/cluster.out results/cluster.out
 --- expected/cluster.out
 +++ results/cluster.out
-@@ -501,19 +501,23 @@
+@@ -542,39 +542,47 @@
  CREATE INDEX ptnowner_i_idx ON ptnowner(i);
  CREATE TABLE ptnowner1 PARTITION OF ptnowner FOR VALUES IN (1);
  CREATE ROLE regress_ptnowner;
@@ -23,18 +23,8 @@ diff -U3 expected/cluster.out results/cluster.out
  SET SESSION AUTHORIZATION regress_ptnowner;
 +ERROR:  role "regress_ptnowner" does not exist
  CLUSTER ptnowner USING ptnowner_i_idx;
--WARNING:  permission denied to cluster "ptnowner2", skipping it
+-WARNING:  permission denied to execute CLUSTER on "ptnowner2", skipping it
  RESET SESSION AUTHORIZATION;
- SELECT a.relname, a.relfilenode=b.relfilenode FROM pg_class a
-   JOIN ptnowner_oldnodes b USING (oid) ORDER BY a.relname COLLATE "C";
-@@ -521,28 +525,32 @@
- -----------+----------
-  ptnowner  | t
-  ptnowner1 | f
-- ptnowner2 | t
-+ ptnowner2 | f
- (3 rows)
- 
  DROP TABLE ptnowner;
  DROP ROLE regress_ptnowner;
 +ERROR:  permission denied to drop role
@@ -65,7 +55,97 @@ diff -U3 expected/cluster.out results/cluster.out
  reset enable_indexscan;
  reset maintenance_work_mem;
  -- test CLUSTER on expression index
-@@ -669,7 +677,11 @@
+@@ -712,8 +720,7 @@
+ CLUSTER clstr_table_one USING clstr_partial_idx;
+ ERROR:  cannot cluster on partial index "clstr_partial_idx"
+ REPACK pg_class USING INDEX pg_class_oid_index;
+-ERROR:  permission denied: "pg_class" is a system catalog
+-DETAIL:  System catalogs can only be clustered by the index they're already clustered on, if any, unless "allow_system_table_mods" is enabled.
++ERROR:  permission denied for table pg_class
+ DROP TABLE clstr_table_one, clstr_table_two;
+ -- verify that CLUSTER/REPACK don't touch a NO DATA matview
+ CREATE MATERIALIZED VIEW clstr_matview AS
+@@ -742,51 +749,15 @@
+ -- REPACK handles individual tables identically to CLUSTER, but it's worth
+ -- checking if it handles table hierarchies identically as well.
+ REPACK clstr_tst USING INDEX clstr_tst_c;
++ERROR:  permission denied for table clstr_tst
+ -- Verify that inheritance link still works
+ INSERT INTO clstr_tst_inh VALUES (0, 100, 'in child table 2');
++ERROR:  permission denied for table clstr_tst_inh
+ SELECT a,b,c,substring(d for 30), length(d) from clstr_tst;
+- a  |  b  |        c         |           substring            | length 
+-----+-----+------------------+--------------------------------+--------
+- 10 |  14 | catorce          |                                |       
+- 18 |   5 | cinco            |                                |       
+-  9 |   4 | cuatro           |                                |       
+- 26 |  19 | diecinueve       |                                |       
+- 12 |  18 | dieciocho        |                                |       
+- 30 |  16 | dieciseis        |                                |       
+- 24 |  17 | diecisiete       |                                |       
+-  2 |  10 | diez             |                                |       
+- 23 |  12 | doce             |                                |       
+- 11 |   2 | dos              |                                |       
+- 25 |   9 | nueve            |                                |       
+- 31 |   8 | ocho             |                                |       
+-  1 |  11 | once             |                                |       
+- 28 |  15 | quince           |                                |       
+- 32 |   6 | seis             | xyzzyxyzzyxyzzyxyzzyxyzzyxyzzy | 500000
+- 29 |   7 | siete            |                                |       
+- 15 |  13 | trece            |                                |       
+- 22 |  30 | treinta          |                                |       
+- 17 |  32 | treinta y dos    |                                |       
+-  3 |  31 | treinta y uno    |                                |       
+-  5 |   3 | tres             |                                |       
+- 20 |   1 | uno              |                                |       
+-  6 |  20 | veinte           |                                |       
+- 14 |  25 | veinticinco      |                                |       
+- 21 |  24 | veinticuatro     |                                |       
+-  4 |  22 | veintidos        |                                |       
+- 19 |  29 | veintinueve      |                                |       
+- 16 |  28 | veintiocho       |                                |       
+- 27 |  26 | veintiseis       |                                |       
+- 13 |  27 | veintisiete      |                                |       
+-  7 |  23 | veintitres       |                                |       
+-  8 |  21 | veintiuno        |                                |       
+-  0 | 100 | in child table   |                                |       
+-  0 | 100 | in child table 2 |                                |       
+-(34 rows)
+-
++ERROR:  permission denied for table clstr_tst
+ -- Verify that foreign key link still works
+ INSERT INTO clstr_tst (b, c) VALUES (1111, 'this should fail');
+-ERROR:  insert or update on table "clstr_tst" violates foreign key constraint "clstr_tst_con"
+-DETAIL:  Key (b)=(1111) is not present in table "clstr_tst_s".
++ERROR:  permission denied for table clstr_tst
+ SELECT conname FROM pg_constraint WHERE conrelid = 'clstr_tst'::regclass
+ ORDER BY 1;
+        conname        
+@@ -798,10 +769,13 @@
+ 
+ -- Verify REPACK (ANALYZE) works, including partial analyze.
+ REPACK (ANALYZE) clstr_tst (a);
++ERROR:  permission denied for table clstr_tst
+ REPACK (ANALYZE) clstr_tst;
++ERROR:  permission denied for table clstr_tst
+ -- Plain REPACK is allowed in a transaction block.
+ BEGIN;
+ REPACK clstr_tst;
++ERROR:  permission denied for table clstr_tst
+ ROLLBACK;
+ -- REPACK (ANALYZE) is not allowed in a transaction block.
+ BEGIN;
+@@ -810,6 +784,9 @@
+ ROLLBACK;
+ -- REPACK is allowed within a PL, as long as there's no ANALYZE.
+ DO $$ BEGIN EXECUTE 'REPACK clstr_tst'; END $$;
++ERROR:  permission denied for table clstr_tst
++CONTEXT:  SQL statement "REPACK clstr_tst"
++PL/pgSQL function inline_code_block line 1 at EXECUTE
+ DO $$ BEGIN EXECUTE 'REPACK (ANALYZE) clstr_tst'; END $$;
+ ERROR:  REPACK (ANALYZE) cannot be executed from a function or procedure
+ CONTEXT:  SQL statement "REPACK (ANALYZE) clstr_tst"
+@@ -848,8 +825,12 @@
  DROP TABLE clustertest;
  DROP TABLE clstr_1;
  DROP TABLE clstr_2;
@@ -74,6 +154,7 @@ diff -U3 expected/cluster.out results/cluster.out
  DROP TABLE clstr_4;
 +ERROR:  table "clstr_4" does not exist
  DROP TABLE clstr_expression;
+ DROP TABLE clstrpart;
  DROP USER regress_clstr_user;
 +ERROR:  permission denied to drop role
 +DETAIL:  Only roles with the CREATEROLE attribute and the ADMIN option on the target roles may drop roles.

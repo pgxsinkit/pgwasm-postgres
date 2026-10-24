@@ -24,7 +24,7 @@ diff -U3 expected/indirect_toast.out results/indirect_toast.out
 +ERROR:  function make_tuple_indirect(indtoasttest) does not exist
 +LINE 1: SELECT descr, substring(make_tuple_indirect(indtoasttest)::t...
 +                                ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
  -- modification without changing varlenas
  UPDATE indtoasttest SET cnt = cnt +1 RETURNING substring(indtoasttest::text, 1, 200);
                                                                                                  substring                                                                                                 
@@ -43,7 +43,7 @@ diff -U3 expected/indirect_toast.out results/indirect_toast.out
 +ERROR:  function make_tuple_indirect(indtoasttest) does not exist
 +LINE 1: NEW := make_tuple_indirect(NEW)
 +               ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
 +QUERY:  NEW := make_tuple_indirect(NEW)
 +CONTEXT:  PL/pgSQL function update_using_indirect() line 3 at assignment
  -- modification without modifying assigned value
@@ -59,7 +59,7 @@ diff -U3 expected/indirect_toast.out results/indirect_toast.out
 +ERROR:  function make_tuple_indirect(indtoasttest) does not exist
 +LINE 1: NEW := make_tuple_indirect(NEW)
 +               ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
 +QUERY:  NEW := make_tuple_indirect(NEW)
 +CONTEXT:  PL/pgSQL function update_using_indirect() line 3 at assignment
  -- modification modifying, but effectively not changing
@@ -75,7 +75,7 @@ diff -U3 expected/indirect_toast.out results/indirect_toast.out
 +ERROR:  function make_tuple_indirect(indtoasttest) does not exist
 +LINE 1: NEW := make_tuple_indirect(NEW)
 +               ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
 +QUERY:  NEW := make_tuple_indirect(NEW)
 +CONTEXT:  PL/pgSQL function update_using_indirect() line 3 at assignment
  UPDATE indtoasttest SET cnt = cnt +1, f1 = '-'||f1||'-' RETURNING substring(indtoasttest::text, 1, 200);
@@ -90,14 +90,14 @@ diff -U3 expected/indirect_toast.out results/indirect_toast.out
 +ERROR:  function make_tuple_indirect(indtoasttest) does not exist
 +LINE 1: NEW := make_tuple_indirect(NEW)
 +               ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
 +QUERY:  NEW := make_tuple_indirect(NEW)
 +CONTEXT:  PL/pgSQL function update_using_indirect() line 3 at assignment
  INSERT INTO indtoasttest(descr, f1, f2) VALUES('one-toasted,one-null, via indirect', repeat('1234567890',30000), NULL);
 +ERROR:  function make_tuple_indirect(indtoasttest) does not exist
 +LINE 1: NEW := make_tuple_indirect(NEW)
 +               ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
 +QUERY:  NEW := make_tuple_indirect(NEW)
 +CONTEXT:  PL/pgSQL function update_using_indirect() line 3 at assignment
  SELECT substring(indtoasttest::text, 1, 200) FROM indtoasttest;

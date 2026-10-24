@@ -1,7 +1,7 @@
 diff -U3 expected/opr_sanity.out results/opr_sanity.out
 --- expected/opr_sanity.out
 +++ results/opr_sanity.out
-@@ -989,10 +989,10 @@
+@@ -999,10 +999,10 @@
               OR (c.castsource = 'character'::regtype AND
                   p.proargtypes[0] = 'text'::regtype))
       OR NOT binary_coercible(p.prorettype, c.casttarget));
@@ -12,11 +12,11 @@ diff -U3 expected/opr_sanity.out results/opr_sanity.out
 +ERROR:  function binary_coercible(oid, oid) does not exist
 +LINE 5:      OR NOT (binary_coercible(c.castsource, p.proargtypes[0]...
 +                     ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
  SELECT c.*
  FROM pg_cast c, pg_proc p
  WHERE c.castfunc = p.oid AND
-@@ -1285,10 +1285,10 @@
+@@ -1295,10 +1295,10 @@
       OR NOT binary_coercible(p1.prorettype, o1.oprresult)
       OR NOT binary_coercible(o1.oprleft, p1.proargtypes[0])
       OR NOT binary_coercible(o1.oprright, p1.proargtypes[1]));
@@ -27,11 +27,11 @@ diff -U3 expected/opr_sanity.out results/opr_sanity.out
 +ERROR:  function binary_coercible(oid, oid) does not exist
 +LINE 6:      OR NOT binary_coercible(p1.prorettype, o1.oprresult)
 +                    ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
  SELECT o1.oid, o1.oprname, p1.oid, p1.proname
  FROM pg_operator AS o1, pg_proc AS p1
  WHERE o1.oprcode = p1.oid AND
-@@ -1297,10 +1297,10 @@
+@@ -1307,10 +1307,10 @@
       OR NOT binary_coercible(p1.prorettype, o1.oprresult)
       OR NOT binary_coercible(o1.oprright, p1.proargtypes[0])
       OR o1.oprleft != 0);
@@ -42,11 +42,11 @@ diff -U3 expected/opr_sanity.out results/opr_sanity.out
 +ERROR:  function binary_coercible(oid, oid) does not exist
 +LINE 6:      OR NOT binary_coercible(p1.prorettype, o1.oprresult)
 +                    ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
  -- If the operator is mergejoinable or hashjoinable, its underlying function
  -- should not be volatile.
  SELECT o1.oid, o1.oprname, p1.oid, p1.proname
-@@ -1524,10 +1524,10 @@
+@@ -1534,10 +1534,10 @@
       -- we could carry the check further, but 4 args is enough for now
       OR (p.pronargs > 4)
      );
@@ -57,11 +57,11 @@ diff -U3 expected/opr_sanity.out results/opr_sanity.out
 +ERROR:  function binary_coercible(oid, oid) does not exist
 +LINE 9:      OR NOT binary_coercible(ptr.prorettype, a.aggtranstype)
 +                    ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
  -- Cross-check finalfn (if present) against its entry in pg_proc.
  SELECT a.aggfnoid::oid, p.proname, pfn.oid, pfn.proname
  FROM pg_aggregate AS a, pg_proc AS p, pg_proc AS pfn
-@@ -1547,10 +1547,10 @@
+@@ -1557,10 +1557,10 @@
       -- we could carry the check further, but 4 args is enough for now
       OR (pfn.pronargs > 4)
      );
@@ -72,11 +72,11 @@ diff -U3 expected/opr_sanity.out results/opr_sanity.out
 +ERROR:  function binary_coercible(oid, oid) does not exist
 +LINE 6:      NOT binary_coercible(pfn.prorettype, p.prorettype) OR
 +                 ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
  -- If transfn is strict then either initval should be non-NULL, or
  -- input type should match transtype so that the first non-null input
  -- can be assigned as the state value.
-@@ -1560,10 +1560,10 @@
+@@ -1570,10 +1570,10 @@
      a.aggtransfn = ptr.oid AND ptr.proisstrict AND
      a.agginitval IS NULL AND
      NOT binary_coercible(p.proargtypes[0], a.aggtranstype);
@@ -87,11 +87,11 @@ diff -U3 expected/opr_sanity.out results/opr_sanity.out
 +ERROR:  function binary_coercible(oid, oid) does not exist
 +LINE 6:     NOT binary_coercible(p.proargtypes[0], a.aggtranstype);
 +                ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
  -- Check for inconsistent specifications of moving-aggregate columns.
  SELECT ctid, aggfnoid::oid
  FROM pg_aggregate as a
-@@ -1612,10 +1612,10 @@
+@@ -1622,10 +1622,10 @@
       -- we could carry the check further, but 3 args is enough for now
       OR (p.pronargs > 3)
      );
@@ -102,11 +102,11 @@ diff -U3 expected/opr_sanity.out results/opr_sanity.out
 +ERROR:  function binary_coercible(oid, oid) does not exist
 +LINE 9:      OR NOT binary_coercible(ptr.prorettype, a.aggmtranstype...
 +                    ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
  -- Cross-check minvtransfn (if present) against its entry in pg_proc.
  SELECT a.aggfnoid::oid, p.proname, ptr.oid, ptr.proname
  FROM pg_aggregate AS a, pg_proc AS p, pg_proc AS ptr
-@@ -1636,10 +1636,10 @@
+@@ -1646,10 +1646,10 @@
       -- we could carry the check further, but 3 args is enough for now
       OR (p.pronargs > 3)
      );
@@ -117,11 +117,11 @@ diff -U3 expected/opr_sanity.out results/opr_sanity.out
 +ERROR:  function binary_coercible(oid, oid) does not exist
 +LINE 9:      OR NOT binary_coercible(ptr.prorettype, a.aggmtranstype...
 +                    ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
  -- Cross-check mfinalfn (if present) against its entry in pg_proc.
  SELECT a.aggfnoid::oid, p.proname, pfn.oid, pfn.proname
  FROM pg_aggregate AS a, pg_proc AS p, pg_proc AS pfn
-@@ -1659,10 +1659,10 @@
+@@ -1669,10 +1669,10 @@
       -- we could carry the check further, but 4 args is enough for now
       OR (pfn.pronargs > 4)
      );
@@ -132,11 +132,11 @@ diff -U3 expected/opr_sanity.out results/opr_sanity.out
 +ERROR:  function binary_coercible(oid, oid) does not exist
 +LINE 6:      NOT binary_coercible(pfn.prorettype, p.prorettype) OR
 +                 ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
  -- If mtransfn is strict then either minitval should be non-NULL, or
  -- input type should match mtranstype so that the first non-null input
  -- can be assigned as the state value.
-@@ -1672,10 +1672,10 @@
+@@ -1682,10 +1682,10 @@
      a.aggmtransfn = ptr.oid AND ptr.proisstrict AND
      a.aggminitval IS NULL AND
      NOT binary_coercible(p.proargtypes[0], a.aggmtranstype);
@@ -147,11 +147,11 @@ diff -U3 expected/opr_sanity.out results/opr_sanity.out
 +ERROR:  function binary_coercible(oid, oid) does not exist
 +LINE 6:     NOT binary_coercible(p.proargtypes[0], a.aggmtranstype);
 +                ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
  -- mtransfn and minvtransfn should have same strictness setting.
  SELECT a.aggfnoid::oid, p.proname, ptr.oid, ptr.proname, iptr.oid, iptr.proname
  FROM pg_aggregate AS a, pg_proc AS p, pg_proc AS ptr, pg_proc AS iptr
-@@ -1696,10 +1696,10 @@
+@@ -1706,10 +1706,10 @@
       p.prorettype != p.proargtypes[0] OR
       p.prorettype != p.proargtypes[1] OR
       NOT binary_coercible(a.aggtranstype, p.proargtypes[0]));
@@ -162,11 +162,11 @@ diff -U3 expected/opr_sanity.out results/opr_sanity.out
 +ERROR:  function binary_coercible(oid, oid) does not exist
 +LINE 7:      NOT binary_coercible(a.aggtranstype, p.proargtypes[0]))...
 +                 ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
  -- Check that no combine function for an INTERNAL transtype is strict.
  SELECT a.aggfnoid, p.proname
  FROM pg_aggregate as a, pg_proc as p
-@@ -2122,10 +2122,10 @@
+@@ -2132,10 +2132,10 @@
  WHERE NOT EXISTS(SELECT 1 FROM pg_amop AS a1
                   WHERE a1.amopfamily = c1.opcfamily
                     AND binary_coercible(c1.opcintype, a1.amoplefttype));
@@ -177,11 +177,11 @@ diff -U3 expected/opr_sanity.out results/opr_sanity.out
 +ERROR:  function binary_coercible(oid, oid) does not exist
 +LINE 5:                    AND binary_coercible(c1.opcintype, a1.amo...
 +                               ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
  -- Check that each operator listed in pg_amop has an associated opclass,
  -- that is one whose opcintype matches oprleft (possibly by coercion).
  -- Otherwise the operator is useless because it cannot be matched to an index.
-@@ -2137,10 +2137,10 @@
+@@ -2147,10 +2147,10 @@
  WHERE NOT EXISTS(SELECT 1 FROM pg_opclass AS c1
                   WHERE c1.opcfamily = a1.amopfamily
                     AND binary_coercible(c1.opcintype, a1.amoplefttype));
@@ -192,11 +192,11 @@ diff -U3 expected/opr_sanity.out results/opr_sanity.out
 +ERROR:  function binary_coercible(oid, oid) does not exist
 +LINE 5:                    AND binary_coercible(c1.opcintype, a1.amo...
 +                               ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
  -- Operators that are primary members of opclasses must be immutable (else
  -- it suggests that the index ordering isn't fixed).  Operators that are
  -- cross-type members need only be stable, since they are just shorthands
-@@ -2264,10 +2264,10 @@
+@@ -2276,10 +2276,10 @@
        pg_opclass opc
  WHERE a.attrelid = indrelid AND a.attnum = ikey AND opc.oid = iclass AND
        (NOT binary_coercible(atttypid, opcintype) OR icoll != attcollation);
@@ -207,7 +207,7 @@ diff -U3 expected/opr_sanity.out results/opr_sanity.out
 +ERROR:  function binary_coercible(oid, oid) does not exist
 +LINE 8:       (NOT binary_coercible(atttypid, opcintype) OR icoll !=...
 +                   ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
  -- For system catalogs, be even tighter: nearly all indexes should be
  -- exact type matches not binary-coercible matches.  At this writing
  -- the only exception is an OID index on a regproc column.

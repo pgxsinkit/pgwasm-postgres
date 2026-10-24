@@ -1,7 +1,7 @@
 diff -U3 expected/copy2.out results/copy2.out
 --- expected/copy2.out
 +++ results/copy2.out
-@@ -796,9 +796,11 @@
+@@ -876,9 +876,11 @@
  
  -- test datatype error that can't be handled as soft: should fail
  CREATE TABLE hard_err(foo widget);
@@ -15,7 +15,7 @@ diff -U3 expected/copy2.out results/copy2.out
  -- test missing data: should fail
  COPY check_ign_err FROM STDIN WITH (on_error ignore);
  ERROR:  missing data for column "k"
-@@ -815,14 +817,25 @@
+@@ -895,14 +897,25 @@
  NOTICE:  4 rows were skipped due to data type incompatibility
  -- clean up
  DROP TABLE forcetest;
@@ -41,7 +41,7 @@ diff -U3 expected/copy2.out results/copy2.out
  DROP TABLE instead_of_insert_tbl;
  DROP VIEW instead_of_insert_tbl_view;
  DROP VIEW instead_of_insert_tbl_view_2;
-@@ -831,6 +844,7 @@
+@@ -914,6 +927,7 @@
  DROP TABLE check_ign_err2;
  DROP DOMAIN dcheck_ign_err2;
  DROP TABLE hard_err;

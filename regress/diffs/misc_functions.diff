@@ -1,7 +1,7 @@
 diff -U3 expected/misc_functions.out results/misc_functions.out
 --- expected/misc_functions.out
 +++ results/misc_functions.out
-@@ -184,138 +184,117 @@
+@@ -175,138 +175,117 @@
     RETURNS text
     AS :'regresslib'
     LANGUAGE C STRICT IMMUTABLE;
@@ -15,7 +15,7 @@ diff -U3 expected/misc_functions.out results/misc_functions.out
 +ERROR:  function test_canonicalize_path(unknown) does not exist
 +LINE 1: SELECT test_canonicalize_path('/');
 +               ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
  SELECT test_canonicalize_path('/./abc/def/');
 - test_canonicalize_path 
 -------------------------
@@ -25,7 +25,7 @@ diff -U3 expected/misc_functions.out results/misc_functions.out
 +ERROR:  function test_canonicalize_path(unknown) does not exist
 +LINE 1: SELECT test_canonicalize_path('/./abc/def/');
 +               ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
  SELECT test_canonicalize_path('/./../abc/def');
 - test_canonicalize_path 
 -------------------------
@@ -35,7 +35,7 @@ diff -U3 expected/misc_functions.out results/misc_functions.out
 +ERROR:  function test_canonicalize_path(unknown) does not exist
 +LINE 1: SELECT test_canonicalize_path('/./../abc/def');
 +               ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
  SELECT test_canonicalize_path('/./../../abc/def/');
 - test_canonicalize_path 
 -------------------------
@@ -45,7 +45,7 @@ diff -U3 expected/misc_functions.out results/misc_functions.out
 +ERROR:  function test_canonicalize_path(unknown) does not exist
 +LINE 1: SELECT test_canonicalize_path('/./../../abc/def/');
 +               ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
  SELECT test_canonicalize_path('/abc/.././def/ghi');
 - test_canonicalize_path 
 -------------------------
@@ -55,7 +55,7 @@ diff -U3 expected/misc_functions.out results/misc_functions.out
 +ERROR:  function test_canonicalize_path(unknown) does not exist
 +LINE 1: SELECT test_canonicalize_path('/abc/.././def/ghi');
 +               ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
  SELECT test_canonicalize_path('/abc/./../def/ghi//');
 - test_canonicalize_path 
 -------------------------
@@ -65,7 +65,7 @@ diff -U3 expected/misc_functions.out results/misc_functions.out
 +ERROR:  function test_canonicalize_path(unknown) does not exist
 +LINE 1: SELECT test_canonicalize_path('/abc/./../def/ghi//');
 +               ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
  SELECT test_canonicalize_path('/abc/def/../..');
 - test_canonicalize_path 
 -------------------------
@@ -75,7 +75,7 @@ diff -U3 expected/misc_functions.out results/misc_functions.out
 +ERROR:  function test_canonicalize_path(unknown) does not exist
 +LINE 1: SELECT test_canonicalize_path('/abc/def/../..');
 +               ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
  SELECT test_canonicalize_path('/abc/def/../../..');
 - test_canonicalize_path 
 -------------------------
@@ -85,7 +85,7 @@ diff -U3 expected/misc_functions.out results/misc_functions.out
 +ERROR:  function test_canonicalize_path(unknown) does not exist
 +LINE 1: SELECT test_canonicalize_path('/abc/def/../../..');
 +               ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
  SELECT test_canonicalize_path('/abc/def/../../../../ghi/jkl');
 - test_canonicalize_path 
 -------------------------
@@ -95,7 +95,7 @@ diff -U3 expected/misc_functions.out results/misc_functions.out
 +ERROR:  function test_canonicalize_path(unknown) does not exist
 +LINE 1: SELECT test_canonicalize_path('/abc/def/../../../../ghi/jkl'...
 +               ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
  SELECT test_canonicalize_path('.');
 - test_canonicalize_path 
 -------------------------
@@ -105,7 +105,7 @@ diff -U3 expected/misc_functions.out results/misc_functions.out
 +ERROR:  function test_canonicalize_path(unknown) does not exist
 +LINE 1: SELECT test_canonicalize_path('.');
 +               ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
  SELECT test_canonicalize_path('./');
 - test_canonicalize_path 
 -------------------------
@@ -115,7 +115,7 @@ diff -U3 expected/misc_functions.out results/misc_functions.out
 +ERROR:  function test_canonicalize_path(unknown) does not exist
 +LINE 1: SELECT test_canonicalize_path('./');
 +               ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
  SELECT test_canonicalize_path('./abc/..');
 - test_canonicalize_path 
 -------------------------
@@ -125,7 +125,7 @@ diff -U3 expected/misc_functions.out results/misc_functions.out
 +ERROR:  function test_canonicalize_path(unknown) does not exist
 +LINE 1: SELECT test_canonicalize_path('./abc/..');
 +               ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
  SELECT test_canonicalize_path('abc/../');
 - test_canonicalize_path 
 -------------------------
@@ -135,7 +135,7 @@ diff -U3 expected/misc_functions.out results/misc_functions.out
 +ERROR:  function test_canonicalize_path(unknown) does not exist
 +LINE 1: SELECT test_canonicalize_path('abc/../');
 +               ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
  SELECT test_canonicalize_path('abc/../def');
 - test_canonicalize_path 
 -------------------------
@@ -145,7 +145,7 @@ diff -U3 expected/misc_functions.out results/misc_functions.out
 +ERROR:  function test_canonicalize_path(unknown) does not exist
 +LINE 1: SELECT test_canonicalize_path('abc/../def');
 +               ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
  SELECT test_canonicalize_path('..');
 - test_canonicalize_path 
 -------------------------
@@ -155,7 +155,7 @@ diff -U3 expected/misc_functions.out results/misc_functions.out
 +ERROR:  function test_canonicalize_path(unknown) does not exist
 +LINE 1: SELECT test_canonicalize_path('..');
 +               ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
  SELECT test_canonicalize_path('../abc/def');
 - test_canonicalize_path 
 -------------------------
@@ -165,7 +165,7 @@ diff -U3 expected/misc_functions.out results/misc_functions.out
 +ERROR:  function test_canonicalize_path(unknown) does not exist
 +LINE 1: SELECT test_canonicalize_path('../abc/def');
 +               ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
  SELECT test_canonicalize_path('../abc/..');
 - test_canonicalize_path 
 -------------------------
@@ -175,7 +175,7 @@ diff -U3 expected/misc_functions.out results/misc_functions.out
 +ERROR:  function test_canonicalize_path(unknown) does not exist
 +LINE 1: SELECT test_canonicalize_path('../abc/..');
 +               ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
  SELECT test_canonicalize_path('../abc/../def');
 - test_canonicalize_path 
 -------------------------
@@ -185,7 +185,7 @@ diff -U3 expected/misc_functions.out results/misc_functions.out
 +ERROR:  function test_canonicalize_path(unknown) does not exist
 +LINE 1: SELECT test_canonicalize_path('../abc/../def');
 +               ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
  SELECT test_canonicalize_path('../abc/../../def/ghi');
 - test_canonicalize_path 
 -------------------------
@@ -195,7 +195,7 @@ diff -U3 expected/misc_functions.out results/misc_functions.out
 +ERROR:  function test_canonicalize_path(unknown) does not exist
 +LINE 1: SELECT test_canonicalize_path('../abc/../../def/ghi');
 +               ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
  SELECT test_canonicalize_path('./abc/./def/.');
 - test_canonicalize_path 
 -------------------------
@@ -205,7 +205,7 @@ diff -U3 expected/misc_functions.out results/misc_functions.out
 +ERROR:  function test_canonicalize_path(unknown) does not exist
 +LINE 1: SELECT test_canonicalize_path('./abc/./def/.');
 +               ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
  SELECT test_canonicalize_path('./abc/././def/.');
 - test_canonicalize_path 
 -------------------------
@@ -215,7 +215,7 @@ diff -U3 expected/misc_functions.out results/misc_functions.out
 +ERROR:  function test_canonicalize_path(unknown) does not exist
 +LINE 1: SELECT test_canonicalize_path('./abc/././def/.');
 +               ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
  SELECT test_canonicalize_path('./abc/./def/.././ghi/../../../jkl/mno');
 - test_canonicalize_path 
 -------------------------
@@ -225,11 +225,11 @@ diff -U3 expected/misc_functions.out results/misc_functions.out
 +ERROR:  function test_canonicalize_path(unknown) does not exist
 +LINE 1: SELECT test_canonicalize_path('./abc/./def/.././ghi/../../.....
 +               ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
  --
  -- pg_log_backend_memory_contexts()
  --
-@@ -334,8 +313,7 @@
+@@ -325,8 +304,7 @@
    WHERE backend_type = 'checkpointer';
   pg_log_backend_memory_contexts 
  --------------------------------
@@ -239,7 +239,7 @@ diff -U3 expected/misc_functions.out results/misc_functions.out
  
  CREATE ROLE regress_log_memory;
  SELECT has_function_privilege('regress_log_memory',
-@@ -601,45 +579,40 @@
+@@ -592,45 +570,40 @@
      RETURNS internal
      AS :'regresslib', 'test_support_func'
      LANGUAGE C STRICT;
@@ -287,7 +287,7 @@ diff -U3 expected/misc_functions.out results/misc_functions.out
 +ERROR:  function my_gen_series(integer, integer) does not exist
 +LINE 2: SELECT * FROM tenk1 a JOIN my_gen_series(1,1000) g ON a.uniq...
 +                                   ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
  EXPLAIN (COSTS OFF)
  SELECT * FROM tenk1 a JOIN my_gen_series(1,10) g ON a.unique1 = g;
 -                   QUERY PLAN                    
@@ -301,11 +301,50 @@ diff -U3 expected/misc_functions.out results/misc_functions.out
 +ERROR:  function my_gen_series(integer, integer) does not exist
 +LINE 2: SELECT * FROM tenk1 a JOIN my_gen_series(1,10) g ON a.unique...
 +                                   ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
  --
- -- Test the SupportRequestRows support function for generate_series_timestamp()
+ -- Test SupportRequestInlineInFrom request
  --
-@@ -908,12 +881,12 @@
+@@ -638,6 +611,7 @@
+     RETURNS internal
+     AS :'regresslib', 'test_inline_in_from_support_func'
+     LANGUAGE C STRICT;
++ERROR:  could not access file "@abs_builddir@/lib/regress.so": No such file or directory
+ CREATE FUNCTION foo_from_bar(colname TEXT, tablename TEXT, filter TEXT)
+ RETURNS SETOF TEXT
+ LANGUAGE plpgsql
+@@ -654,6 +628,7 @@
+ $function$ STABLE;
+ ALTER FUNCTION foo_from_bar(TEXT, TEXT, TEXT)
+   SUPPORT test_inline_in_from_support_func;
++ERROR:  function test_inline_in_from_support_func(internal) does not exist
+ SELECT * FROM foo_from_bar('f1', 'text_tbl', NULL);
+    foo_from_bar    
+ -------------------
+@@ -668,17 +643,16 @@
+ (1 row)
+ 
+ EXPLAIN (COSTS OFF) SELECT * FROM foo_from_bar('f1', 'text_tbl', NULL);
+-      QUERY PLAN      
+-----------------------
+- Seq Scan on text_tbl
++          QUERY PLAN           
++-------------------------------
++ Function Scan on foo_from_bar
+ (1 row)
+ 
+ EXPLAIN (COSTS OFF) SELECT * FROM foo_from_bar('f1', 'text_tbl', 'doh!');
+           QUERY PLAN           
+ -------------------------------
+- Seq Scan on text_tbl
+-   Filter: (f1 = 'doh!'::text)
+-(2 rows)
++ Function Scan on foo_from_bar
++(1 row)
+ 
+ DROP FUNCTION foo_from_bar;
+ -- Test functions for control data
+@@ -811,12 +785,12 @@
      RETURNS void
      AS :'regresslib'
      LANGUAGE C;
@@ -319,7 +358,74 @@ diff -U3 expected/misc_functions.out results/misc_functions.out
 +ERROR:  function test_relpath() does not exist
 +LINE 1: SELECT test_relpath();
 +               ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
  -- pg_replication_origin.roname limit
  SELECT pg_replication_origin_create('regress_' || repeat('a', 505));
  ERROR:  replication origin name is too long
+@@ -855,12 +829,12 @@
+     RETURNS bool
+     AS :'regresslib'
+     LANGUAGE C;
++ERROR:  could not access file "@abs_builddir@/lib/regress.so": No such file or directory
+ SELECT test_instr_time();
+- test_instr_time 
+------------------
+- t
+-(1 row)
+-
++ERROR:  function test_instr_time() does not exist
++LINE 1: SELECT test_instr_time();
++               ^
++DETAIL:  There is no function of that name.
+ --
+ -- C tests for pg_locale.h APIs. No interesting output; tests will
+ -- ERROR upon failure.
+@@ -873,31 +847,28 @@
+     RETURNS void
+     AS :'regresslib'
+     LANGUAGE C STRICT;
++ERROR:  could not access file "@abs_builddir@/lib/regress.so": No such file or directory
+ -- Libc C.  Available in every database.
+ SELECT test_pg_locale_apis(to_regcollation('"C"'));
+- test_pg_locale_apis 
+----------------------
+- 
+-(1 row)
+-
++ERROR:  function test_pg_locale_apis(regcollation) does not exist
++LINE 1: SELECT test_pg_locale_apis(to_regcollation('"C"'));
++               ^
++DETAIL:  There is no function of that name.
+ -- Builtin C (collate and ctype).  Usable only in UTF8 databases.
+ SELECT test_pg_locale_apis(to_regcollation('ucs_basic'));
+- test_pg_locale_apis 
+----------------------
+- 
+-(1 row)
+-
++ERROR:  function test_pg_locale_apis(regcollation) does not exist
++LINE 1: SELECT test_pg_locale_apis(to_regcollation('ucs_basic'));
++               ^
++DETAIL:  There is no function of that name.
+ -- Builtin C.UTF-8 (C collate, Unicode ctype).  Same encoding restriction.
+ SELECT test_pg_locale_apis(to_regcollation('pg_c_utf8'));
+- test_pg_locale_apis 
+----------------------
+- 
+-(1 row)
+-
++ERROR:  function test_pg_locale_apis(regcollation) does not exist
++LINE 1: SELECT test_pg_locale_apis(to_regcollation('pg_c_utf8'));
++               ^
++DETAIL:  There is no function of that name.
+ -- en-x-icu is present when ICU collations were imported at initdb.
+ SELECT test_pg_locale_apis(to_regcollation('en-x-icu'));
+- test_pg_locale_apis 
+----------------------
+- 
+-(1 row)
+-
++ERROR:  function test_pg_locale_apis(regcollation) does not exist
++LINE 1: SELECT test_pg_locale_apis(to_regcollation('en-x-icu'));
++               ^
++DETAIL:  There is no function of that name.

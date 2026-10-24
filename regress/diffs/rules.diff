@@ -1,7 +1,7 @@
 diff -U3 expected/rules.out results/rules.out
 --- expected/rules.out
 +++ results/rules.out
-@@ -3878,27 +3878,29 @@
+@@ -4079,27 +4079,29 @@
  CREATE TABLE ruletest_t3 (x int);
  CREATE RULE rule2 AS ON UPDATE TO ruletest_t1
      DO INSTEAD INSERT INTO ruletest_t2 VALUES (OLD.*);

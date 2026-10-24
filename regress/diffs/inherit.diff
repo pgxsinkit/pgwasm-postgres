@@ -1,7 +1,7 @@
 diff -U3 expected/inherit.out results/inherit.out
 --- expected/inherit.out
 +++ results/inherit.out
-@@ -2921,7 +2921,10 @@
+@@ -3134,7 +3134,10 @@
  reset session authorization;
  drop table inh_parent, inh_child;
  revoke all on schema public from regress_alice, regress_bob;
@@ -12,7 +12,7 @@ diff -U3 expected/inherit.out results/inherit.out
  --
  -- Check use of temporary tables with inheritance trees
  --
-@@ -3639,9 +3642,14 @@
+@@ -3854,9 +3857,14 @@
    select 1, 'a', left(fipshash(i::text), 5) from generate_series(0, 100) i;
  analyze permtest_parent;
  create role regress_no_child_access;
@@ -27,7 +27,7 @@ diff -U3 expected/inherit.out results/inherit.out
  -- without stats access, these queries would produce hash join plans:
  explain (costs off)
    select * from permtest_parent p1 inner join permtest_parent p2
-@@ -3669,8 +3677,11 @@
+@@ -3884,8 +3892,11 @@
  
  reset session authorization;
  revoke all on permtest_parent from regress_no_child_access;
@@ -39,7 +39,7 @@ diff -U3 expected/inherit.out results/inherit.out
  explain (costs off)
    select p2.a, p1.c from permtest_parent p1 inner join permtest_parent p2
    on p1.a = p2.a and p1.c ~ 'a1$';
-@@ -3687,19 +3698,21 @@
+@@ -3902,19 +3913,21 @@
  explain (costs off)
    select p2.a, p1.c from permtest_parent p1 inner join permtest_parent p2
    on p1.a = p2.a and left(p1.c, 3) ~ 'a1$';

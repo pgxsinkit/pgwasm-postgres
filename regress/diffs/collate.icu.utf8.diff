@@ -1196,7 +1196,7 @@ diff -U3 expected/collate.icu.utf8.out results/collate.icu.utf8.out
  CREATE OR REPLACE FUNCTION
    mylt2 (x text, y text) RETURNS boolean LANGUAGE plpgsql AS $$
  declare
-@@ -934,114 +630,70 @@
+@@ -934,116 +630,70 @@
  
  -- polymorphism
  SELECT * FROM unnest((SELECT array_agg(b ORDER BY b) FROM collate_test1)) ORDER BY 1;
@@ -1280,6 +1280,8 @@ diff -U3 expected/collate.icu.utf8.out results/collate.icu.utf8.out
 +ERROR:  relation "collate_test1" does not exist
  CREATE INDEX collate_test1_idx5 ON collate_test1 (a COLLATE "C"); -- fail
 -ERROR:  collations are not supported by type integer
+-LINE 1: CREATE INDEX collate_test1_idx5 ON collate_test1 (a COLLATE ...
+-                                                          ^
 +ERROR:  relation "collate_test1" does not exist
  CREATE INDEX collate_test1_idx6 ON collate_test1 ((a COLLATE "C")); -- fail
 -ERROR:  collations are not supported by type integer
@@ -1346,7 +1348,7 @@ diff -U3 expected/collate.icu.utf8.out results/collate.icu.utf8.out
  reset enable_seqscan;
  -- schema manipulation commands
  CREATE ROLE regress_test_role;
-@@ -1125,7 +777,7 @@
+@@ -1127,7 +777,7 @@
  DROP ROLE regress_test_role;
  -- ALTER
  ALTER COLLATION "en-x-icu" REFRESH VERSION;
@@ -1355,7 +1357,7 @@ diff -U3 expected/collate.icu.utf8.out results/collate.icu.utf8.out
  -- also test for database while we are here
  SELECT current_database() AS datname \gset
  ALTER DATABASE :"datname" REFRESH COLLATION VERSION;
-@@ -1170,6 +822,7 @@
+@@ -1172,6 +822,7 @@
  -- test range types and collations
  create type textrange_c as range(subtype=text, collation="C");
  create type textrange_en_us as range(subtype=text, collation="en-x-icu");
@@ -1363,7 +1365,7 @@ diff -U3 expected/collate.icu.utf8.out results/collate.icu.utf8.out
  select textrange_c('A','Z') @> 'b'::text;
   ?column? 
  ----------
-@@ -1177,36 +830,27 @@
+@@ -1179,36 +830,27 @@
  (1 row)
  
  select textrange_en_us('A','Z') @> 'b'::text;
@@ -1375,7 +1377,7 @@ diff -U3 expected/collate.icu.utf8.out results/collate.icu.utf8.out
 +ERROR:  function textrange_en_us(unknown, unknown) does not exist
 +LINE 1: select textrange_en_us('A','Z') @> 'b'::text;
 +               ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
  drop type textrange_c;
  drop type textrange_en_us;
 +ERROR:  type "textrange_en_us" does not exist
@@ -1412,7 +1414,7 @@ diff -U3 expected/collate.icu.utf8.out results/collate.icu.utf8.out
  RESET client_min_messages;
  SELECT 'aaá' > 'AAA' COLLATE "und-x-icu", 'aaá' < 'AAA' COLLATE testcoll_ignore_accents;
   ?column? | ?column? 
-@@ -1216,6 +860,7 @@
+@@ -1218,6 +860,7 @@
  
  SET client_min_messages=WARNING;
  CREATE COLLATION testcoll_backwards (provider = icu, locale = '@colBackwards=yes');
@@ -1420,7 +1422,7 @@ diff -U3 expected/collate.icu.utf8.out results/collate.icu.utf8.out
  RESET client_min_messages;
  SELECT 'coté' < 'côte' COLLATE "und-x-icu", 'coté' > 'côte' COLLATE testcoll_backwards;
   ?column? | ?column? 
-@@ -1224,9 +869,9 @@
+@@ -1226,9 +869,9 @@
  (1 row)
  
  CREATE COLLATION testcoll_lower_first (provider = icu, locale = '@colCaseFirst=lower');
@@ -1432,7 +1434,7 @@ diff -U3 expected/collate.icu.utf8.out results/collate.icu.utf8.out
  SELECT 'aaa' < 'AAA' COLLATE testcoll_lower_first, 'aaa' > 'AAA' COLLATE testcoll_upper_first;
   ?column? | ?column? 
  ----------+----------
-@@ -1234,7 +879,7 @@
+@@ -1236,7 +879,7 @@
  (1 row)
  
  CREATE COLLATION testcoll_shifted (provider = icu, locale = '@colAlternate=shifted');
@@ -1441,7 +1443,7 @@ diff -U3 expected/collate.icu.utf8.out results/collate.icu.utf8.out
  SELECT 'de-luge' < 'deanza' COLLATE "und-x-icu", 'de-luge' > 'deanza' COLLATE testcoll_shifted;
   ?column? | ?column? 
  ----------+----------
-@@ -1243,6 +888,7 @@
+@@ -1245,6 +888,7 @@
  
  SET client_min_messages=WARNING;
  CREATE COLLATION testcoll_numeric (provider = icu, locale = '@colNumeric=yes');
@@ -1449,7 +1451,7 @@ diff -U3 expected/collate.icu.utf8.out results/collate.icu.utf8.out
  RESET client_min_messages;
  SELECT 'A-21' > 'A-123' COLLATE "und-x-icu", 'A-21' < 'A-123' COLLATE testcoll_numeric;
   ?column? | ?column? 
-@@ -1251,18 +897,18 @@
+@@ -1253,18 +897,18 @@
  (1 row)
  
  CREATE COLLATION testcoll_error1 (provider = icu, locale = '@colNumeric=lower');
@@ -1476,7 +1478,7 @@ diff -U3 expected/collate.icu.utf8.out results/collate.icu.utf8.out
  -- rules
  CREATE COLLATION testcoll_rules1 (provider = icu, locale = '', rules = '&a < g');
  NOTICE:  using standard form "und" for ICU locale ""
-@@ -1270,16 +916,9 @@
+@@ -1272,16 +916,9 @@
  -- example from https://unicode-org.github.io/icu/userguide/collation/customization/#syntax
  INSERT INTO test7 VALUES ('Abernathy'), ('apple'), ('bird'), ('Boston'), ('Graham'), ('green');
  SELECT * FROM test7 ORDER BY a COLLATE "en-x-icu";
@@ -1496,7 +1498,7 @@ diff -U3 expected/collate.icu.utf8.out results/collate.icu.utf8.out
  SELECT * FROM test7 ORDER BY a COLLATE testcoll_rules1;
       a     
  -----------
-@@ -1458,7 +1097,7 @@
+@@ -1468,7 +1105,7 @@
  CREATE COLLATION case_sensitive (provider = icu, locale = '');
  NOTICE:  using standard form "und" for ICU locale ""
  CREATE COLLATION case_insensitive (provider = icu, locale = '@colStrength=secondary', deterministic = false);
@@ -1505,7 +1507,7 @@ diff -U3 expected/collate.icu.utf8.out results/collate.icu.utf8.out
  SELECT 'abc' <= 'ABC' COLLATE case_sensitive, 'abc' >= 'ABC' COLLATE case_sensitive;
   ?column? | ?column? 
  ----------+----------
-@@ -1523,17 +1162,19 @@
+@@ -1533,17 +1170,19 @@
  
  -- test language tags
  CREATE COLLATION lt_insensitive (provider = icu, locale = 'en-u-ks-level1', deterministic = false);
@@ -1527,7 +1529,7 @@ diff -U3 expected/collate.icu.utf8.out results/collate.icu.utf8.out
  (1 row)
  
  CREATE TABLE test1cs (x text COLLATE case_sensitive);
-@@ -2853,6 +2494,7 @@
+@@ -2980,6 +2619,7 @@
  -- accents
  SET client_min_messages=WARNING;
  CREATE COLLATION ignore_accents (provider = icu, locale = '@colStrength=primary;colCaseLevel=yes', deterministic = false);

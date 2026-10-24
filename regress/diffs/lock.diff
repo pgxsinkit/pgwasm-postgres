@@ -15,4 +15,4 @@ diff -U3 expected/lock.out results/lock.out
 +ERROR:  function test_atomic_ops() does not exist
 +LINE 1: SELECT test_atomic_ops();
 +               ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.

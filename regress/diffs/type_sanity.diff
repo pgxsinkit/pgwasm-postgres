@@ -20,7 +20,7 @@ diff -U3 expected/type_sanity.out results/type_sanity.out
 +ERROR:  function is_catalog_text_unique_index_oid(oid) does not exist
 +LINE 3: WHERE (is_catalog_text_unique_index_oid(indexrelid) <>
 +               ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
  -- **************** pg_range ****************
  -- Look for illegal values in pg_range fields.
  SELECT r.rngtypid, r.rngsubtype

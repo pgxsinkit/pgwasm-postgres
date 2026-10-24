@@ -1,7 +1,7 @@
 diff -U3 expected/updatable_views.out results/updatable_views.out
 --- expected/updatable_views.out
 +++ results/updatable_views.out
-@@ -1502,181 +1502,326 @@
+@@ -1517,181 +1517,326 @@
  
  RESET SESSION AUTHORIZATION;
  DROP TABLE base_tbl CASCADE;
@@ -401,7 +401,7 @@ diff -U3 expected/updatable_views.out results/updatable_views.out
  UPDATE rw_view1 SET bb=bb, cc=cc; -- not allowed
  ERROR:  permission denied for table base_tbl
  MERGE INTO rw_view1 t USING (VALUES (1)) AS v(a) ON t.aa = v.a
-@@ -1685,10 +1830,10 @@
+@@ -1700,10 +1845,10 @@
  DELETE FROM base_tbl; -- not allowed
  ERROR:  permission denied for table base_tbl
  DELETE FROM rw_view1; -- not allowed
@@ -414,7 +414,7 @@ diff -U3 expected/updatable_views.out results/updatable_views.out
  SET SESSION AUTHORIZATION regress_view_user1;
  GRANT SELECT ON base_tbl TO regress_view_user2;
  GRANT UPDATE (a,c) ON base_tbl TO regress_view_user2;
-@@ -1696,16 +1841,20 @@
+@@ -1711,16 +1856,20 @@
  SELECT * FROM base_tbl; -- ok
   a |   b   | c 
  ---+-------+---
@@ -437,7 +437,7 @@ diff -U3 expected/updatable_views.out results/updatable_views.out
  
  UPDATE base_tbl SET a=a, c=c; -- ok
  UPDATE base_tbl SET b=b; -- not allowed
-@@ -1714,12 +1863,10 @@
+@@ -1729,12 +1878,10 @@
  MERGE INTO rw_view1 t USING (VALUES (1)) AS v(a) ON t.aa = v.a
    WHEN MATCHED THEN UPDATE SET cc = cc; -- ok
  UPDATE rw_view1 SET aa=aa; -- not allowed
@@ -450,7 +450,7 @@ diff -U3 expected/updatable_views.out results/updatable_views.out
  MERGE INTO rw_view1 t USING (VALUES (1)) AS v(a) ON t.aa = v.a
    WHEN MATCHED THEN UPDATE SET bb = bb; -- not allowed
  ERROR:  permission denied for table base_tbl
-@@ -1728,13 +1875,10 @@
+@@ -1743,13 +1890,10 @@
  SET SESSION AUTHORIZATION regress_view_user2;
  INSERT INTO base_tbl VALUES (3, 'Row 3', 3.0); -- ok
  INSERT INTO rw_view1 VALUES ('Row 4', 4.0, 4); -- not allowed
@@ -464,7 +464,7 @@ diff -U3 expected/updatable_views.out results/updatable_views.out
  SET SESSION AUTHORIZATION regress_view_user1;
  REVOKE INSERT, DELETE ON base_tbl FROM regress_view_user2;
  GRANT INSERT, DELETE ON rw_view1 TO regress_view_user2;
-@@ -1757,277 +1901,571 @@
+@@ -1772,277 +1916,571 @@
   a |   b   | c 
  ---+-------+---
   4 | Row 4 | 4
@@ -1130,7 +1130,7 @@ diff -U3 expected/updatable_views.out results/updatable_views.out
  CREATE FUNCTION rw_view1_trig_fn()
  RETURNS trigger AS
  $$
-@@ -2042,183 +2480,170 @@
+@@ -2057,183 +2495,171 @@
  LANGUAGE plpgsql;
  CREATE TRIGGER rw_view1_ins_trig AFTER INSERT ON base_tbl
    FOR EACH ROW EXECUTE PROCEDURE rw_view1_trig_fn();
@@ -1166,7 +1166,8 @@ diff -U3 expected/updatable_views.out results/updatable_views.out
 +ERROR:  operator does not exist: integer + text
 +LINE 1: CREATE VIEW rw_view1 AS SELECT * FROM base_tbl ORDER BY a+b;
 +                                                                 ^
-+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  No operator of that name accepts the given argument types.
++HINT:  You might need to add explicit type casts.
  SELECT * FROM rw_view1;
 - a | b  
 ----+----
@@ -1413,7 +1414,7 @@ diff -U3 expected/updatable_views.out results/updatable_views.out
  
  SELECT table_name, is_updatable, is_insertable_into
    FROM information_schema.views
-@@ -2226,10 +2651,8 @@
+@@ -2241,10 +2667,8 @@
   ORDER BY table_name;
   table_name | is_updatable | is_insertable_into 
  ------------+--------------+--------------------
@@ -1425,7 +1426,7 @@ diff -U3 expected/updatable_views.out results/updatable_views.out
  
  SELECT table_name, column_name, is_updatable
    FROM information_schema.columns
-@@ -2237,197 +2660,195 @@
+@@ -2252,197 +2676,195 @@
   ORDER BY table_name, ordinal_position;
   table_name | column_name | is_updatable 
  ------------+-------------+--------------
@@ -1755,7 +1756,7 @@ diff -U3 expected/updatable_views.out results/updatable_views.out
  
  CREATE TABLE other_tbl_parent (id int);
  CREATE TABLE other_tbl_child () INHERITS (other_tbl_parent);
-@@ -2435,344 +2856,340 @@
+@@ -2450,344 +2872,341 @@
  INSERT INTO other_tbl_child VALUES (8),(100);
  EXPLAIN (costs off)
  UPDATE rw_view1 SET a = a + 1000 FROM other_tbl_parent WHERE a = id;
@@ -1846,7 +1847,8 @@ diff -U3 expected/updatable_views.out results/updatable_views.out
 +ERROR:  operator does not exist: integer < text
 +LINE 1: CREATE VIEW rw_view1 AS SELECT * FROM base_tbl WHERE a < b
 +                                                               ^
-+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  No operator of that name accepts the given argument types.
++HINT:  You might need to add explicit type casts.
  \d+ rw_view1
 -                          View "public.rw_view1"
 - Column |  Type   | Collation | Nullable | Default | Storage | Description 
@@ -2276,7 +2278,7 @@ diff -U3 expected/updatable_views.out results/updatable_views.out
 ----------------------------------------------------------
 - Insert on base_tbl b
 -   ->  Result
--   SubPlan 1
+-   SubPlan exists_1
 -     ->  Index Only Scan using ref_tbl_pkey on ref_tbl r
 -           Index Cond: (a = b.a)
 -(5 rows)
@@ -2291,7 +2293,7 @@ diff -U3 expected/updatable_views.out results/updatable_views.out
 -         ->  Seq Scan on base_tbl b
 -         ->  Hash
 -               ->  Seq Scan on ref_tbl r
--   SubPlan 1
+-   SubPlan exists_1
 -     ->  Index Only Scan using ref_tbl_pkey on ref_tbl r_1
 -           Index Cond: (a = b.a)
 -(9 rows)
@@ -2308,7 +2310,7 @@ diff -U3 expected/updatable_views.out results/updatable_views.out
  CREATE FUNCTION base_tbl_trig_fn()
  RETURNS trigger AS
  $$
-@@ -2784,20 +3201,31 @@
+@@ -2799,20 +3218,33 @@
  LANGUAGE plpgsql;
  CREATE TRIGGER base_tbl_trig BEFORE INSERT OR UPDATE ON base_tbl
    FOR EACH ROW EXECUTE PROCEDURE base_tbl_trig_fn();
@@ -2317,7 +2319,8 @@ diff -U3 expected/updatable_views.out results/updatable_views.out
 +ERROR:  operator does not exist: integer < text
 +LINE 1: ...E VIEW rw_view1 AS SELECT * FROM base_tbl WHERE a < b WITH C...
 +                                                             ^
-+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  No operator of that name accepts the given argument types.
++HINT:  You might need to add explicit type casts.
  INSERT INTO rw_view1 VALUES (5,0); -- ok
 +ERROR:  permission denied for view rw_view1
  INSERT INTO rw_view1 VALUES (15, 20); -- should fail
@@ -2341,11 +2344,12 @@ diff -U3 expected/updatable_views.out results/updatable_views.out
 +ERROR:  operator does not exist: integer < text
 +LINE 1: CREATE VIEW rw_view1 AS SELECT a FROM base_tbl WHERE a < b;
 +                                                               ^
-+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  No operator of that name accepts the given argument types.
++HINT:  You might need to add explicit type casts.
  CREATE FUNCTION rw_view1_trig_fn()
  RETURNS trigger AS
  $$
-@@ -2818,100 +3246,125 @@
+@@ -2833,100 +3265,125 @@
  CREATE TRIGGER rw_view1_trig
    INSTEAD OF INSERT OR UPDATE OR DELETE ON rw_view1
    FOR EACH ROW EXECUTE PROCEDURE rw_view1_trig_fn();
@@ -2515,7 +2519,7 @@ diff -U3 expected/updatable_views.out results/updatable_views.out
  CREATE FUNCTION snoop(anyelement)
  RETURNS boolean AS
  $$
-@@ -2929,40 +3382,34 @@
+@@ -2944,40 +3401,34 @@
  END;
  $$
  LANGUAGE plpgsql STRICT IMMUTABLE LEAKPROOF;
@@ -2569,7 +2573,7 @@ diff -U3 expected/updatable_views.out results/updatable_views.out
  
  SELECT table_name, column_name, is_updatable
    FROM information_schema.columns
-@@ -2970,72 +3417,53 @@
+@@ -2985,72 +3436,53 @@
   ORDER BY ordinal_position;
   table_name | column_name | is_updatable 
  ------------+-------------+--------------
@@ -2672,7 +2676,7 @@ diff -U3 expected/updatable_views.out results/updatable_views.out
  SELECT table_name, is_insertable_into
    FROM information_schema.tables
   WHERE table_name = 'rw_view2';
-@@ -3058,144 +3486,100 @@
+@@ -3073,144 +3505,100 @@
   ORDER BY ordinal_position;
   table_name | column_name | is_updatable 
  ------------+-------------+--------------
@@ -2837,21 +2841,21 @@ diff -U3 expected/updatable_views.out results/updatable_views.out
 +LINE 1: DELETE FROM rw_view1 WHERE id = 1 AND snoop(data);
 +                                   ^
  EXPLAIN (costs off) INSERT INTO rw_view1 VALUES (2, 'New row 2');
--                        QUERY PLAN                         
-------------------------------------------------------------
+-                           QUERY PLAN                            
+------------------------------------------------------------------
 - Insert on base_tbl
--   InitPlan 1
+-   InitPlan exists_1
 -     ->  Index Only Scan using base_tbl_pkey on base_tbl t
 -           Index Cond: (id = 2)
 -   ->  Result
--         One-Time Filter: ((InitPlan 1).col1 IS NOT TRUE)
+-         One-Time Filter: ((InitPlan exists_1).col1 IS NOT TRUE)
 - 
 - Update on base_tbl
--   InitPlan 1
+-   InitPlan exists_1
 -     ->  Index Only Scan using base_tbl_pkey on base_tbl t
 -           Index Cond: (id = 2)
 -   ->  Result
--         One-Time Filter: (InitPlan 1).col1
+-         One-Time Filter: (InitPlan exists_1).col1
 -         ->  Index Scan using base_tbl_pkey on base_tbl
 -               Index Cond: (id = 2)
 -(15 rows)
@@ -2877,12 +2881,12 @@ diff -U3 expected/updatable_views.out results/updatable_views.out
  -- security barrier view based on inheritance set
  CREATE TABLE t1 (a int, b float, c text);
  CREATE INDEX t1_a_idx ON t1(a);
-@@ -3240,41 +3624,15 @@
+@@ -3255,41 +3643,15 @@
  
  EXPLAIN (VERBOSE, COSTS OFF)
  UPDATE v1 SET a=100 WHERE snoop(a) AND leakproof(a) AND a < 7 AND a != 6;
--                                                QUERY PLAN                                                 
-------------------------------------------------------------------------------------------------------------
+-                                                    QUERY PLAN                                                    
+-------------------------------------------------------------------------------------------------------------------
 - Update on public.t1
 -   Update on public.t1 t1_1
 -   Update on public.t11 t1_2
@@ -2894,8 +2898,8 @@ diff -U3 expected/updatable_views.out results/updatable_views.out
 -               ->  Index Scan using t1_a_idx on public.t1 t1_1
 -                     Output: t1_1.tableoid, t1_1.ctid
 -                     Index Cond: ((t1_1.a > 5) AND (t1_1.a < 7))
--                     Filter: ((t1_1.a <> 6) AND EXISTS(SubPlan 1) AND snoop(t1_1.a) AND leakproof(t1_1.a))
--                     SubPlan 1
+-                     Filter: ((t1_1.a <> 6) AND EXISTS(SubPlan exists_1) AND snoop(t1_1.a) AND leakproof(t1_1.a))
+-                     SubPlan exists_1
 -                       ->  Append
 -                             ->  Seq Scan on public.t12 t12_1
 -                                   Filter: (t12_1.a = t1_1.a)
@@ -2904,35 +2908,35 @@ diff -U3 expected/updatable_views.out results/updatable_views.out
 -               ->  Index Scan using t11_a_idx on public.t11 t1_2
 -                     Output: t1_2.tableoid, t1_2.ctid
 -                     Index Cond: ((t1_2.a > 5) AND (t1_2.a < 7))
--                     Filter: ((t1_2.a <> 6) AND EXISTS(SubPlan 1) AND snoop(t1_2.a) AND leakproof(t1_2.a))
+-                     Filter: ((t1_2.a <> 6) AND EXISTS(SubPlan exists_1) AND snoop(t1_2.a) AND leakproof(t1_2.a))
 -               ->  Index Scan using t12_a_idx on public.t12 t1_3
 -                     Output: t1_3.tableoid, t1_3.ctid
 -                     Index Cond: ((t1_3.a > 5) AND (t1_3.a < 7))
--                     Filter: ((t1_3.a <> 6) AND EXISTS(SubPlan 1) AND snoop(t1_3.a) AND leakproof(t1_3.a))
+-                     Filter: ((t1_3.a <> 6) AND EXISTS(SubPlan exists_1) AND snoop(t1_3.a) AND leakproof(t1_3.a))
 -               ->  Index Scan using t111_a_idx on public.t111 t1_4
 -                     Output: t1_4.tableoid, t1_4.ctid
 -                     Index Cond: ((t1_4.a > 5) AND (t1_4.a < 7))
--                     Filter: ((t1_4.a <> 6) AND EXISTS(SubPlan 1) AND snoop(t1_4.a) AND leakproof(t1_4.a))
+-                     Filter: ((t1_4.a <> 6) AND EXISTS(SubPlan exists_1) AND snoop(t1_4.a) AND leakproof(t1_4.a))
 -(30 rows)
 -
 +ERROR:  function leakproof(integer) does not exist
 +LINE 2: UPDATE v1 SET a=100 WHERE snoop(a) AND leakproof(a) AND a < ...
 +                                               ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
  UPDATE v1 SET a=100 WHERE snoop(a) AND leakproof(a) AND a < 7 AND a != 6;
 +ERROR:  function leakproof(integer) does not exist
 +LINE 1: UPDATE v1 SET a=100 WHERE snoop(a) AND leakproof(a) AND a < ...
 +                                               ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
  SELECT * FROM v1 WHERE a=100; -- Nothing should have been changed to 100
   a | b | c | d 
  ---+---+---+---
-@@ -3287,104 +3645,79 @@
+@@ -3302,104 +3664,79 @@
  
  EXPLAIN (VERBOSE, COSTS OFF)
  UPDATE v1 SET a=a+1 WHERE snoop(a) AND leakproof(a) AND a = 8;
--                                       QUERY PLAN                                        
-------------------------------------------------------------------------------------------
+-                                           QUERY PLAN                                           
+-------------------------------------------------------------------------------------------------
 - Update on public.t1
 -   Update on public.t1 t1_1
 -   Update on public.t11 t1_2
@@ -2944,8 +2948,8 @@ diff -U3 expected/updatable_views.out results/updatable_views.out
 -               ->  Index Scan using t1_a_idx on public.t1 t1_1
 -                     Output: t1_1.a, t1_1.tableoid, t1_1.ctid
 -                     Index Cond: ((t1_1.a > 5) AND (t1_1.a = 8))
--                     Filter: (EXISTS(SubPlan 1) AND snoop(t1_1.a) AND leakproof(t1_1.a))
--                     SubPlan 1
+-                     Filter: (EXISTS(SubPlan exists_1) AND snoop(t1_1.a) AND leakproof(t1_1.a))
+-                     SubPlan exists_1
 -                       ->  Append
 -                             ->  Seq Scan on public.t12 t12_1
 -                                   Filter: (t12_1.a = t1_1.a)
@@ -2954,21 +2958,21 @@ diff -U3 expected/updatable_views.out results/updatable_views.out
 -               ->  Index Scan using t11_a_idx on public.t11 t1_2
 -                     Output: t1_2.a, t1_2.tableoid, t1_2.ctid
 -                     Index Cond: ((t1_2.a > 5) AND (t1_2.a = 8))
--                     Filter: (EXISTS(SubPlan 1) AND snoop(t1_2.a) AND leakproof(t1_2.a))
+-                     Filter: (EXISTS(SubPlan exists_1) AND snoop(t1_2.a) AND leakproof(t1_2.a))
 -               ->  Index Scan using t12_a_idx on public.t12 t1_3
 -                     Output: t1_3.a, t1_3.tableoid, t1_3.ctid
 -                     Index Cond: ((t1_3.a > 5) AND (t1_3.a = 8))
--                     Filter: (EXISTS(SubPlan 1) AND snoop(t1_3.a) AND leakproof(t1_3.a))
+-                     Filter: (EXISTS(SubPlan exists_1) AND snoop(t1_3.a) AND leakproof(t1_3.a))
 -               ->  Index Scan using t111_a_idx on public.t111 t1_4
 -                     Output: t1_4.a, t1_4.tableoid, t1_4.ctid
 -                     Index Cond: ((t1_4.a > 5) AND (t1_4.a = 8))
--                     Filter: (EXISTS(SubPlan 1) AND snoop(t1_4.a) AND leakproof(t1_4.a))
+-                     Filter: (EXISTS(SubPlan exists_1) AND snoop(t1_4.a) AND leakproof(t1_4.a))
 -(30 rows)
 -
 +ERROR:  function leakproof(integer) does not exist
 +LINE 2: UPDATE v1 SET a=a+1 WHERE snoop(a) AND leakproof(a) AND a = ...
 +                                               ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
  UPDATE v1 SET a=a+1 WHERE snoop(a) AND leakproof(a) AND a = 8;
 -NOTICE:  snooped value: 8
 -NOTICE:  snooped value: 8
@@ -2977,7 +2981,7 @@ diff -U3 expected/updatable_views.out results/updatable_views.out
 +ERROR:  function leakproof(integer) does not exist
 +LINE 1: UPDATE v1 SET a=a+1 WHERE snoop(a) AND leakproof(a) AND a = ...
 +                                               ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
  SELECT * FROM v1 WHERE b=8;
   a | b |  c   |  d   
  ---+---+------+------
@@ -3015,7 +3019,7 @@ diff -U3 expected/updatable_views.out results/updatable_views.out
 +ERROR:  function leakproof(integer) does not exist
 +LINE 1: DELETE FROM v1 WHERE snoop(a) AND leakproof(a);
 +                                          ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
  TABLE t1; -- verify all a<=5 are intact
 - a | b |  c   
 ----+---+------
@@ -3092,9 +3096,9 @@ diff -U3 expected/updatable_views.out results/updatable_views.out
  CREATE TABLE tx1 (a integer);
  CREATE TABLE tx2 (b integer);
  CREATE TABLE tx3 (c integer);
-@@ -3769,34 +4102,48 @@
+@@ -3824,44 +4161,54 @@
  drop table uv_iocu_tab;
- -- ON CONFLICT DO UPDATE permissions checks
+ -- ON CONFLICT DO SELECT/UPDATE permissions checks
  create user regress_view_user1;
 +ERROR:  permission denied to create role
 +DETAIL:  Only roles with the CREATEROLE attribute may create roles.
@@ -3129,6 +3133,18 @@ diff -U3 expected/updatable_views.out results/updatable_views.out
    on conflict (aa) do update set cc = 3.0; -- Not allowed
 -ERROR:  permission denied for view rw_view1
 +ERROR:  there is no unique or exclusion constraint matching the ON CONFLICT specification
+ insert into rw_view1 values ('yyy',2.0,1)
+   on conflict (aa) do select for update returning cc; -- Not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  there is no unique or exclusion constraint matching the ON CONFLICT specification
+ insert into rw_view1 values ('yyy',2.0,1)
+   on conflict (aa) do select for update returning aa, bb;
+- aa |   bb   
+-----+--------
+-  1 | yyyxxx
+-(1 row)
+-
++ERROR:  there is no unique or exclusion constraint matching the ON CONFLICT specification
  reset session authorization;
  select * from base_tbl;
 - a |   b    | c 
@@ -3148,7 +3164,7 @@ diff -U3 expected/updatable_views.out results/updatable_views.out
  
  set session authorization regress_view_user1;
  grant select (a,b) on base_tbl to regress_view_user2;
-@@ -3804,42 +4151,68 @@
+@@ -3869,55 +4216,77 @@
  grant update (a,b) on base_tbl to regress_view_user2;
  set session authorization regress_view_user2;
  create view rw_view2 as select b as bb, c as cc, a as aa from base_tbl;
@@ -3157,10 +3173,22 @@ diff -U3 expected/updatable_views.out results/updatable_views.out
    on conflict (aa) do update set bb = excluded.bb; -- Not allowed
 -ERROR:  permission denied for table base_tbl
 +ERROR:  there is no unique or exclusion constraint matching the ON CONFLICT specification
+ insert into rw_view2 (aa,bb) values (1,'xxx')
+   on conflict (aa) do select returning 1;          -- Not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  there is no unique or exclusion constraint matching the ON CONFLICT specification
  create view rw_view3 as select b as bb, a as aa from base_tbl;
 +ERROR:  relation "rw_view3" already exists
  insert into rw_view3 (aa,bb) values (1,'xxx')
    on conflict (aa) do update set bb = excluded.bb; -- OK
++ERROR:  permission denied for view rw_view3
+ insert into rw_view3 (aa,bb) values (1,'xxx')
+   on conflict (aa) do select returning aa, bb;     -- OK
+- aa | bb  
+-----+-----
+-  1 | xxx
+-(1 row)
+-
 +ERROR:  permission denied for view rw_view3
  reset session authorization;
  select * from base_tbl;
@@ -3183,6 +3211,10 @@ diff -U3 expected/updatable_views.out results/updatable_views.out
  create view rw_view4 as select aa, bb, cc FROM rw_view1;
  insert into rw_view4 (aa,bb) values (1,'yyy')
    on conflict (aa) do update set bb = excluded.bb; -- Not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  there is no unique or exclusion constraint matching the ON CONFLICT specification
+ insert into rw_view4 (aa,bb) values (1,'yyy')
+   on conflict (aa) do select returning 1; -- Not allowed
 -ERROR:  permission denied for view rw_view1
 +ERROR:  there is no unique or exclusion constraint matching the ON CONFLICT specification
  create view rw_view5 as select aa, bb FROM rw_view1;

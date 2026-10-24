@@ -21,7 +21,7 @@ diff -U3 expected/misc.out results/misc.out
 +ERROR:  function reverse_name(name) does not exist
 +LINE 2:    SET stringu1 = reverse_name(onek.stringu1)
 +                          ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
  UPDATE tmp
     SET stringu1 = reverse_name(onek2.stringu1)
     FROM onek2
@@ -30,7 +30,7 @@ diff -U3 expected/misc.out results/misc.out
 +ERROR:  function reverse_name(name) does not exist
 +LINE 2:    SET stringu1 = reverse_name(onek2.stringu1)
 +                          ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
  DROP TABLE tmp;
  --UPDATE person*
  --   SET age = age + 1;
@@ -51,7 +51,7 @@ diff -U3 expected/misc.out results/misc.out
 +ERROR:  function overpaid(emp) does not exist
 +LINE 1: SELECT name, overpaid(emp.*) FROM emp;
 +                     ^
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no function of that name.
  --
  -- Try a few cases with SQL-spec row constructor expressions
  --

@@ -1,7 +1,7 @@
 diff -U3 expected/merge.out results/merge.out
 --- expected/merge.out
 +++ results/merge.out
-@@ -2837,11 +2837,7 @@
+@@ -2838,11 +2838,7 @@
  WHEN MATCHED THEN
  	UPDATE SET reltuples = reltuples + 1
  RETURNING j.oid;
@@ -14,7 +14,7 @@ diff -U3 expected/merge.out results/merge.out
  CREATE VIEW classv AS SELECT * FROM pg_class;
  MERGE INTO classv c
  USING pg_namespace n
-@@ -2849,14 +2845,32 @@
+@@ -2850,14 +2846,32 @@
  WHEN MATCHED AND c.oid = 'pg_depend'::regclass THEN
  	UPDATE SET reltuples = reltuples - 1
  RETURNING c.oid;

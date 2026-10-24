@@ -1,7 +1,7 @@
 diff -U3 expected/privileges.out results/privileges.out
 --- expected/privileges.out
 +++ results/privileges.out
-@@ -127,16 +127,21 @@
+@@ -136,16 +136,21 @@
  REVOKE pg_read_all_settings FROM regress_priv_user9;
  RESET SESSION AUTHORIZATION;
  REVOKE regress_priv_user9 FROM regress_priv_user8;
@@ -24,7 +24,7 @@ diff -U3 expected/privileges.out results/privileges.out
  SET ROLE pg_read_all_stats;     -- fail, granted without SET option
  ERROR:  permission denied to set role "pg_read_all_stats"
  RESET ROLE;
-@@ -144,6 +149,8 @@
+@@ -153,6 +158,8 @@
  -- test interaction of SET SESSION AUTHORIZATION and SET ROLE,
  -- as well as propagation of these settings to parallel workers
  GRANT regress_priv_user9 TO regress_priv_user8;
@@ -33,7 +33,7 @@ diff -U3 expected/privileges.out results/privileges.out
  SET SESSION AUTHORIZATION regress_priv_user8;
  SET ROLE regress_priv_user9;
  SET debug_parallel_query = 0;
-@@ -209,50 +216,76 @@
+@@ -218,50 +225,76 @@
  
  RESET debug_parallel_query;
  REVOKE pg_read_all_settings FROM regress_priv_user8;
@@ -119,7 +119,7 @@ diff -U3 expected/privileges.out results/privileges.out
  SET SESSION AUTHORIZATION regress_priv_user1;
  SELECT session_user, current_user;
      session_user    |    current_user    
-@@ -478,49 +511,38 @@
+@@ -487,49 +520,38 @@
  RESET default_statistics_target;
  CREATE OPERATOR <<< (procedure = leak, leftarg = integer, rightarg = integer,
                       restrict = scalarltsel);
@@ -130,13 +130,13 @@ diff -U3 expected/privileges.out results/privileges.out
 +ERROR:  operator does not exist: integer <<< integer
 +LINE 2:   SELECT * FROM atest12 WHERE b <<< 5;
 +                                        ^
-+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no operator of that name.
  CREATE VIEW atest12sbv WITH (security_barrier=true) AS
    SELECT * FROM atest12 WHERE b <<< 5;
 +ERROR:  operator does not exist: integer <<< integer
 +LINE 2:   SELECT * FROM atest12 WHERE b <<< 5;
 +                                        ^
-+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no operator of that name.
  -- This plan should use nestloop, knowing that few rows will be selected.
  EXPLAIN (COSTS OFF) SELECT * FROM atest12v x, atest12v y WHERE x.a = y.b;
 -                   QUERY PLAN                    
@@ -167,7 +167,7 @@ diff -U3 expected/privileges.out results/privileges.out
 +ERROR:  operator does not exist: integer <<< integer
 +LINE 2:   WHERE x.a = y.b and abs(y.a) <<< 5;
 +                                       ^
-+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no operator of that name.
  -- This should also be a nestloop, but the security barrier forces the inner
  -- scan to be materialized
  EXPLAIN (COSTS OFF) SELECT * FROM atest12sbv x, atest12sbv y WHERE x.a = y.b;
@@ -188,7 +188,7 @@ diff -U3 expected/privileges.out results/privileges.out
  -- Check if regress_priv_user2 can break security.
  SET SESSION AUTHORIZATION regress_priv_user2;
  CREATE FUNCTION leak2(integer,integer) RETURNS boolean
-@@ -532,97 +554,59 @@
+@@ -541,97 +563,59 @@
  EXPLAIN (COSTS OFF) SELECT * FROM atest12 WHERE a >>> 0;
  ERROR:  permission denied for table atest12
  EXPLAIN (COSTS OFF) SELECT * FROM atest12v WHERE a >>> 0;
@@ -309,11 +309,11 @@ diff -U3 expected/privileges.out results/privileges.out
 +ERROR:  operator does not exist: integer <<< integer
 +LINE 2:   WHERE x.a = y.b and abs(y.a) <<< 5;
 +                                       ^
-+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
++DETAIL:  There is no operator of that name.
  -- clean up (regress_priv_user1's objects are all dropped later)
  DROP FUNCTION leak2(integer, integer) CASCADE;
  NOTICE:  drop cascades to operator >>>(integer,integer)
-@@ -630,28 +614,43 @@
+@@ -639,28 +623,43 @@
  SET SESSION AUTHORIZATION regress_priv_user3;
  CREATE TABLE atest3 (one int, two int, three int);
  GRANT DELETE ON atest3 TO GROUP regress_priv_group2;
@@ -359,7 +359,7 @@ diff -U3 expected/privileges.out results/privileges.out
  ROLLBACK;
  -- views
  SET SESSION AUTHORIZATION regress_priv_user3;
-@@ -1850,6 +1849,7 @@
+@@ -1885,6 +1884,7 @@
  GRANT SELECT ON atest4 TO regress_priv_user2 WITH GRANT OPTION;
  GRANT UPDATE ON atest4 TO regress_priv_user2;
  GRANT SELECT ON atest4 TO GROUP regress_priv_group1 WITH GRANT OPTION;
@@ -367,7 +367,7 @@ diff -U3 expected/privileges.out results/privileges.out
  SET SESSION AUTHORIZATION regress_priv_user2;
  GRANT SELECT ON atest4 TO regress_priv_user3;
  GRANT UPDATE ON atest4 TO regress_priv_user3; -- fail
-@@ -1974,8 +1974,7 @@
+@@ -2009,8 +2009,7 @@
  ERROR:  cannot fire deferred trigger within security-restricted operation
  CONTEXT:  SQL function "mv_action" statement 1
  BEGIN; SET CONSTRAINTS ALL IMMEDIATE; REFRESH MATERIALIZED VIEW sro_mv; COMMIT;
@@ -377,7 +377,7 @@ diff -U3 expected/privileges.out results/privileges.out
  CONTEXT:  SQL function "unwanted_grant" statement 1
  SQL statement "SELECT public.unwanted_grant()"
  PL/pgSQL function public.sro_trojan() line 1 at PERFORM
-@@ -2003,32 +2002,29 @@
+@@ -2038,32 +2037,29 @@
  CREATE FUNCTION dogrant_ok() RETURNS void LANGUAGE sql SECURITY DEFINER AS
  	'GRANT regress_priv_group2 TO regress_priv_user5';
  GRANT regress_priv_group2 TO regress_priv_user5; -- ok: had ADMIN OPTION
@@ -421,7 +421,7 @@ diff -U3 expected/privileges.out results/privileges.out
  -- has_sequence_privilege tests
  \c -
  CREATE SEQUENCE x_seq;
-@@ -2433,21 +2429,21 @@
+@@ -2515,21 +2511,21 @@
  	RETURN false;
  END$$;
  ALTER FUNCTION terminate_nothrow OWNER TO pg_signal_backend;
@@ -448,7 +448,7 @@ diff -U3 expected/privileges.out results/privileges.out
  REVOKE DELETE ON datdba_only FROM pg_database_owner;
  SELECT
  	pg_has_role('regress_priv_user1', 'pg_database_owner', 'USAGE') as priv,
-@@ -2462,44 +2458,33 @@
+@@ -2544,44 +2540,33 @@
  BEGIN;
  DO $$BEGIN EXECUTE format(
  	'ALTER DATABASE %I OWNER TO regress_priv_group2', current_catalog); END$$;
@@ -507,7 +507,7 @@ diff -U3 expected/privileges.out results/privileges.out
  ROLLBACK;
  -- test default ACLs
  \c -
-@@ -3162,7 +3147,9 @@
+@@ -3244,7 +3229,9 @@
  (5 rows)
  
  DROP GROUP regress_priv_group1;
@@ -517,7 +517,7 @@ diff -U3 expected/privileges.out results/privileges.out
  -- these are needed to clean up permissions
  REVOKE USAGE ON LANGUAGE sql FROM regress_priv_user1;
  DROP OWNED BY regress_priv_user1;
-@@ -3174,7 +3161,6 @@
+@@ -3256,7 +3243,6 @@
  DROP USER regress_priv_user6;
  DROP USER regress_priv_user7;
  DROP USER regress_priv_user8; -- does not exist
@@ -525,7 +525,7 @@ diff -U3 expected/privileges.out results/privileges.out
  -- leave some default ACLs for pg_upgrade's dump-restore test input.
  ALTER DEFAULT PRIVILEGES FOR ROLE pg_signal_backend
  	REVOKE USAGE ON TYPES FROM pg_signal_backend;
-@@ -3379,70 +3365,121 @@
+@@ -3474,70 +3460,121 @@
  REVOKE regress_group FROM regress_group_member;
  RESET SESSION AUTHORIZATION;
  DROP ROLE regress_group;
@@ -657,7 +657,7 @@ diff -U3 expected/privileges.out results/privileges.out
  VACUUM maintain_test;
  ANALYZE maintain_test;
  VACUUM (ANALYZE) maintain_test;
-@@ -3451,9 +3488,10 @@
+@@ -3546,9 +3583,10 @@
  REINDEX TABLE maintain_test;
  REINDEX INDEX maintain_test_a_idx;
  REINDEX SCHEMA reindex_test;
@@ -669,7 +669,7 @@ diff -U3 expected/privileges.out results/privileges.out
  VACUUM maintain_test;
  ANALYZE maintain_test;
  VACUUM (ANALYZE) maintain_test;
-@@ -3462,37 +3500,54 @@
+@@ -3557,89 +3595,106 @@
  REINDEX TABLE maintain_test;
  REINDEX INDEX maintain_test_a_idx;
  REINDEX SCHEMA reindex_test;
@@ -730,5 +730,89 @@ diff -U3 expected/privileges.out results/privileges.out
  
  DROP TABLE grantor_test1, grantor_test2, grantor_test3;
  DROP ROLE regress_grantor1, regress_grantor2, regress_grantor3;
++ERROR:  permission denied to drop role
++DETAIL:  Only roles with the CREATEROLE attribute and the ADMIN option on the target roles may drop roles.
+ -- GRANTED BY
+ CREATE ROLE regress_grantor1;
++ERROR:  permission denied to create role
++DETAIL:  Only roles with the CREATEROLE attribute may create roles.
+ CREATE ROLE regress_grantor2 ROLE regress_grantor1;
++ERROR:  permission denied to create role
++DETAIL:  Only roles with the CREATEROLE attribute may create roles.
+ CREATE ROLE regress_grantor3 ROLE regress_grantor1;
++ERROR:  permission denied to create role
++DETAIL:  Only roles with the CREATEROLE attribute may create roles.
+ CREATE ROLE regress_grantor4 ROLE regress_grantor1;
++ERROR:  permission denied to create role
++DETAIL:  Only roles with the CREATEROLE attribute may create roles.
+ CREATE ROLE regress_grantor5;
++ERROR:  permission denied to create role
++DETAIL:  Only roles with the CREATEROLE attribute may create roles.
+ CREATE TABLE grantor_test ();
+ GRANT SELECT ON grantor_test TO regress_grantor2 WITH GRANT OPTION;
++ERROR:  role "regress_grantor2" does not exist
+ GRANT UPDATE ON grantor_test TO regress_grantor3 WITH GRANT OPTION;
++ERROR:  role "regress_grantor3" does not exist
+ GRANT SELECT, UPDATE ON grantor_test TO regress_grantor4 WITH GRANT OPTION;
++ERROR:  role "regress_grantor4" does not exist
+ SET ROLE regress_grantor1;
++ERROR:  role "regress_grantor1" does not exist
+ GRANT SELECT, UPDATE ON grantor_test TO regress_grantor5;
++ERROR:  role "regress_grantor5" does not exist
+ SELECT * FROM information_schema.table_privileges t
+     WHERE grantor LIKE 'regress_grantor%' ORDER BY ROW(t.*);
+-     grantor      |     grantee      | table_catalog | table_schema |  table_name  | privilege_type | is_grantable | with_hierarchy 
+-------------------+------------------+---------------+--------------+--------------+----------------+--------------+----------------
+- regress_grantor4 | regress_grantor5 | regression    | public       | grantor_test | SELECT         | NO           | YES
+- regress_grantor4 | regress_grantor5 | regression    | public       | grantor_test | UPDATE         | NO           | NO
+-(2 rows)
++ grantor | grantee | table_catalog | table_schema | table_name | privilege_type | is_grantable | with_hierarchy 
++---------+---------+---------------+--------------+------------+----------------+--------------+----------------
++(0 rows)
+ 
+ REVOKE SELECT, UPDATE ON grantor_test FROM regress_grantor5;
++ERROR:  role "regress_grantor5" does not exist
+ GRANT SELECT, UPDATE ON grantor_test TO regress_grantor5 GRANTED BY regress_grantor2;
+-WARNING:  not all privileges were granted for "grantor_test"
++ERROR:  role "regress_grantor5" does not exist
+ GRANT SELECT, UPDATE ON grantor_test TO regress_grantor5 GRANTED BY regress_grantor3;
+-WARNING:  not all privileges were granted for "grantor_test"
++ERROR:  role "regress_grantor5" does not exist
+ SELECT * FROM information_schema.table_privileges t
+     WHERE grantor LIKE 'regress_grantor%' ORDER BY ROW(t.*);
+-     grantor      |     grantee      | table_catalog | table_schema |  table_name  | privilege_type | is_grantable | with_hierarchy 
+-------------------+------------------+---------------+--------------+--------------+----------------+--------------+----------------
+- regress_grantor2 | regress_grantor5 | regression    | public       | grantor_test | SELECT         | NO           | YES
+- regress_grantor3 | regress_grantor5 | regression    | public       | grantor_test | UPDATE         | NO           | NO
+-(2 rows)
++ grantor | grantee | table_catalog | table_schema | table_name | privilege_type | is_grantable | with_hierarchy 
++---------+---------+---------------+--------------+------------+----------------+--------------+----------------
++(0 rows)
+ 
+ REVOKE SELECT, UPDATE ON grantor_test FROM regress_grantor5 GRANTED BY regress_grantor2;
+-WARNING:  not all privileges could be revoked for "grantor_test"
+-WARNING:  not all privileges could be revoked for column "tableoid" of relation "grantor_test"
+-WARNING:  not all privileges could be revoked for column "cmax" of relation "grantor_test"
+-WARNING:  not all privileges could be revoked for column "xmax" of relation "grantor_test"
+-WARNING:  not all privileges could be revoked for column "cmin" of relation "grantor_test"
+-WARNING:  not all privileges could be revoked for column "xmin" of relation "grantor_test"
+-WARNING:  not all privileges could be revoked for column "ctid" of relation "grantor_test"
++ERROR:  role "regress_grantor5" does not exist
+ REVOKE SELECT, UPDATE ON grantor_test FROM regress_grantor5 GRANTED BY regress_grantor3;
+-WARNING:  not all privileges could be revoked for "grantor_test"
+-WARNING:  not all privileges could be revoked for column "tableoid" of relation "grantor_test"
+-WARNING:  not all privileges could be revoked for column "cmax" of relation "grantor_test"
+-WARNING:  not all privileges could be revoked for column "xmax" of relation "grantor_test"
+-WARNING:  not all privileges could be revoked for column "cmin" of relation "grantor_test"
+-WARNING:  not all privileges could be revoked for column "xmin" of relation "grantor_test"
+-WARNING:  not all privileges could be revoked for column "ctid" of relation "grantor_test"
++ERROR:  role "regress_grantor5" does not exist
+ SELECT * FROM information_schema.table_privileges t
+     WHERE grantor LIKE 'regress_grantor%' ORDER BY ROW(t.*);
+  grantor | grantee | table_catalog | table_schema | table_name | privilege_type | is_grantable | with_hierarchy 
+@@ -3649,3 +3704,5 @@
+ RESET ROLE;
+ DROP TABLE grantor_test;
+ DROP ROLE regress_grantor1, regress_grantor2, regress_grantor3, regress_grantor4, regress_grantor5;
 +ERROR:  permission denied to drop role
 +DETAIL:  Only roles with the CREATEROLE attribute and the ADMIN option on the target roles may drop roles.

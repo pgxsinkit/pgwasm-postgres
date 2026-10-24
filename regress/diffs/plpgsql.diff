@@ -1,7 +1,7 @@
 diff -U3 expected/plpgsql.out results/plpgsql.out
 --- expected/plpgsql.out
 +++ results/plpgsql.out
-@@ -4111,15 +4111,11 @@
+@@ -4114,15 +4114,11 @@
  $$ language plpgsql parallel safe;
  set debug_parallel_query to on;
  explain (verbose, costs off) select error_trap_test();

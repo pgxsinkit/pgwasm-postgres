@@ -1,15 +1,20 @@
 diff -U3 expected/foreign_data.out results/foreign_data.out
 --- expected/foreign_data.out
 +++ results/foreign_data.out
-@@ -9,6 +9,7 @@
+@@ -9,10 +9,12 @@
      RETURNS fdw_handler
      AS :'regresslib', 'test_fdw_handler'
+     LANGUAGE C;
++ERROR:  could not access file "@abs_builddir@/lib/regress.so": No such file or directory
+ CREATE FUNCTION test_fdw_connection(oid, oid, internal)
+     RETURNS text
+     AS :'regresslib', 'test_fdw_connection'
      LANGUAGE C;
 +ERROR:  could not access file "@abs_builddir@/lib/regress.so": No such file or directory
  -- Clean up in case a prior regression run failed
  -- Suppress NOTICE messages when roles don't exist
  SET client_min_messages TO 'warning';
-@@ -102,18 +103,16 @@
+@@ -106,23 +108,20 @@
  CREATE FOREIGN DATA WRAPPER test_fdw HANDLER invalid_fdw_handler;  -- ERROR
  ERROR:  function invalid_fdw_handler must return type fdw_handler
  CREATE FOREIGN DATA WRAPPER test_fdw HANDLER test_fdw_handler HANDLER invalid_fdw_handler;  -- ERROR
@@ -19,7 +24,9 @@ diff -U3 expected/foreign_data.out results/foreign_data.out
 +ERROR:  function test_fdw_handler() does not exist
  CREATE FOREIGN DATA WRAPPER test_fdw HANDLER test_fdw_handler;
 +ERROR:  function test_fdw_handler() does not exist
- -- should preserve dependency on test_fdw_handler
+ -- should preserve dependencies on test_fdw_handler and test_fdw_connection
+ ALTER FOREIGN DATA WRAPPER test_fdw CONNECTION test_fdw_connection;
++ERROR:  foreign-data wrapper "test_fdw" does not exist
  ALTER FOREIGN DATA WRAPPER test_fdw VALIDATOR postgresql_fdw_validator;
 -WARNING:  changing the foreign-data wrapper validator can cause the options for dependent objects to become invalid
 +ERROR:  foreign-data wrapper "test_fdw" does not exist
@@ -28,12 +35,17 @@ diff -U3 expected/foreign_data.out results/foreign_data.out
 -DETAIL:  foreign-data wrapper test_fdw depends on function test_fdw_handler()
 -HINT:  Use DROP ... CASCADE to drop the dependent objects too.
 +ERROR:  function test_fdw_handler() does not exist
+ DROP FUNCTION test_fdw_connection(oid, oid, internal); -- ERROR
+-ERROR:  cannot drop function test_fdw_connection(oid,oid,internal) because other objects depend on it
+-DETAIL:  foreign-data wrapper test_fdw depends on function test_fdw_connection(oid,oid,internal)
+-HINT:  Use DROP ... CASCADE to drop the dependent objects too.
++ERROR:  function test_fdw_connection(oid, oid, internal) does not exist
  DROP FOREIGN DATA WRAPPER test_fdw;
 +ERROR:  foreign-data wrapper "test_fdw" does not exist
  -- ALTER FOREIGN DATA WRAPPER
  ALTER FOREIGN DATA WRAPPER foo OPTIONS (nonexistent 'fdw');         -- ERROR
  ERROR:  invalid option "nonexistent"
-@@ -220,11 +219,9 @@
+@@ -229,11 +228,9 @@
  ALTER FOREIGN DATA WRAPPER foo HANDLER invalid_fdw_handler;  -- ERROR
  ERROR:  function invalid_fdw_handler must return type fdw_handler
  ALTER FOREIGN DATA WRAPPER foo HANDLER test_fdw_handler HANDLER anything;  -- ERROR
@@ -47,7 +59,7 @@ diff -U3 expected/foreign_data.out results/foreign_data.out
  DROP FUNCTION invalid_fdw_handler();
  -- DROP FOREIGN DATA WRAPPER
  DROP FOREIGN DATA WRAPPER nonexistent;                      -- ERROR
-@@ -232,12 +229,12 @@
+@@ -241,12 +238,12 @@
  DROP FOREIGN DATA WRAPPER IF EXISTS nonexistent;
  NOTICE:  foreign-data wrapper "nonexistent" does not exist, skipping
  \dew+

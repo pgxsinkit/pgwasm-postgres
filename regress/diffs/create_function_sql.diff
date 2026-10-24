@@ -1,7 +1,7 @@
 diff -U3 expected/create_function_sql.out results/create_function_sql.out
 --- expected/create_function_sql.out
 +++ results/create_function_sql.out
-@@ -549,8 +549,9 @@
+@@ -560,8 +560,9 @@
  CREATE FUNCTION functest_B_2(bigint) RETURNS bool LANGUAGE 'sql'
         IMMUTABLE AS 'SELECT $1 > 0';
  DROP FUNCTION functest_b_1;
@@ -12,7 +12,7 @@ diff -U3 expected/create_function_sql.out results/create_function_sql.out
  DROP FUNCTION functest_b_2;  -- error, ambiguous
  ERROR:  function name "functest_b_2" is not unique
  HINT:  Specify the argument list to select the function unambiguously.
-@@ -741,14 +742,19 @@
+@@ -752,14 +753,19 @@
  -- Put it into an operator class so that FmgrInfo will be cached in relcache.
  CREATE OPERATOR CLASS part_test_int4_ops_bad FOR TYPE int4 USING hash AS
    FUNCTION 2 part_hashint4_error(int4, int8);
@@ -36,7 +36,7 @@ diff -U3 expected/create_function_sql.out results/create_function_sql.out
  -- Things that shouldn't work:
  CREATE FUNCTION test1 (int) RETURNS int LANGUAGE SQL
      AS 'SELECT ''not an integer'';';
-@@ -789,44 +795,8 @@
+@@ -800,44 +806,8 @@
  RESET check_function_bodies;
  -- Cleanup
  DROP SCHEMA temp_func_test CASCADE;

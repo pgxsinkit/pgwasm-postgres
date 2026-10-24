@@ -1,7 +1,7 @@
 diff -U3 expected/matview.out results/matview.out
 --- expected/matview.out
 +++ results/matview.out
-@@ -650,12 +650,10 @@
+@@ -655,12 +655,10 @@
  ALTER DEFAULT PRIVILEGES FOR ROLE regress_matview_user
    GRANT INSERT ON TABLES TO regress_matview_user;
  DROP SCHEMA matview_schema CASCADE;

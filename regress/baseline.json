@@ -1,22 +1,22 @@
 {
   "$comment": "The pg_regress baseline (ADR-0001 decision 6): each test of the schedule on the pinned tag, run through the TCP bridge on the build, with --use-existing --max-connections=1. A failed test's normalised diff is regress/diffs/<test>.diff; an unstable test's outcome or diff differed between the recorded runs. `tests` and `summary` are written by `bun run regress --record`; `groups` (why each failing or unstable test fails) are written by hand and kept by --record. `bun run regress` fails on a new failure, a changed diff or a newly unstable test, and reports a vanished failure.",
   "upstream": {
-    "tag": "REL_18_6",
-    "commit": "724edf9bde9d356724ad384a2e196edc3c9f80f7"
+    "tag": "REL_19_RC1",
+    "commit": "0b8bff042a997fe50fcd1c4c83b9ef1cc9ed8a89"
   },
   "schedule": "parallel_schedule",
   "runs": 8,
   "recordedWith": {
-    "pglite.js": "5969cf9cd1cf54661f9838e14a4435b6b4f169f741d77eee2a7c32531d8bc8ee",
-    "pglite.wasm": "9e30c88fb9bc8efe4e8e9a84b2c62a99cc55369b513b7bbda6f4ecb384110847",
-    "pglite.data": "0d836559779b3658b05e8b0fa74fe310d0f0c897ef2cbe4815ec3a3e8d7204e3",
-    "initdb.js": "5da5c8aa5443ba113153f49d71b6fdacd4b888b4d4547bc7d9b5a7c45f5356c7",
-    "initdb.wasm": "1691997a10d595f0850bc0f0eaffd1ed6cbb22e1de6faec7a5f925e09305d336"
+    "postgres.js": "49f427bd890b89ba5b29cf96e3032dcc13cbaf5aadf62b782290480317ea0178",
+    "postgres.wasm": "582eba0f5c42f5f01e8ce0a031454b43f0fd2edb6bfc99ef16e60904b2787980",
+    "postgres.data": "be7b9fd708ddffcc627aefaff8fdc35310978d8f274a87046cfd232e306a861b",
+    "initdb.js": "cf3fff4109879f3be1ba321f19b126c4f8d518d9909846927d3104b1ec0a8129",
+    "initdb.wasm": "50d9c51650a64f08acfe3b51a28a1d43968e02604bd881fc81b57e5f2d85b5d9"
   },
   "summary": {
-    "tests": 231,
-    "passed": 178,
-    "failed": 49,
+    "tests": 239,
+    "passed": 185,
+    "failed": 50,
     "unstable": 4
   },
   "groups": {
@@ -25,15 +25,15 @@
       "tests": ["stats"]
     },
     "extended-protocol-ready": {
-      "reason": "Unstable. An error in an extended-query batch sends a ReadyForQuery before the batch's Sync: pgl_longjmp (overlay pglite/src/pglitec/pglitec.c) sets send_ready_for_query before PostgresMainLongJmp sets ignore_till_sync, and PostgresMainLoopOnce sends it ahead of its next message. psql reports 'message type 0x5a arrived from server while idle' and then pairs results with the wrong queries; where it catches up depends on how the bytes are split between reads, so the diff differs from run to run.",
+      "reason": "Unstable. An error in an extended-query batch sends a ReadyForQuery before the batch's Sync: pgwasm_longjmp (overlay pgwasm/src/pgwasmc/pgwasmc.c) sets send_ready_for_query before PostgresMainLongJmp sets ignore_till_sync, and PostgresMainLoopOnce sends it ahead of its next message. psql reports 'message type 0x5a arrived from server while idle' and then pairs results with the wrong queries; where it catches up depends on how the bytes are split between reads, so the diff differs from run to run.",
       "tests": ["psql", "psql_pipeline"]
     },
     "icu-locales": {
-      "reason": "The only ICU collations are und-x-icu and unicode: initdb imports no language locale from the build's ICU data. collate.icu.utf8 skips itself only when there is no ICU collation at all, so it runs and fails on en-x-icu, sv-x-icu, tr-x-icu, ….",
+      "reason": "The only ICU collations are und-x-icu and unicode: initdb imports no language locale from the build's ICU data. collate.icu.utf8 skips itself only when there is no ICU collation at all, so it runs and fails on en-x-icu, sv-x-icu, tr-x-icu, …. The PG19 port uses ICU 79.1 but keeps the root-only data selection: unicode is still ICU and und-x-icu still makes the upstream test run. Runtime smoke separately verifies that root collation versions agree and non-ASCII sorting works.",
       "tests": ["collate.icu.utf8"]
     },
     "regress-library": {
-      "reason": "The tests' C functions are missing (binary_coercible, widget_in, interpt_pp, test_enc_setup, test_enc_conversion, test_bytea_to_text, make_tuple_indirect, trigger_return_old, test_fdw_handler, test_pglz_compress, test_pglz_decompress, …), and so is everything built on them (the widget type, the iexit view, the test foreign-data wrapper, opr_sanity's binary_coercible checks, conversion's test_enc_* checks, encoding's ascii() checks on invalid multibyte input, all of compression_pglz). The run's --dlpath holds no regress.so: the build tree's own src/test/regress/regress.so is not a module the build ships, so pglite.wasm does not export 32 of its imports (IsBinaryCoercible, pg_do_encoding_conversion_buf, lseg_intersect, cpu_operator_cost, pglz_compress, …) and its dlopen fails, and in this runtime a failed dlopen breaks every later one. Without the file, CREATE FUNCTION … AS :'regresslib' fails with 'could not access file' before any dlopen. conversion's and copy2's diffs also show session-authorization (DROP USER, and copy2's clean-up, after RESET SESSION AUTHORIZATION).",
+      "reason": "The tests' C functions are missing (binary_coercible, widget_in, interpt_pp, test_enc_setup, test_enc_conversion, test_bytea_to_text, make_tuple_indirect, trigger_return_old, test_fdw_handler, test_pglz_compress, test_pglz_decompress, …), and so is everything built on them (the widget type, the iexit view, the test foreign-data wrapper, opr_sanity's binary_coercible checks, conversion's test_enc_* checks, encoding's ascii() checks on invalid multibyte input, all of compression_pglz). The run's --dlpath holds no regress.so: the test library is not a shipped module, so its imports are outside the backend export contract. PG18 qualification found 32 missing imports (IsBinaryCoercible, pg_do_encoding_conversion_buf, lseg_intersect, cpu_operator_cost, pglz_compress, …), and its failed dlopen broke later module loads. The PG19 gate continues to omit the test library; it does not claim that old import count or dlopen behavior was remeasured on the new toolchain. Without the file, CREATE FUNCTION … AS :'regresslib' fails with 'could not access file' before any dlopen. conversion's and copy2's diffs also show session-authorization (DROP USER, and copy2's clean-up, after RESET SESSION AUTHORIZATION). PostgreSQL 19 adds test_translation (nls), test_fdw_connection, test_inline_in_from_support_func, test_instr_time and test_pg_locale_apis to the same missing-regress.so limitation. Failed SUPPORT registration leaves foo_from_bar as a Function Scan instead of the expected inline Seq Scan. nls fails on its missing C test helper, not on disabled translation support; upstream provides a non-NLS fallback.",
       "tests": [
         "test_setup",
         "type_sanity",
@@ -52,11 +52,12 @@
         "alter_generic",
         "opr_sanity",
         "conversion",
-        "compression_pglz"
+        "compression_pglz",
+        "nls"
       ]
     },
     "session-authorization": {
-      "reason": "RESET SESSION AUTHORIZATION does not return to the superuser. Single-user mode (InitializeSessionUserIdStandalone) never gives the session_authorization setting a value, so its reset value is empty and RESET SESSION AUTHORIZATION (like SET SESSION AUTHORIZATION DEFAULT) changes nothing: after a test's first SET SESSION AUTHORIZATION, the rest of the test runs as that role, and ownership, privilege and role-management errors follow (and objects the test cannot drop). The bridge's reset sets the superuser back explicitly, so it ends with the test. alter_table's diff also shows start-parameters (-O).",
+      "reason": "RESET SESSION AUTHORIZATION does not return to the superuser. Single-user mode (InitializeSessionUserIdStandalone) never gives the session_authorization setting a value, so its reset value is empty and RESET SESSION AUTHORIZATION (like SET SESSION AUTHORIZATION DEFAULT) changes nothing: after a test's first SET SESSION AUTHORIZATION, the rest of the test runs as that role, and ownership, privilege and role-management errors follow (and objects the test cannot drop). The bridge's reset sets the superuser back explicitly, so it ends with the test. alter_table's diff also shows start-parameters (-O). PG19 adds GRANTED BY, ON CONFLICT DO SELECT, REPACK and RLS self-join-elimination tests after failed resets; permission failures and stale fixtures then cascade. In rowsecurity, an undropped one-row rls_tbl prevents the next 100-row fixture, changing UNION output from 400 to 202 rows and causing later column mismatches; these follow the same failed-reset cause.",
       "tests": [
         "alter_operator",
         "cluster",
@@ -82,7 +83,7 @@
       ]
     },
     "session-persistence": {
-      "reason": "psql's \\c gets the same backend back: the bridge resets the session instead of starting a new one. Login event triggers never fire (event_trigger_login), temp_buffers cannot be changed once any temporary table was used in the backend (temp, and stats), and plpgsql, loaded by an earlier test, already reserves its prefix (guc, which then also shows session-authorization). temp's PREPARE TRANSACTION also finds prepared transactions disabled: max_prepared_transactions is 0, where pg_regress's own temporary instance sets 2.",
+      "reason": "psql's \\c gets the same backend back: the bridge resets the session instead of starting a new one. Login event triggers never fire (event_trigger_login), temp_buffers cannot be changed once any temporary table was used in the backend (temp, and stats), and plpgsql, loaded by an earlier test, already reserves its prefix (guc, which then also shows session-authorization). temp's PREPARE TRANSACTION also finds prepared transactions disabled: max_prepared_transactions is 0, where pg_regress's own temporary instance sets 2. PG19 adds process-specific log_min_messages checks after the same failed authorization reset, so permissions replace their expected setting-validation errors.",
       "tests": ["event_trigger_login", "temp", "guc"]
     },
     "single-process": {
@@ -158,6 +159,9 @@
     "mvcc": "ok",
     "database": "ok",
     "stats_import": "ok",
+    "pg_ndistinct": "ok",
+    "pg_dependencies": "ok",
+    "oid8": "ok",
     "encoding": "failed",
     "euc_kr": "ok",
     "copy": "ok",
@@ -245,6 +249,7 @@
     "dbsize": "ok",
     "merge": "failed",
     "misc_functions": "failed",
+    "nls": "failed",
     "sysviews": "ok",
     "tsrf": "ok",
     "tid": "ok",
@@ -273,7 +278,6 @@
     "select_views": "failed",
     "portals_p2": "ok",
     "foreign_key": "ok",
-    "cluster": "failed",
     "dependency": "failed",
     "guc": "failed",
     "bitmapops": "ok",
@@ -287,6 +291,7 @@
     "advisory_lock": "ok",
     "indirect_toast": "failed",
     "equivclass": "failed",
+    "stats_rewrite": "ok",
     "json": "failed",
     "jsonb": "failed",
     "json_encoding": "ok",
@@ -327,8 +332,12 @@
     "stats": "unstable",
     "predicate": "ok",
     "numa": "ok",
+    "eager_aggregate": "ok",
+    "planner_est": "ok",
     "compression": "ok",
+    "compression_lz4": "ok",
     "compression_pglz": "failed",
+    "cluster": "failed",
     "oidjoins": "ok",
     "event_trigger": "failed",
     "event_trigger_login": "failed",
