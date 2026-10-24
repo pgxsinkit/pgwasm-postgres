@@ -12,13 +12,17 @@ consumes the releases. Read [README.md](README.md) and
   `lint:fix` change files. `bun run validate` (format, typecheck, lint, unit tests, `patches:check`) is
   the pre-commit hook, installed by `bun install` through `prepare`, and must pass before every commit.
   `bun run validate:full` is what `ci.yml` runs; `gate.yml` runs the engine gate (`bun run gate --lock`) on
-  every pull request and every push to develop and main.
+  every pull request and every push to develop, main and `port-*` (also on demand).
 - **Tags are the only version input.** Releases are tagged `<pg major>.<pg minor>.<revision>` (`18.3.0`),
-  unprefixed. `package.json` keeps `"version": "0.0.0"`; never hand-edit a version anywhere.
+  unprefixed; opt-in RC prereleases use `<pg major>.0.0-rc.<upstream rc>` (`19.0.0-rc.1`).
+  RC tags never advance stable version derivation. `package.json` keeps `"version": "0.0.0"`;
+  never hand-edit a version anywhere.
 - **Releases are GitHub release assets**, never npm packages, made only by `release.yml` from a pushed tag
-  `N.N.N`: the tag must be the commit's candidate version, the commit must have passed `gate.yml` (tag only
-  after it did, and after main is fast-forwarded to it), and the release is the gated build, byte for byte.
-  Never create a release by hand.
+  `N.N.N` or `N.0.0-rc.N`: the tag must be the commit's candidate version and the commit must have passed
+  `gate.yml`. Finals require main to be fast-forwarded first; an RC can be tagged on its reviewed `port-*`
+  branch without promoting it onto main, and is marked `--prerelease --latest=false`. Both require the
+  published builder and ship the gated build byte for byte. Each upstream RC has one immutable release tag;
+  never retarget or replace a published tag/asset. Betas remain build-only. Never create a release by hand.
 - **Rebase, never merge.** History is linear. PRs are for review; main is fast-forwarded from the command
   line. Never push, tag or publish unless the maintainer asks for that specific step.
 

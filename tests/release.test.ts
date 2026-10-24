@@ -32,19 +32,32 @@ function manifest(): GateManifest {
 }
 
 describe("the release tag", () => {
-  test("a port's gated release candidate cannot be published as a final release", () => {
+  test("a port's gated release candidate is published only under its exact candidate tag", () => {
     const facts = { tag: "19.0.0-rc.1", tagCommit: HEAD, head: HEAD, candidate: "19.0.0-rc.1" };
-    expect(releaseTagProblems(facts)).toEqual([
-      "19.0.0-rc.1 is not a release tag (N.N.N, unprefixed, no leading zeros).",
-    ]);
+    expect(releaseTagProblems(facts)).toEqual([]);
     expect(releaseTagProblems({ ...facts, tag: "19.0.0" })[0]).toContain("which is 19.0.0-rc.1");
+    expect(releaseTagProblems({ ...facts, tag: "19.0.0-rc.2" })[0]).toContain("which is 19.0.0-rc.1");
+    expect(releaseTagProblems({ ...facts, tagCommit: "b".repeat(40) })[0]).toContain("but the checkout is");
+    expect(releaseTagProblems({ ...facts, tagCommit: undefined })).toEqual(["there is no tag 19.0.0-rc.1."]);
+    for (const tag of [
+      "19.0.0-rc.01",
+      "19.0.0-rc.0",
+      "019.0.0-rc.1",
+      "v19.0.0-rc.1",
+      "19.1.0-rc.1",
+      "19.0.1-rc.1",
+      "19.0.0-beta.4",
+      "19.0.0-rc.1.1",
+    ]) {
+      expect(releaseTagProblems({ ...facts, tag })[0]).toContain("not a release tag");
+    }
   });
 
   test("must be N.N.N, on the checkout, and the checkout's candidate version", () => {
     const facts = { tag: "18.3.0", tagCommit: HEAD, head: HEAD, candidate: "18.3.0" };
     expect(releaseTagProblems(facts)).toEqual([]);
     expect(releaseTagProblems({ ...facts, tag: "builder-sources-2" })).toEqual([
-      "builder-sources-2 is not a release tag (N.N.N, unprefixed, no leading zeros).",
+      "builder-sources-2 is not a release tag (N.N.N or N.0.0-rc.N, unprefixed, no leading zeros).",
     ]);
     expect(releaseTagProblems({ ...facts, tag: "v18.3.0" })[0]).toContain("not a release tag");
     // A tag on the checkout that skips the candidate.
@@ -154,9 +167,44 @@ describe("the gated build", () => {
       warnings: publishProblems(unpublished).errors,
     });
   });
+
+  test("RC publication retains the gate and published-image requirements and matches the upstream pin", () => {
+    const ours = {
+      ...manifest(),
+      version: "19.0.0-rc.1",
+      upstream: { tag: "REL_19_RC1", commit: "3".repeat(40) },
+    };
+    const input = { tag: ours.version, head: HEAD, tagCommit: HEAD, ours, gated: structuredClone(ours), dryRun: false };
+    expect(publishProblems(input)).toEqual({ errors: [], warnings: [] });
+    const local = { ...ours, builder: { ...ours.builder, digest: null } };
+    expect(publishProblems({ ...input, ours: local, gated: local }).errors[0]).toContain(
+      "not the published builder image",
+    );
+    const otherPin = { ...ours, upstream: { ...ours.upstream, tag: "REL_19_RC2" } };
+    expect(publishProblems({ ...input, ours: otherPin, gated: otherPin }).errors).toContain(
+      "19.0.0-rc.1 does not match the pinned upstream tag REL_19_RC2 (19.0.0-rc.2).",
+    );
+    const final = { ...ours, version: "19.0.0" };
+    expect(publishProblems({ ...input, tag: final.version, ours: final, gated: final }).errors).toContain(
+      "19.0.0 does not match the pinned upstream tag REL_19_RC1 (19.0.0-rc.1).",
+    );
+  });
 });
 
 describe("the release notes", () => {
+  test("an RC's notes name the actual server version and its prerelease status", () => {
+    const rc = {
+      ...manifest(),
+      version: "19.0.0-rc.1",
+      upstream: { tag: "REL_19_RC1", commit: "3".repeat(40) },
+    };
+    const notes = releaseNotes({ manifest: rc, exports: [], previous: undefined });
+    expect(notes).toContain("PostgreSQL 19rc1 for WebAssembly");
+    expect(notes).toContain("PostgreSQL 19rc1 (pgwasm-postgres 19.0.0-rc.1)");
+    expect(notes).toContain(
+      "This is a release candidate, published as a GitHub prerelease; it does not replace the stable release.",
+    );
+  });
   test("say what the release is, from its manifest, and how the export list changed", () => {
     const first = releaseNotes({ manifest: manifest(), exports: ["_a", "_c"], previous: undefined });
     expect(first).toContain(
@@ -201,6 +249,23 @@ describe("the release notes", () => {
       "/n.md",
       "/g/a",
       "/g/b",
+    ]);
+  });
+
+  test("an RC is explicitly a prerelease and never replaces Latest", () => {
+    expect(releaseCommand("19.0.0-rc.1", "/n.md", ["/g/a"])).toEqual([
+      "gh",
+      "release",
+      "create",
+      "19.0.0-rc.1",
+      "--verify-tag",
+      "--title",
+      "19.0.0-rc.1",
+      "--notes-file",
+      "/n.md",
+      "--prerelease",
+      "--latest=false",
+      "/g/a",
     ]);
   });
 });

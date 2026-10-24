@@ -1,5 +1,5 @@
 /**
- * The release (ADR-0001 decisions 5, 7 and 9). A release is a tag `N.N.N` on a commit whose engine gate passed:
+ * The release (ADR-0001 decisions 5, 7 and 9). A final or RC tag names a commit whose engine gate passed:
  * `release.yml` refuses a tag that is not the commit's candidate version ({@link releaseTagProblems}), runs the gate
  * at the tag, downloads the gated build of the same commit from a successful `gate.yml` run ({@link chooseGateRun}),
  * requires the two manifests to be identical ({@link publishProblems}), and creates the GitHub release with every
@@ -15,7 +15,14 @@ import {
   type GateManifest,
 } from "./gate.ts";
 import { git } from "./git.ts";
-import { ancestorTags, formatVersion, parseReleaseTag, type Version } from "./version.ts";
+import {
+  ancestorTags,
+  formatVersion,
+  isReleaseCandidateTag,
+  parseReleaseTag,
+  prereleaseVersion,
+  type Version,
+} from "./version.ts";
 
 /** What the release job knows about a tag when it starts. */
 export interface TagFacts {
@@ -30,9 +37,8 @@ export interface TagFacts {
 
 /** Why a tag cannot be released at `head`; empty when it can. */
 export function releaseTagProblems(facts: TagFacts): string[] {
-  if (parseReleaseTag(facts.tag) === undefined) {
-    return [`${facts.tag} is not a release tag (N.N.N, unprefixed, no leading zeros).`];
-  }
+  const formatProblem = releaseTagFormatProblem(facts.tag);
+  if (formatProblem !== undefined) return [formatProblem];
   const problems: string[] = [];
   if (facts.tagCommit === undefined) problems.push(`there is no tag ${facts.tag}.`);
   else if (facts.tagCommit !== facts.head) {
@@ -44,6 +50,12 @@ export function releaseTagProblems(facts: TagFacts): string[] {
     );
   }
   return problems;
+}
+
+function releaseTagFormatProblem(tag: string): string | undefined {
+  return parseReleaseTag(tag) !== undefined || isReleaseCandidateTag(tag)
+    ? undefined
+    : `${tag} is not a release tag (N.N.N or N.0.0-rc.N, unprefixed, no leading zeros).`;
 }
 
 /** The latest release tag (`N.N.N`) among `commit`'s strict ancestors, or undefined before the first release. */
@@ -112,6 +124,16 @@ export interface PublishInput {
 export function publishProblems(input: PublishInput): { errors: string[]; warnings: string[] } {
   const errors: string[] = [];
   const warnings: string[] = [];
+  const formatProblem = releaseTagFormatProblem(input.tag);
+  if (formatProblem !== undefined) errors.push(formatProblem);
+  const pinnedPrerelease = prereleaseVersion(input.ours.upstream.tag);
+  if (pinnedPrerelease !== undefined && input.tag !== pinnedPrerelease) {
+    errors.push(
+      `${input.tag} does not match the pinned upstream tag ${input.ours.upstream.tag} (${pinnedPrerelease}).`,
+    );
+  } else if (isReleaseCandidateTag(input.tag) && pinnedPrerelease === undefined) {
+    errors.push(`${input.tag} requires an upstream RC pin, not ${input.ours.upstream.tag}.`);
+  }
   const soft = (message: string): void => {
     (input.dryRun ? warnings : errors).push(message);
   };
@@ -146,11 +168,19 @@ function previousExportsLine(input: NotesInput): string {
 /** The release's notes, from its gate manifest. */
 export function releaseNotes(input: NotesInput): string {
   const { manifest } = input;
-  const pg = /^REL_(\d+)_(\d+)$/.exec(manifest.upstream.tag);
-  const pgVersion = pg === null ? manifest.upstream.tag : `${pg[1]}.${pg[2]}`;
+  const pg = /^REL_(\d+)_(?:(\d+)|(BETA|RC)(\d+))$/.exec(manifest.upstream.tag);
+  const pgVersion =
+    pg === null
+      ? manifest.upstream.tag
+      : pg[2] === undefined
+        ? `${pg[1]}${pg[3]?.toLowerCase()}${pg[4]}`
+        : `${pg[1]}.${pg[2]}`;
   return [
     `PostgreSQL ${pgVersion} for WebAssembly: upstream \`${manifest.upstream.tag}\` (\`${manifest.upstream.commit}\`) with this repository's patch series and overlay at \`${manifest.commit}\` (tree \`${manifest.tree}\`). \`SELECT version()\` reads \`PostgreSQL ${pgVersion} (pgwasm-postgres ${manifest.version}) on wasm32-unknown-emscripten, …\`.`,
     "",
+    ...(isReleaseCandidateTag(manifest.version)
+      ? ["This is a release candidate, published as a GitHub prerelease; it does not replace the stable release.", ""]
+      : []),
     "## Assets",
     "",
     ...filesTable(manifest.files),
@@ -176,5 +206,17 @@ export function releaseNotes(input: NotesInput): string {
 
 /** The command that creates the release: the tag must exist on GitHub; every gate file is an asset. */
 export function releaseCommand(tag: string, notesFile: string, files: readonly string[]): string[] {
-  return ["gh", "release", "create", tag, "--verify-tag", "--title", tag, "--notes-file", notesFile, ...files];
+  return [
+    "gh",
+    "release",
+    "create",
+    tag,
+    "--verify-tag",
+    "--title",
+    tag,
+    "--notes-file",
+    notesFile,
+    ...(isReleaseCandidateTag(tag) ? ["--prerelease", "--latest=false"] : []),
+    ...files,
+  ];
 }

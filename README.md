@@ -366,8 +366,9 @@ bun run release:publish <tag> --gated <dir> [--dry-run]     # identical manifest
   the published image, pulled by digest, when the lock records `builder/`'s content published, and otherwise
   the image built from `builder/` in the job; `--published` (the release) accepts only the published image.
   `--summary` appends a Markdown summary of the manifest (the job summary in CI).
-- **`release:check <tag>`** refuses a tag that is not `N.N.N`, does not point at HEAD, or is not HEAD's
-  candidate version.
+- **`release:check <tag>`** accepts a final `N.N.N` or opt-in RC `N.0.0-rc.N` tag only when it points
+  at HEAD and is HEAD's exact candidate version. Betas remain build-only; a `REL_19_RC1` pin cannot be
+  released as `19.0.0` or `19.0.0-rc.2`.
 - **`release:gated <commit> [--out <dir>]`** downloads the `gate-<commit>` artifact of the latest successful
   `gate.yml` run on the commit (`gh run list`, `gh run download`; it waits for a run still going) into
   `.cache/gated/<commit>` and checks it against its own manifest and `SHA256SUMS`.
@@ -375,8 +376,9 @@ bun run release:publish <tag> --gated <dir> [--dry-run]     # identical manifest
   directories, requires this gate (default: `.cache/gate/<HEAD>`) to be of HEAD and of the tag's version,
   built in the published image, and its manifest identical to the gated build's, writes the notes
   (`.cache/gate/<HEAD>.notes.md`) and runs `gh release create <tag> --verify-tag` with every file of the gate
-  directory. `--dry-run` stops before that, printing the notes and the command, and reports a missing tag or
-  a local builder image instead of refusing.
+  directory. For an RC it adds `--prerelease --latest=false`, so PG18 can remain the stable release while
+  consumers opt into PG19 by its exact tag. `--dry-run` stops before that, printing the notes and the command,
+  and reports a missing tag or a local builder image instead of refusing.
 
 A release, and the gate directory it is made from, holds:
 
@@ -404,13 +406,13 @@ the builder image's digest.
 The workflows are thin: every step that does work is one of these scripts, and gives the same result
 locally.
 
-| Workflow            | On                                                                          | Runs                                                                                                                               |
-| ------------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `ci.yml`            | pull requests, pushes to develop and main                                   | `validate:full`                                                                                                                    |
-| `builder-image.yml` | pushes to develop and main that change `builder/` (not the lock); on demand | `builder:image --push` to `ghcr.io/pgxsinkit/pgwasm-builder`; the digest and the `builder:lock` command in the job summary         |
-| `gate.yml`          | pull requests (their head commit), pushes to develop and main               | `gate --lock`; the gate directory uploaded as the artifact `gate-<commit>`; the manifest in the job summary                        |
-| `release.yml`       | a tag `N.N.N` (never `builder-sources-<n>`)                                 | `release:check`, `gate --lock --published`, `release:gated`, `release:publish`: the release, only if its manifest is the gated one |
-| `poll.yml`          | Mondays 06:00 UTC; on demand (`dry_run`)                                    | `poll --lock` from develop: a bump's branch and pull request (or issue), the readiness issue's comment and table                   |
+| Workflow            | On                                                                                 | Runs                                                                                                                               |
+| ------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `ci.yml`            | pull requests, pushes to develop and main                                          | `validate:full`                                                                                                                    |
+| `builder-image.yml` | pushes to develop and main that change `builder/` (not the lock); on demand        | `builder:image --push` to `ghcr.io/pgxsinkit/pgwasm-builder`; the digest and the `builder:lock` command in the job summary         |
+| `gate.yml`          | pull requests (their head commit), pushes to develop, main and `port-*`; on demand | `gate --lock`; the gate directory uploaded as the artifact `gate-<commit>`; the manifest in the job summary                        |
+| `release.yml`       | a tag `N.N.N` or `N.0.0-rc.N` (never betas or `builder-sources-<n>`)               | `release:check`, `gate --lock --published`, `release:gated`, `release:publish`: the release, only if its manifest is the gated one |
+| `poll.yml`          | Mondays 06:00 UTC; on demand (`dry_run`)                                           | `poll --lock` from develop: a bump's branch and pull request (or issue), the readiness issue's comment and table                   |
 
 The builder image is published from `builder/` by `builder-image.yml` as
 `ghcr.io/pgxsinkit/pgwasm-builder:<tag>` (`6.0.13-p1`, the local image's tag), in Docker's v2s2 format so that
@@ -422,7 +424,7 @@ hour more), and no release can be made. The job summary prints the command that 
 `bun run builder:lock --digest <sha256:…> --id <image id> --content <sha256>`, run on the commit the workflow
 ran on, and committed.
 
-Releasing, once the lock records the published image (`bun run builder:lock` says the gate pulls it):
+Releasing a final version, once the lock records the published image (`bun run builder:lock` says the gate pulls it):
 
 1. The commit is on develop and `gate.yml` passed on it (on its pull request's head or on a push).
 2. Fast-forward main to it and push main; `release.yml` finds the gate run through `gate.yml` on main, the
@@ -430,6 +432,18 @@ Releasing, once the lock records the published image (`bun run builder:lock` say
 3. Tag the commit with its candidate version, the version the gate built (`18.3.0`), unprefixed, and push the
    tag. `release.yml` rebuilds the commit from scratch in the published image, runs the gate again, requires
    its manifest to be identical to the gated build's, and publishes the release with its assets and notes.
+
+An RC follows the same published-image and identical-manifest checks, but its reviewed commit can stay on
+`port-<major>` while the stable line remains on PG18. Publish the builder workflow from that branch and
+record its digest first, then let `gate.yml` pass on the exact final commit (port-branch push, PR head, or
+manual dispatch). Tag it with the exact candidate (`19.0.0-rc.1` for `REL_19_RC1`) and push the tag only
+when instructed. The release workflow marks it as a prerelease, never Latest. This publishes engine
+assets; host ABI adoption and data-directory migration remain separate consumer work.
+
+There is one immutable publication per upstream RC under this initial scheme. A later fix on the same
+upstream RC does not receive a new publication version automatically: do not move the existing RC tag
+or replace its assets. Publishing another revision of that RC needs an explicit version-suffix design
+and matching build/manifest support first, or a new upstream RC pin.
 
 A tag that is not the commit's candidate, a lock that does not record the published image, or a build that
 differs from the gated one fails the job before anything is published; the tag can then be deleted and set
@@ -553,8 +567,9 @@ a tag upstream does not have, and a working tree with changes. It never commits 
   of an earlier one.
 - On a clean apply it builds in a scratch copy of the repository at HEAD (a detached worktree under `.cache/`,
   sharing the upstream cache) with the series re-exported onto the tag and the pin moved to it: `bun run build`,
-  whose version for a beta or a release candidate is the pre-release `19.0.0-beta.4` (never a release: release
-  tags are `N.N.N`). A failed build is reported with build-pgwasm.sh's step and its last errors.
+  whose version for a beta or a release candidate is a pre-release such as `19.0.0-beta.4`.
+  Readiness never publishes; an RC can be published later from a deliberately qualified port branch.
+  A failed build is reported with build-pgwasm.sh's step and its last errors.
 - Once it builds: the compatibility tuple of a fresh initdb against `data-format.json` (a major is expected to
   change it: the report gives the new values), the export list against `exported_functions.txt`, and
   `bun run regress` against the pinned major's baseline (the counts, and the new failures by name).
@@ -670,8 +685,10 @@ only version input, and `package.json`'s `0.0.0` is a placeholder. The build der
 (`scripts/lib/version.ts`): `<major>.<minor>.0` of the pinned upstream tag while there is no release tag,
 the latest release tag's revision + 1 when that tag is of the pinned major.minor, and `<major>.<minor>.0`
 otherwise. Only the tags of HEAD's strict ancestors count, so a tagged commit builds as its own tag, and tags
-that are not `N.N.N` (`builder-sources-1`) are ignored; today the candidate is `18.6.2`. Releases are GitHub
-release assets with a checksum manifest, not npm packages, made only by `release.yml` from the gated build (see
+that are not `N.N.N` (`builder-sources-1`, RC tags) are ignored by stable version derivation. A pin on
+`REL_19_RC1` instead builds as `19.0.0-rc.1`, publishable as an opt-in prerelease; beta pins are build-only.
+Releases are GitHub release assets with a checksum manifest, not npm packages, made only by `release.yml`
+from the gated build (see
 [The engine gate, CI and releases](#the-engine-gate-ci-and-releases)). History is linear: changes are rebased,
 never merged, and main is fast-forwarded from the command line.
 

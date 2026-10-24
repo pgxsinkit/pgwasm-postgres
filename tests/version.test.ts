@@ -34,6 +34,8 @@ describe("the candidate version", () => {
   test("is <major>.<minor>.0 until there is a release tag, ignoring other tags", () => {
     expect(candidate("REL_18_3", [])).toBe("18.3.0");
     expect(candidate("REL_18_3", ["builder-sources-1", "builder-sources-2"])).toBe("18.3.0");
+    expect(candidate("REL_18_6", ["18.6.2", "19.0.0-rc.1", "19.0.0-beta.4"])).toBe("18.6.3");
+    expect(candidate("REL_19_0", ["18.6.2", "19.0.0-rc.1", "19.0.0-rc.2"])).toBe("19.0.0");
   });
 
   test("is the latest release's revision + 1 on the same minor", () => {
@@ -51,7 +53,7 @@ describe("the candidate version", () => {
     expect(thrown(() => candidateVersion("REL_18_3", ["18.3.0", "18.6.0"])).message).toContain("moved backwards");
   });
 
-  test("is a pre-release for a beta or a release candidate, which is never a release tag", () => {
+  test("is a pre-release for a beta or release candidate, separate from stable release tags", () => {
     expect(prereleaseVersion("REL_19_BETA4")).toBe("19.0.0-beta.4");
     expect(prereleaseVersion("REL_19_RC1")).toBe("19.0.0-rc.1");
     for (const tag of ["REL_18_6", "REL_19_0", "REL_19_ALPHA1", "18.6.0"])

@@ -1,6 +1,6 @@
 name: Release
 
-# Publishes a release (ADR-0001 decisions 5, 7 and 9) when a tag N.N.N is pushed. In order:
+# Publishes a final release or an opt-in RC prerelease when its candidate tag is pushed. In order:
 #   1. `release:check` refuses a tag that is not the candidate version of the commit it points at;
 #   2. `gate --lock --published` runs the engine gate at the tag, from scratch, in the published builder image;
 #   3. `release:gated` downloads the gated build of the same commit (the gate-<commit> artifact of a successful
@@ -11,8 +11,8 @@ name: Release
 
 on:
   push:
-    # Release tags only: `builder-sources-<n>` and anything else that is not N.N.N never triggers a release.
-    tags: ["[0-9]+.[0-9]+.[0-9]+"]
+    # Exact syntax and upstream-pin agreement are enforced by release:check; betas and mirror tags do not match.
+    tags: ["[0-9]+.[0-9]+.[0-9]+", "[0-9]+.0.0-rc.[0-9]+"]
 
 permissions: {}
 

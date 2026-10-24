@@ -149,7 +149,7 @@ export function formatGateManifest(manifest: GateManifest): string {
 
 const SHA256 = /^[0-9a-f]{64}$/;
 const DIGEST = /^sha256:[0-9a-f]{64}$/;
-// Port branches gate betas and release candidates too; release:check still requires a final N.N.N tag.
+// Port branches gate betas and release candidates too; publication accepts final tags and exact RC candidates.
 const VERSION = /^\d+\.\d+\.\d+(?:-(?:beta|rc)\.\d+)?$/;
 
 /** Reads and checks a gate manifest; `name` names it in messages. */

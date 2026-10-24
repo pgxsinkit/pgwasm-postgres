@@ -1,6 +1,6 @@
 name: Gate
 
-# The engine gate (ADR-0001 decisions 6 and 9) of a pull request's head and of every push to develop and main:
+# The engine gate of a pull request's head and every push to develop, main and port-*:
 # `bun run gate --lock` builds the commit from scratch in the builder image builder/image.lock.json pins (pulled
 # by digest; built from builder/ in the job when builder/ changed since it was published), runs every check, and
 # writes the release it would publish to .cache/gate/<commit>/, uploaded as the artifact gate-<commit>. The release
@@ -10,7 +10,8 @@ name: Gate
 on:
   pull_request:
   push:
-    branches: [main, develop]
+    branches: [main, develop, "port-*"]
+  workflow_dispatch:
 
 permissions: {}
 

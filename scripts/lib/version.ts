@@ -11,8 +11,9 @@
  * Tags that are not `N.N.N` (`builder-sources-1`) are ignored.
  *
  * A pin on a beta or a release candidate of the next major (a `port-<major>` branch's, or `bun run readiness`'s
- * scratch copy, decision 8) builds as the semver pre-release `<major>.0.0-beta.<n>` or `<major>.0.0-rc.<n>`: never a
- * release, since releases are tagged `N.N.N` only, so `release:check` refuses it.
+ * scratch copy, decision 8) builds as the semver pre-release `<major>.0.0-beta.<n>` or `<major>.0.0-rc.<n>`.
+ * RCs can be published as opt-in GitHub prereleases; betas remain build-only. Prerelease tags never advance
+ * the stable candidate. Each upstream RC has one immutable publication under its exact candidate tag.
  */
 import { git, UserError } from "./git.ts";
 
@@ -23,6 +24,7 @@ export interface Version {
 }
 
 const SEMVER_TAG = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+const RELEASE_CANDIDATE_TAG = /^[1-9]\d*\.0\.0-rc\.[1-9]\d*$/;
 /** Upstream's release tags: `REL_18_3`. Betas and release candidates (`REL_19_BETA4`) have no minor. */
 const UPSTREAM_RELEASE_TAG = /^REL_(\d+)_(\d+)$/;
 /** Upstream's betas and release candidates: `REL_19_BETA4`, `REL_19_RC1`. */
@@ -33,6 +35,11 @@ export function parseReleaseTag(tag: string): Version | undefined {
   const match = SEMVER_TAG.exec(tag);
   if (match === null) return undefined;
   return { major: Number(match[1]), minor: Number(match[2]), revision: Number(match[3]) };
+}
+
+/** An opt-in RC publication tag, distinct from the final tags used for stable version derivation. */
+export function isReleaseCandidateTag(tag: string): boolean {
+  return RELEASE_CANDIDATE_TAG.test(tag);
 }
 
 /** The Postgres major and minor of an upstream release tag. */

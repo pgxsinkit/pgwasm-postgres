@@ -1,7 +1,7 @@
 /**
  * bun run release:check <tag>
  *
- * The release job's first step (ADR-0001 decision 5): refuses a tag that is not a release tag (`N.N.N`), that
+ * The release job's first step (ADR-0001 decision 5): refuses a tag that is not a final or RC publication tag, that
  * does not point at the checkout, or that is not the checkout's candidate version (scripts/lib/version.ts: the
  * version the build embeds, derived from the release tags of its ancestors and the pinned upstream tag).
  */

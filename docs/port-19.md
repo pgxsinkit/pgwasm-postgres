@@ -178,6 +178,39 @@ baseline. The accepted gate's files are under `.cache/gate/<commit>/`.
    contract gate on the candidate artefacts.
 4. Follow the existing rebase, review, fast-forward and tag release procedure.
 
+### RC publication alongside PG18
+
+The current branch builds PG19 RC1 only. Retaining the PG18 control-file parser
+and historical format declaration supports tooling and comparisons; it does not
+make the PG19 patches or binaries work as PG18.
+
+The release tooling supports an opt-in `19.0.0-rc.1` GitHub prerelease while
+PG18 remains the stable line. Publication follows this path:
+
+1. The release workflow's tag filter and `release:check` accept the exact RC
+   candidate derived from the upstream pin. Stable version derivation continues
+   to ignore prerelease tags; beta builds remain unpublished.
+2. `release:publish` marks RCs as prereleases and explicitly passes
+   `--latest=false`, retaining tag verification, checksums and identical-manifest
+   checks. These flags are documented by the [GitHub CLI](https://cli.github.com/manual/gh_release_create).
+3. RC publication uses the reviewed `port-19` commit without promoting PG19 onto
+   main; stable releases retain their existing integration procedure. The CI
+   gate runs on port-branch pushes, review PRs and manual dispatch, and must pass
+   on that exact commit.
+4. Publish builder `6.0.13-p1` from this branch through the builder workflow,
+   record its registry digest with `builder:lock`, and qualify the final candidate
+   using the published image. The current local-image gates cannot supply the
+   release's required published-image manifest.
+5. Once the final commit passes its gate, tag that commit `19.0.0-rc.1` and use
+   the release workflow to publish the checked assets. Keep PG18's stable release
+   available separately.
+
+Publication and host adoption are separate. pgxsinkit's `scripts/pgwasm-pin.ts`
+currently accepts only final `N.N.N` tags and refuses a data-format change. An
+experimental consumer branch needs prerelease pin support, the host ABI changes
+above, an explicit format-2 store policy and its contract/browser checks before
+using this build. Publishing an RC alone does not migrate existing stores.
+
 ## Further Wasm work to investigate
 
 These are follow-up options from the code audit, not additions to this port or
@@ -186,7 +219,9 @@ maintainer policy:
 - **Protocol and role correctness:** reproduce the baseline's early
   ReadyForQuery after extended-query errors, and standalone mode's incomplete
   `RESET SESSION AUTHORIZATION`. Fix and tighten their existing baseline groups
-  separately rather than recording new failures away.
+  separately rather than recording new failures away. The
+  [October PGlite audit](pglite-fixes-2026-10.md) identifies the exact upstream
+  readiness fix and confirms that both our PG18 and PG19 branches need it.
 - **Browser memory:** pgxsinkit's C host starts at 128 MiB with a 2 GiB maximum.
   Measure smaller starting allocations, growth, OOM handling and stack limits on
   supported browsers. The regression bridge's 256 MiB native stack does not
