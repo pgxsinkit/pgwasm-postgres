@@ -64,6 +64,11 @@ ICU 79.1 from its checksum-verified release source, and Ubuntu's 2026-10-24
 snapshot. zlib 1.3.2 and libxml2 2.15.4 remain the latest releases when verified.
 The image must be published and its digest recorded before any release.
 
+Local and CI Bun pins are both 1.4.4, verified as the latest published version.
+The workspace dependencies were refreshed together: Bun types 1.4.4, oxfmt
+0.74.0, oxlint 1.89.0 and oxlint-tsgolint 7.0.2005; TypeScript 7.0.2 remained
+latest. Validation and gate commands run directly through `bun run`.
+
 The minimal data retains the root-only selection: `coll/root.res` and
 `coll/ucadata.icu`, extracted from the release's `source/data/in/icudt79l.dat`
 with the native ICU 79.1 `icupkg` built in the builder stage. The release's full
@@ -120,10 +125,49 @@ conversion and all seventeen non-ASCII round-trip encodings.
 
 ## Validation
 
-The five patches apply and round-trip on RC1. Builder compilation, the actual
-initdb tuple, smoke tests, generated records, pg_regress and the two final engine
-gates are pending while this port is being implemented. Replace this paragraph
-with measured results before considering the branch complete.
+The builder was compiled and its 225 installed packages checked. All five
+patches apply and round-trip on RC1; format, typecheck, lint and all 195 unit
+tests pass. A real initdb verifies format 2's complete fourteen-field tuple.
+
+Runtime smoke passes exact version matching, filesystem interface identity,
+ICU root collation, SQL/error recovery, amcheck, all 27 shipped modules, all 98
+default conversions, seventeen non-ASCII encoding round trips, stemming, 4,000
+consecutive handled SQL errors without shadow-stack loss, and pg_dump. The
+prepopulated archive boots with 999 entries and 421 catalog relations, and its
+record reproduces under Bun 1.4.4. Export, identity and regression records are
+separate commits.
+
+Eight complete native regression runs each executed 239 tests: 185 passed and
+54 failed, with no backend failure. Their combined baseline records 185 passed,
+50 stable failures and the same four unstable tests as PG18 (`psql`,
+`psql_pipeline`, `subscription`, `stats`). Of eight new tests, seven pass; the
+new `nls` failure requires the same deliberately unshipped `regress.so` helper
+library as existing tests. `compression_lz4` matches upstream's unsupported-build
+skip and establishes no LZ4 execution coverage.
+
+PG19's live diff output exposed a harness defect: combined stdout/stderr could
+obscure status lines, reading 237 tests where PostgreSQL's own summary had 239.
+The harness now reads canonical `regression.out` and rejects missing, truncated
+or duplicate TAP plans, test names and test numbers. The incomplete recording
+attempt was rejected; the eight-run record above uses this corrected reader.
+
+Every changed stable diff was reviewed against upstream's SQL/expected output
+and the previous failure cause before accepting the baseline:
+
+| Changed tests                                                                                                                             | Explanation                                                                                                                                                                                                                                                                                                                                                                                               |
+| ----------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `create_schema`, `create_function_sql`, `constraints`, `inherit`, `matview`, `merge`, `rules`, `plpgsql`, `copy2`                         | Existing failure bodies are unchanged after removing only hunk coordinates. `publication` likewise retains its sole current-user role-drop failure, with new surrounding test context.                                                                                                                                                                                                                    |
+| `type_sanity`, `opr_sanity`, `encoding`, `create_type`, `create_view`, `lock`, `misc`, `indirect_toast`, `conversion`, `compression_pglz` | Existing missing C helpers persist. PG19 adds precise missing-function DETAIL text and changes hunk context. MULE_INTERNAL removal and the new GB18030-2022 case explain encoding/conversion expected-output changes.                                                                                                                                                                                     |
+| `misc_functions`, `foreign_data`, new `nls`                                                                                               | New C helpers remain in the unshipped test library: SUPPORT inlining, timing, locale, FDW connection and translation helpers. NLS-disabled mode itself has an upstream fallback and is not the failure cause.                                                                                                                                                                                             |
+| `updatable_views`, `privileges`, `cluster`, `guc`                                                                                         | New ON CONFLICT DO SELECT, GRANTED BY, REPACK and GUC checks execute after existing failed authorization resets; ownership, cleanup and permissions cascade. Existing preloaded-PL/pgSQL and zero-worker limitations remain.                                                                                                                                                                              |
+| `rowsecurity`                                                                                                                             | New policy-command and self-join-elimination tests leave restricted roles and undeleted fixtures. A surviving one-row table blocks the following 100-row fixture, explaining 400-to-202 UNION output and later column mismatches. New tests that explicitly restore Alice also remove some former missing-table errors. These follow the same reset defect, not a newly demonstrated RLS semantic defect. |
+| `stats_ext`, `alter_table`, `partition_prune`                                                                                             | New statistics rendering, description/publication headings, cursor context and InitPlan labels change expected text. The existing authorization, `-O` and disabled-parallel-worker failures remain.                                                                                                                                                                                                       |
+| `collate.icu.utf8`                                                                                                                        | Only hunk positions, cursor context and missing-function diagnostics change. ICU 79.1's root-only data still lacks imported language locales; root collation is separately verified by smoke.                                                                                                                                                                                                             |
+
+The final reproducibility acceptance is two `bun run gate --lock` runs from the
+same clean commit, with byte-identical `manifest.json` files. Each gate rebuilds,
+runs smoke and record checks, then compares a fresh regression run with this
+baseline. The accepted gate's files are under `.cache/gate/<commit>/`.
 
 ## Adoption after this branch
 
