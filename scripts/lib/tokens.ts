@@ -588,8 +588,8 @@ export function compileCommand(makeOutput: string, source: string, object: strin
   );
 }
 
-/** Decision 4's flags: preprocess only, without line markers, with `__PGLITE__` defined and `__LINE__` fixed. */
-export const PREPROCESS_FLAGS = ["-E", "-P", "-D__PGLITE__", "-D__LINE__=0", "-Wno-builtin-macro-redefined"] as const;
+/** Decision 4's flags: preprocess only, without line markers, with `__PGWASM__` defined and `__LINE__` fixed. */
+export const PREPROCESS_FLAGS = ["-E", "-P", "-D__PGWASM__", "-D__LINE__=0", "-Wno-builtin-macro-redefined"] as const;
 
 /** Flags that only write dependency files, and those of them that take the next word as their value. */
 const DEPENDENCY_FLAGS = new Set(["-MD", "-MMD", "-MP", "-MG"]);

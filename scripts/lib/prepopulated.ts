@@ -289,7 +289,9 @@ function compareWal(a: Uint8Array, b: Uint8Array, ours: readonly DataDirEntry[])
     byKind.set(kind, tally);
   }
   const differing = [...byKind.values()].reduce((total, tally) => total + tally.differing, 0);
-  lines.push(`    ${differing} of ${ourWal.records.length} WAL records differ (same positions and lengths):`);
+  lines.push(
+    `    ${differing} of ${ourWal.records.length} WAL records differ when compared at this build's offsets and lengths:`,
+  );
   for (const [kind, tally] of byKind) {
     if (tally.differing > 0) lines.push(`      ${kind}: ${tally.differing} of ${tally.records}`);
   }

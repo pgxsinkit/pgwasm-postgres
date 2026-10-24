@@ -40,11 +40,12 @@ unchanged; since release 18.3.0 pgwasm-postgres changes and adds to it.
 Unicode: ICU collation data
 ------------------------------------------------------------------------------
 
-`overlay/pglite/static/minimal-icu/76.1/icudt76l/coll/` holds two ICU 76.1 data
-files (root.res, ucadata.icu), part of the postgres-pglite overlay.
+`overlay/pgwasm/static/minimal-icu/79.1/icudt79l/coll/` holds two ICU 79.1 data
+files (root.res, ucadata.icu), extracted from ICU's release data for the
+PostgreSQL 19 port. The original ICU 76.1 selection came from postgres-pglite.
 
-  Source:  https://github.com/unicode-org/icu (release 76.1)
+  Source:  https://github.com/unicode-org/icu (release 79.1)
   License: Unicode License V3 (SPDX: Unicode-3.0), with the third-party notices
            ICU carries; the full text ships next to the files in
-           overlay/pglite/static/minimal-icu/76.1/LICENSE
-  Copyright (c) 2016-2024 Unicode, Inc.
+           overlay/pgwasm/static/minimal-icu/79.1/LICENSE
+  Copyright (c) 1991-2026 Unicode, Inc.

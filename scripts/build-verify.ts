@@ -2,7 +2,7 @@
  * bun run build:verify <manifest> [<dist dir>]
  *
  * Checks that a build reproduces another (ADR-0001 decision 9): the release artefacts of a `dist/` (by default
- * .cache/build/postgres-pglite/dist, where `bun run build` puts it) against a manifest another build wrote, such
+ * .cache/build/postgres-pgwasm/dist, where `bun run build` puts it) against a manifest another build wrote, such
  * as the gated build's. Every artefact (the extension archives included) must have the manifest's bytes and
  * sha256, and the dist's own manifest.json, when it has one, the same version, source date and compatibility
  * tuple. Prints a table; exits 1 on any difference.

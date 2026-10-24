@@ -85,8 +85,78 @@ const CONTROL_FILE_1800: readonly Field[] = [
   ["crc", "u32"], // pg_crc32c, over every byte before it
 ];
 
+/** `CheckPoint` at PG_CONTROL_VERSION 1905 (REL_19_RC1 pg_control.h). */
+const CHECKPOINT_1905: readonly Field[] = [
+  ["redo", "u64"],
+  ["ThisTimeLineID", "u32"],
+  ["PrevTimeLineID", "u32"],
+  ["fullPageWrites", "bool"],
+  ["wal_level", "i32"],
+  ["logicalDecodingEnabled", "bool"],
+  ["nextXid", "u64"],
+  ["nextOid", "u32"],
+  ["nextMulti", "u32"],
+  ["nextMultiOffset", "u64"], // MultiXactOffset became 64-bit in 19
+  ["oldestXid", "u32"],
+  ["oldestXidDB", "u32"],
+  ["oldestMulti", "u32"],
+  ["oldestMultiDB", "u32"],
+  ["time", "i64"],
+  ["oldestCommitTsXid", "u32"],
+  ["newestCommitTsXid", "u32"],
+  ["oldestActiveXid", "u32"],
+];
+
+/**
+ * `ControlFileData` at PG_CONTROL_VERSION 1905 (REL_19_RC1 pg_control.h). Checked with clang's
+ * wasm32-unknown-emscripten record layout: sizeof 312, crc at 308; the nested checkpoint is 96 bytes.
+ */
+const CONTROL_FILE_1905: readonly Field[] = [
+  ["system_identifier", "u64"],
+  ["pg_control_version", "u32"],
+  ["catalog_version_no", "u32"],
+  ["state", "i32"],
+  ["time", "i64"],
+  ["checkPoint", "u64"],
+  ["checkPointCopy", CHECKPOINT_1905],
+  ["unloggedLSN", "u64"],
+  ["minRecoveryPoint", "u64"],
+  ["minRecoveryPointTLI", "u32"],
+  ["backupStartPoint", "u64"],
+  ["backupEndPoint", "u64"],
+  ["backupEndRequired", "bool"],
+  ["wal_level", "i32"],
+  ["wal_log_hints", "bool"],
+  ["MaxConnections", "i32"],
+  ["max_worker_processes", "i32"],
+  ["max_wal_senders", "i32"],
+  ["max_prepared_xacts", "i32"],
+  ["max_locks_per_xact", "i32"],
+  ["track_commit_timestamp", "bool"],
+  ["maxAlign", "u32"],
+  ["floatFormat", "f64"],
+  ["blcksz", "u32"],
+  ["relseg_size", "u32"],
+  ["slru_pages_per_segment", "u32"],
+  ["xlog_blcksz", "u32"],
+  ["xlog_seg_size", "u32"],
+  ["nameDataLen", "u32"],
+  ["indexMaxKeys", "u32"],
+  ["toast_max_chunk_size", "u32"],
+  ["loblksize", "u32"],
+  ["float8ByVal", "bool"],
+  ["data_checksum_version_init", "u32"],
+  ["data_checksum_version", "u32"],
+  ["default_char_signedness", "bool"],
+  ["mock_authentication_nonce", "nonce"],
+  ["crc", "u32"],
+];
+
 /** The layouts this parser knows, by `pg_control_version`. A new major adds its own. */
-const LAYOUTS: ReadonlyMap<number, readonly Field[]> = new Map([[1800, CONTROL_FILE_1800]]);
+const LAYOUTS: ReadonlyMap<number, readonly Field[]> = new Map([
+  [1800, CONTROL_FILE_1800],
+  [1905, CONTROL_FILE_1905],
+]);
 
 /** `pg_control_version` sits right after the 8-byte system identifier in every layout since 8.x. */
 const VERSION_OFFSET = 8;
@@ -246,7 +316,8 @@ export function parseWalLongPageHeader(bytes: Uint8Array): WalLongPageHeader {
  * before it will use a data directory. `ReadControlFile()` (REL_18_3 xlog.c lines 4388-4535) refuses a
  * pg_control whose version, catalog version or any of the build-time sizes differ; WAL is refused when a
  * page's magic is not `XLOG_PAGE_MAGIC` (`XLogReaderValidatePageHeader()`, xlogreader.c line 1247). Keys are
- * the C field names.
+ * the C field names. 19 additionally checks SLRU_PAGES_PER_SEGMENT; its float8ByVal is a vestigial
+ * always-true field, retained in the tuple so historical declarations keep their meaning.
  */
 export interface CompatibilityTuple {
   readonly pg_control_version: number;
@@ -255,6 +326,8 @@ export interface CompatibilityTuple {
   readonly floatFormat: number;
   readonly blcksz: number;
   readonly relseg_size: number;
+  /** Present from PG_CONTROL_VERSION 1905: 19's ReadControlFile checks SLRU_PAGES_PER_SEGMENT. */
+  readonly slru_pages_per_segment?: number;
   readonly xlog_blcksz: number;
   readonly nameDataLen: number;
   readonly indexMaxKeys: number;
@@ -265,6 +338,7 @@ export interface CompatibilityTuple {
   readonly xlp_magic: string;
 }
 
+/** All known tuple keys, in report order; tupleKeys selects the keys required by one control version. */
 export const TUPLE_KEYS = [
   "pg_control_version",
   "catalog_version_no",
@@ -272,6 +346,7 @@ export const TUPLE_KEYS = [
   "floatFormat",
   "blcksz",
   "relseg_size",
+  "slru_pages_per_segment",
   "xlog_blcksz",
   "nameDataLen",
   "indexMaxKeys",
@@ -280,6 +355,13 @@ export const TUPLE_KEYS = [
   "float8ByVal",
   "xlp_magic",
 ] as const satisfies readonly (keyof CompatibilityTuple)[];
+
+/** A historical tuple retains its original keys; 19 adds the SLRU segment size to the contract. */
+export function tupleKeys(pgControlVersion: unknown): readonly (typeof TUPLE_KEYS)[number][] {
+  if (pgControlVersion === 1800) return TUPLE_KEYS.filter((key) => key !== "slru_pages_per_segment");
+  if (pgControlVersion === 1905) return TUPLE_KEYS;
+  throw new ControlFileError(`The compatibility tuple has unknown PG_CONTROL_VERSION ${String(pgControlVersion)}`);
+}
 
 function numberField(control: ControlFile, name: string): number {
   const value = control.fields.get(name);
@@ -308,6 +390,9 @@ export function compatibilityTuple(control: ControlFile, wal: WalLongPageHeader)
     floatFormat: numberField(control, "floatFormat"),
     blcksz: numberField(control, "blcksz"),
     relseg_size: numberField(control, "relseg_size"),
+    ...(control.fields.has("slru_pages_per_segment")
+      ? { slru_pages_per_segment: numberField(control, "slru_pages_per_segment") }
+      : {}),
     xlog_blcksz: numberField(control, "xlog_blcksz"),
     nameDataLen: numberField(control, "nameDataLen"),
     indexMaxKeys: numberField(control, "indexMaxKeys"),

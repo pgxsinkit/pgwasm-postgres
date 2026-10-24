@@ -106,16 +106,16 @@ export function applyPastConflicts(
   return { apply: { patches: results, output: outputs.filter((text) => text !== "").join("\n") }, applied, conflicts };
 }
 
-/** build-pglite.sh's exit codes (overlay/build-pglite.sh), and the step each one ends. */
+/** build-pgwasm.sh's exit codes (overlay/build-pgwasm.sh), and the step each one ends. */
 export const BUILD_STEPS: Readonly<Record<number, { readonly short: string; readonly step: string }>> = {
   11: { short: "configure", step: "configure (`emconfigure ./configure`)" },
   21: { short: "make", step: "the tree (`emmake make`)" },
   23: { short: "make install", step: "its install (`emmake make install`)" },
   31: { short: "contrib", step: "the contrib modules' archives (`emmake make -C contrib/`)" },
   41: { short: "modules", step: "unpacking the shipped modules" },
-  42: { short: "export list", step: "the export list (`pglite/scripts/exported-functions.sh`)" },
-  51: { short: "link", step: "linking the backend as postgres.js (`emmake make -C src/backend/ pglite`)" },
-  52: { short: "install-pglite", step: "installing the backend (`emmake make -C src/backend/ install-pglite`)" },
+  42: { short: "export list", step: "the export list (`pgwasm/scripts/exported-functions.sh`)" },
+  51: { short: "link", step: "linking the backend as postgres.js (`emmake make -C src/backend/ pgwasm`)" },
+  52: { short: "install-pgwasm", step: "installing the backend (`emmake make -C src/backend/ install-pgwasm`)" },
 };
 
 const ERROR_LINE = /(?:^|\s)(?:fatal )?error: |\*\*\* .*Error \d+/;
@@ -173,13 +173,13 @@ export function rawTupleValues(entries: readonly DataDirEntry[]): Partial<Record
 export interface BuildFindings {
   /** `bun run build`'s exit code. */
   readonly exitCode: number;
-  /** build-pglite.sh's, from the build's `build.json`; undefined when it did not run. */
+  /** build-pgwasm.sh's, from the build's `build.json`; undefined when it did not run. */
   readonly scriptExitCode: number | undefined;
   readonly seconds: number | undefined;
   readonly version: string | undefined;
-  /** The build log's last error lines, when build-pglite.sh failed. */
+  /** The build log's last error lines, when build-pgwasm.sh failed. */
   readonly errors: readonly string[];
-  /** The build log's last lines, when build-pglite.sh failed; `bun run build`'s own when it failed after it. */
+  /** The build log's last lines, when build-pgwasm.sh failed; `bun run build`'s own when it failed after it. */
   readonly tail: readonly string[];
 }
 
@@ -259,7 +259,7 @@ function minutes(seconds: number): string {
   return `${Math.floor(seconds / 60)}m${String(seconds % 60).padStart(2, "0")}s`;
 }
 
-/** Built: build-pglite.sh made the artefacts. */
+/** Built: build-pgwasm.sh made the artefacts. */
 function built(build: BuildFindings | undefined): boolean {
   return build?.scriptExitCode === 0;
 }
@@ -322,7 +322,7 @@ function headline(input: ReadinessInput): string {
     return "**The series applies**, but the build did not start (its output is below).";
   }
   if (build.scriptExitCode !== 0) {
-    return `**The series applies, but the build fails** at ${BUILD_STEPS[build.scriptExitCode]?.step ?? `build-pglite.sh's exit ${build.scriptExitCode}`}.`;
+    return `**The series applies, but the build fails** at ${BUILD_STEPS[build.scriptExitCode]?.step ?? `build-pgwasm.sh's exit ${build.scriptExitCode}`}.`;
   }
   return "**The series applies and builds.** What differs from the pinned major's records is below: information for the port, not a failure.";
 }
@@ -331,7 +331,7 @@ function buildSection(build: BuildFindings): string[] {
   const lines = ["## Build", ""];
   if (build.scriptExitCode === undefined) {
     lines.push(
-      `\`bun run build\` exited ${build.exitCode} before build-pglite.sh ran:`,
+      `\`bun run build\` exited ${build.exitCode} before build-pgwasm.sh ran:`,
       "",
       ...codeBlock(build.tail.join("\n")),
     );
@@ -340,7 +340,7 @@ function buildSection(build: BuildFindings): string[] {
   const took = build.seconds === undefined ? "" : ` after ${minutes(build.seconds)}`;
   if (build.scriptExitCode !== 0) {
     const step = BUILD_STEPS[build.scriptExitCode]?.step ?? "an unknown step";
-    lines.push(`build-pglite.sh stopped at ${step} (exit ${build.scriptExitCode})${took}.`, "");
+    lines.push(`build-pgwasm.sh stopped at ${step} (exit ${build.scriptExitCode})${took}.`, "");
     if (build.errors.length > 0) lines.push("Its last errors:", "", ...codeBlock(build.errors.join("\n")), "");
     lines.push(...details("The end of the build log", codeBlock(build.tail.join("\n"))));
     return lines;
@@ -351,7 +351,7 @@ function buildSection(build: BuildFindings): string[] {
   if (build.exitCode !== 0) {
     lines.push(
       "",
-      `\`bun run build\` failed after build-pglite.sh (exit ${build.exitCode}):`,
+      `\`bun run build\` failed after build-pgwasm.sh (exit ${build.exitCode}):`,
       "",
       ...codeBlock(build.tail.join("\n")),
     );
@@ -370,18 +370,19 @@ function tupleSection(tag: string, tuple: TupleFindings): string[] {
     }
     return lines;
   }
-  const changed = TUPLE_KEYS.filter((key) => tuple.tuple[key] !== tuple.declared.tuple[key]);
+  const keys = TUPLE_KEYS.filter((key) => key in tuple.tuple || key in tuple.declared.tuple);
+  const changed = keys.filter((key) => tuple.tuple[key] !== tuple.declared.tuple[key]);
   lines.push(
     changed.length === 0
       ? `The tuple is dataFormat ${tuple.declared.dataFormat}'s: a data directory of this build opens with this major's builds and theirs with it.`
-      : `${changed.length} of the ${TUPLE_KEYS.length} values differ from dataFormat ${tuple.declared.dataFormat}'s (**bold**). A major is expected to change the tuple: these are the values its new \`dataFormat\` would declare, not a failure.`,
+      : `${changed.length} of the ${keys.length} values differ from dataFormat ${tuple.declared.dataFormat}'s (**bold**). A major is expected to change the tuple: these are the values its new \`dataFormat\` would declare, not a failure.`,
     "",
     tableRow(["Field", `dataFormat ${tuple.declared.dataFormat}`, code(tag)]),
     tableRow(["---", "---", "---"]),
-    ...TUPLE_KEYS.map((key) => {
-      const now = String(tuple.tuple[key]);
+    ...keys.map((key) => {
+      const now = String(tuple.tuple[key] ?? "not present");
       const mark = changed.includes(key) ? (text: string) => `**${text}**` : (text: string) => text;
-      return tableRow([code(key), code(String(tuple.declared.tuple[key])), mark(code(now))]);
+      return tableRow([code(key), code(String(tuple.declared.tuple[key] ?? "not present")), mark(code(now))]);
     }),
   );
   return lines;

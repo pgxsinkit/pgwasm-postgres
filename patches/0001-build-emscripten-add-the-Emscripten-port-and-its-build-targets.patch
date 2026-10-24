@@ -70,10 +70,10 @@ index 4e911395fe3bae8edf33e5a05257872060146f09..2a4b919c69291150e40d4119391228af
 +*.undef.txt
 \ No newline at end of file
 diff --git a/configure b/configure
-index 6cef1a552e58f9cfeb65b46c2855c934cda11720..4077d8e26b3a4032c28c2d50319a91e0f9c01063 100755
+index 7e3f83b04f3d4501661f051b7c7d5e57adc4da89..fae23b3466ca5ca028617283628cd01117b393cd 100755
 --- a/configure
 +++ b/configure
-@@ -19584,7 +19584,7 @@ fi
+@@ -19753,7 +19753,7 @@ fi
  
  
  cat >>confdefs.h <<_ACEOF
@@ -83,10 +83,10 @@ index 6cef1a552e58f9cfeb65b46c2855c934cda11720..4077d8e26b3a4032c28c2d50319a91e0
  
  
 diff --git a/contrib/Makefile b/contrib/Makefile
-index 2f0a88d3f77448d3f6b9f1dda3de3690be747552..022c520cbbf981b6dbb6b8086e5179707b50301c 100644
+index 7d91fe77db399a4f0e64c81f397971e937151de7..a74c9a7c2ecdc9f681c69aee91cfe624e8a02225 100644
 --- a/contrib/Makefile
 +++ b/contrib/Makefile
-@@ -92,6 +92,8 @@ endif
+@@ -94,6 +94,8 @@ endif
  # Missing:
  #		start-scripts	\ (does not have a makefile)
  
@@ -96,10 +96,10 @@ index 2f0a88d3f77448d3f6b9f1dda3de3690be747552..022c520cbbf981b6dbb6b8086e517970
  $(recurse)
  $(recurse_always)
 diff --git a/src/Makefile.shlib b/src/Makefile.shlib
-index 3825af5b2287271fc5e3953f73879715d583fa6b..b282ced5e87eab2c7206d48692c2964bfd465b8e 100644
+index cd1543550ca5bf6815fa1fd205d40d427697de11..53b8a146c85fc7cb9622376c17dd4a1ed82ca7ef 100644
 --- a/src/Makefile.shlib
 +++ b/src/Makefile.shlib
-@@ -224,6 +224,20 @@ ifeq ($(SHLIB_EXPORTS),)
+@@ -238,6 +238,20 @@ ifeq ($(SHLIB_EXPORTS),)
    override CXXFLAGS += $(CXXFLAGS_SL_MODULE)
  endif
  
@@ -121,19 +121,19 @@ index 3825af5b2287271fc5e3953f73879715d583fa6b..b282ced5e87eab2c7206d48692c2964b
  ##
  ## BUILD
 diff --git a/src/backend/Makefile b/src/backend/Makefile
-index c0be9410383208c85e91d1f977e45f7fba2cd6d4..709450cc08fbb658376bc0534ecdcfe2c4f13237 100644
+index 162d3f1f2a982df04b31bcfea623d9770f2c6e9c..95467e013bfcff3b15428d644c49fa9f1530fc81 100644
 --- a/src/backend/Makefile
 +++ b/src/backend/Makefile
-@@ -61,6 +61,7 @@ override LDFLAGS := $(LDFLAGS) $(LDFLAGS_EX) $(LDFLAGS_EX_BE)
+@@ -83,6 +83,7 @@ override LDFLAGS := $(LDFLAGS) $(LDFLAGS_EX) $(LDFLAGS_EX_BE)
  
  all: submake-libpgport submake-catalog-headers submake-utils-headers postgres $(POSTGRES_IMP)
  
 +ifneq ($(PORTNAME), emscripten)
  ifneq ($(PORTNAME), cygwin)
  ifneq ($(PORTNAME), win32)
- 
-@@ -69,6 +70,20 @@ postgres: $(OBJS)
- 
+ ifneq ($(PORTNAME), aix)
+@@ -93,6 +94,20 @@ postgres: $(OBJS)
+ endif
  endif
  endif
 +endif
@@ -145,32 +145,32 @@ index c0be9410383208c85e91d1f977e45f7fba2cd6d4..709450cc08fbb658376bc0534ecdcfe2
 +
 +# The backend the host embeds: postgres.js, postgres.wasm and postgres.data, linked into pgwasm/ so that they
 +# stay apart from the postgres target's postgres.js and postgres.wasm.
-+pglite: $(OBJS)
++pgwasm: $(OBJS)
 +	$(MKDIR_P) pgwasm
-+	$(CC) $(CFLAGS) $(call expand_subsys,$^) $(LDFLAGS) $(LIBS) $(POSTGRES_PGLITE_FLAGS) -o pgwasm/postgres$(X)
++	$(CC) $(CFLAGS) $(call expand_subsys,$^) $(LDFLAGS) $(LIBS) $(POSTGRES_PGWASM_FLAGS) -o pgwasm/postgres$(X)
 +
 +endif
  
  ifeq ($(PORTNAME), cygwin)
  
-@@ -214,6 +229,15 @@ ifeq ($(MAKE_EXPORTS), true)
+@@ -257,6 +272,15 @@ ifeq ($(MAKE_EXPORTS), true)
  	$(MKDIR_P) '$(DESTDIR)$(pgxsdir)/$(MKLDEXPORT_DIR)'
  endif
  
 +ifeq ($(PORTNAME), emscripten)
-+install-pglite:
++install-pgwasm:
 +	$(MKDIR_P) '$(DESTDIR)$(prefix)/pgwasm'
 +	$(INSTALL_PROGRAM) pgwasm/postgres.wasm '$(DESTDIR)$(prefix)/pgwasm/postgres.wasm'
 +	$(INSTALL_PROGRAM) pgwasm/postgres.js '$(DESTDIR)$(prefix)/pgwasm/postgres.js'
 +	$(INSTALL_PROGRAM) pgwasm/postgres.data '$(DESTDIR)$(prefix)/pgwasm/postgres.data'
 +endif
 +
-+.PHONY: install-pglite
++.PHONY: install-pgwasm
  
  ##########################################################################
  
 diff --git a/src/bin/initdb/Makefile b/src/bin/initdb/Makefile
-index c0470efda92a34f9e3c7339d4fbeb44c3920f7e9..7d1f940d0e5c63e5d1c9d229c6f3cefa26c9cd48 100644
+index 21b755025ad614dd7d8f9c7b4d32626cb314fb20..20e4b7f8d4714b881747e3366b79996369966cb0 100644
 --- a/src/bin/initdb/Makefile
 +++ b/src/bin/initdb/Makefile
 @@ -47,16 +47,25 @@ localtime.c: % : $(top_srcdir)/src/timezone/%
@@ -200,7 +200,7 @@ index c0470efda92a34f9e3c7339d4fbeb44c3920f7e9..7d1f940d0e5c63e5d1c9d229c6f3cefa
  # ensure that changes in datadir propagate into object file
  initdb.o: initdb.c $(top_builddir)/src/Makefile.global
 diff --git a/src/bin/pg_config/Makefile b/src/bin/pg_config/Makefile
-index 38169b0ded5b04e0d12e82cc39865e3d6703d5b6..df163ea5a007b319c6c4125526fecaa5462f2ad3 100644
+index ce78a14d38f3738a9fb0567f73c7b0ba6c7a187c..4747d47e5c6ba807e962610241f6880e4cceddaf 100644
 --- a/src/bin/pg_config/Makefile
 +++ b/src/bin/pg_config/Makefile
 @@ -24,18 +24,39 @@ all: pg_config
@@ -217,7 +217,7 @@ index 38169b0ded5b04e0d12e82cc39865e3d6703d5b6..df163ea5a007b319c6c4125526fecaa5
 +ifeq ($(PORTNAME), emscripten)
 +	$(INSTALL_PROGRAM) pg_config.wasm '$(DESTDIR)$(bindir)/pg_config.wasm'
 +	$(INSTALL_PROGRAM) pg_config$(X) '$(DESTDIR)$(bindir)/pg_config.mjs'
-+	$(INSTALL_PROGRAM) $(top_srcdir)/pglite/scripts/run_pg_cmd.mjs '$(DESTDIR)$(bindir)/run_pg_cmd.mjs'
++	$(INSTALL_PROGRAM) $(top_srcdir)/pgwasm/scripts/run_pg_cmd.mjs '$(DESTDIR)$(bindir)/run_pg_cmd.mjs'
 +	(cd '$(DESTDIR)$(bindir)' && ln -sf 'run_pg_cmd.mjs' 'pg_config')
 +endif
  
@@ -244,7 +244,7 @@ index 38169b0ded5b04e0d12e82cc39865e3d6703d5b6..df163ea5a007b319c6c4125526fecaa5
  check:
  	$(prove_check)
 diff --git a/src/bin/pg_ctl/Makefile b/src/bin/pg_ctl/Makefile
-index 1c4bb324714dd800ae2d983642741e2d8e3b49f0..47313769eda3d0727ed67faa95939f465b515685 100644
+index 5c2d4180980e8a9fa9ae5f35a8d01f8949ea35ce..847d8460f6ca84b6d2bda266c8109cf484f23a09 100644
 --- a/src/bin/pg_ctl/Makefile
 +++ b/src/bin/pg_ctl/Makefile
 @@ -35,12 +35,23 @@ pg_ctl: $(OBJS) | submake-libpgport $(SUBMAKE_LIBPQ)
@@ -254,7 +254,7 @@ index 1c4bb324714dd800ae2d983642741e2d8e3b49f0..47313769eda3d0727ed67faa95939f46
 +ifeq ($(PORTNAME), emscripten)
 +	$(INSTALL_PROGRAM) pg_ctl.wasm '$(DESTDIR)$(bindir)/pg_ctl.wasm'
 +	$(INSTALL_PROGRAM) pg_ctl$(X) '$(DESTDIR)$(bindir)/pg_ctl.mjs'
-+	$(INSTALL_PROGRAM) $(top_srcdir)/pglite/scripts/run_pg_cmd.mjs '$(DESTDIR)$(bindir)/run_pg_cmd.mjs'
++	$(INSTALL_PROGRAM) $(top_srcdir)/pgwasm/scripts/run_pg_cmd.mjs '$(DESTDIR)$(bindir)/run_pg_cmd.mjs'
 +	(cd '$(DESTDIR)$(bindir)' && ln -sf 'run_pg_cmd.mjs' 'pg_ctl')
 +endif
  
@@ -272,7 +272,7 @@ index 1c4bb324714dd800ae2d983642741e2d8e3b49f0..47313769eda3d0727ed67faa95939f46
  clean distclean:
  	rm -f pg_ctl$(X) $(OBJS)
 diff --git a/src/bin/pg_dump/Makefile b/src/bin/pg_dump/Makefile
-index fa795883e9f30a74f2f308cf4ff483995929c026..882d5f84abe99a7c05bbbcb8f8ac77ae4c6fcbaa 100644
+index 79073b0a0ead829be90a0b52b3ee4e92a3b12e44..9cd8b5877780e5f8b75c4464f0056f94dbb5a156 100644
 --- a/src/bin/pg_dump/Makefile
 +++ b/src/bin/pg_dump/Makefile
 @@ -58,6 +58,11 @@ install: all installdirs

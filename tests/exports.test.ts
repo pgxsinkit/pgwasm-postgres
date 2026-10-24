@@ -16,21 +16,21 @@ describe("the export list", () => {
   test("parses to sorted, unique symbols, and formats back", () => {
     expect(parseExportList("_b\n_a\n\n_B\n_a\n")).toEqual(["_B", "_a", "_b"]);
     expect(formatExportList(["_B", "_a"])).toBe("_B\n_a\n");
-    expect(coreSymbols("pgl_startPGlite\nPostgresMainLoopOnce\n")).toEqual([
+    expect(coreSymbols("pgwasm_startPostgres\nPostgresMainLoopOnce\n")).toEqual([
       "_PostgresMainLoopOnce",
-      "_pgl_startPGlite",
+      "_pgwasm_startPostgres",
     ]);
   });
 
   test("a missing core symbol is what fails; additions and other removals are reported", () => {
-    const reference = ["_LocalToUtf", "_pgl_startPGlite", "_postgis_only"];
+    const reference = ["_LocalToUtf", "_pgwasm_startPostgres", "_postgis_only"];
     const build = ["_LocalToUtf", "_WalReceiverFunctions"];
-    expect(diffExports(reference, build, ["_pgl_startPGlite"])).toEqual({
+    expect(diffExports(reference, build, ["_pgwasm_startPostgres"])).toEqual({
       added: ["_WalReceiverFunctions"],
-      removed: ["_pgl_startPGlite", "_postgis_only"],
-      missingCore: ["_pgl_startPGlite"],
+      removed: ["_pgwasm_startPostgres", "_postgis_only"],
+      missingCore: ["_pgwasm_startPostgres"],
     });
-    expect(diffExports(reference, reference, ["_pgl_startPGlite"]).missingCore).toEqual([]);
+    expect(diffExports(reference, reference, ["_pgwasm_startPostgres"]).missingCore).toEqual([]);
     expect(notExported(["_LocalToUtf", "_setTempRet0"], ["LocalToUtf", "memory"])).toEqual(["_setTempRet0"]);
   });
 
@@ -38,7 +38,7 @@ describe("the export list", () => {
     const layout = layoutFor(repoRoot);
     const reference = new Set(readExportList(layout.exportsReference));
     const core = coreSymbols(
-      readFileSync(join(layout.overlayDir, "pglite", "static", "included.pglite.exports"), "utf8"),
+      readFileSync(join(layout.overlayDir, "pgwasm", "static", "included.pgwasm.exports"), "utf8"),
     );
     expect(core.filter((symbol) => !reference.has(symbol))).toEqual([]);
     expect(readFileSync(layout.exportsReference, "utf8")).toBe(formatExportList([...reference]));

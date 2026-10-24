@@ -22,7 +22,7 @@ import { readJson, SHA } from "./config.ts";
 import { sha256Hex } from "./digest.ts";
 import { UserError } from "./git.ts";
 import type { Layout } from "./layout.ts";
-import { TUPLE_KEYS, type CompatibilityTuple } from "./pg-control.ts";
+import { tupleKeys, type CompatibilityTuple } from "./pg-control.ts";
 
 export const GATE_MANIFEST = "manifest.json";
 export const SUMS_FILE = "SHA256SUMS";
@@ -149,7 +149,8 @@ export function formatGateManifest(manifest: GateManifest): string {
 
 const SHA256 = /^[0-9a-f]{64}$/;
 const DIGEST = /^sha256:[0-9a-f]{64}$/;
-const VERSION = /^\d+\.\d+\.\d+$/;
+// Port branches gate betas and release candidates too; release:check still requires a final N.N.N tag.
+const VERSION = /^\d+\.\d+\.\d+(?:-(?:beta|rc)\.\d+)?$/;
 
 /** Reads and checks a gate manifest; `name` names it in messages. */
 export function parseGateManifest(json: Record<string, unknown>, name: string): GateManifest {
@@ -175,7 +176,7 @@ export function parseGateManifest(json: Record<string, unknown>, name: string): 
 
   const upstream = object(json["upstream"], "upstream");
   const tuple = object(json["tuple"], "tuple");
-  if (Object.keys(tuple).sort().join(",") !== [...TUPLE_KEYS].sort().join(","))
+  if (Object.keys(tuple).sort().join(",") !== [...tupleKeys(tuple["pg_control_version"])].sort().join(","))
     fail("`tuple` must have the tuple's keys");
   const builder = object(json["builder"], "builder");
   const exports = object(json["exports"], "exports");

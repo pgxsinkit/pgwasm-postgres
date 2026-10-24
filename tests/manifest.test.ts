@@ -64,6 +64,29 @@ function manifestOf(dist: string): BuildManifest {
 }
 
 describe("the build manifest", () => {
+  test("round-trips 19's tuple and refuses a missing SLRU segment size", () => {
+    const { dir, dist, manifest } = distFixture();
+    const next: BuildManifest = {
+      ...manifest,
+      version: "19.0.0-rc.1",
+      dataFormat: 2,
+      tuple: {
+        ...manifest.tuple,
+        pg_control_version: 1905,
+        catalog_version_no: 202610061,
+        slru_pages_per_segment: 32,
+        float8ByVal: true,
+        xlp_magic: "0xD122",
+      },
+    };
+    const file = join(dist, MANIFEST_FILE);
+    writeFileSync(file, formatManifest(next));
+    expect(readManifest(file, dir)).toEqual(next);
+    const { slru_pages_per_segment: _slru, ...missing } = next.tuple;
+    writeFileSync(file, formatManifest({ ...next, tuple: missing }));
+    expect(thrown(() => readManifest(file, dir)).message).toContain("must have the tuple's keys");
+  });
+
   test("lists the release files and the extension archives, and round-trips through its JSON", () => {
     const { dir, dist, manifest } = distFixture();
     expect(artefactPaths(dist)).toEqual([...RELEASE_FILES, "extensions/ext.tar.gz"].sort());

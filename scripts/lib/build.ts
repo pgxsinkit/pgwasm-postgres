@@ -1,5 +1,5 @@
 /**
- * The build (ADR-0001 decision 9): `build-pglite.sh` on the materialised source, in the builder image, reproducible
+ * The build (ADR-0001 decision 9): `build-pgwasm.sh` on the materialised source, in the builder image, reproducible
  * from any checkout:
  *
  * - the source is mounted at a fixed path, {@link SOURCE_MOUNT}, wherever the checkout is (paths reach the
@@ -10,7 +10,7 @@
  * - `PGWASM_POSTGRES_VERSION` is the candidate version (see version.ts), which `version()` names.
  *
  * A debug build (`DEBUG=true`, `-g`) also gets the checkout's host path as `HOST_SOURCE_DIR`, which
- * `build-pglite.sh` turns into `-ffile-prefix-map=/build=<host path>`, so that its debug info points at the files
+ * `build-pgwasm.sh` turns into `-ffile-prefix-map=/build=<host path>`, so that its debug info points at the files
  * on the host. A release build never sees the host path.
  *
  * Resource caps that change no compiler input: `builder/bin/make` over `/usr/local/bin/make` turns the script's
@@ -28,7 +28,7 @@ export const BUILD_CONTAINER = `${CONTAINER_PREFIX}build`;
 /** Where the source is mounted, and the build runs, whatever the host path of the checkout. */
 export const SOURCE_MOUNT = "/build";
 
-/** `build-pglite.sh`'s output folder (its `INSTALL_FOLDER` default), where the build's `dist/` is mounted. */
+/** `build-pgwasm.sh`'s output folder (its `INSTALL_FOLDER` default), where the build's `dist/` is mounted. */
 export const OUTPUT_MOUNT = "/pgwasm";
 
 /** Where `builder/bin/make` goes: ahead of `/usr/bin/make` on the image's PATH. */
@@ -106,6 +106,6 @@ export function buildCommand(
     "-v",
     `${mountable(paths.make)}:${MAKE_MOUNT}:ro`,
     image,
-    "./build-pglite.sh",
+    "./build-pgwasm.sh",
   ];
 }

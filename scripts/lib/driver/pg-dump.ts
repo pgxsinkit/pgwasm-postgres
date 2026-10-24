@@ -1,8 +1,8 @@
 /**
  * pg_dump (`pg_dump.js`, `pg_dump.wasm`) run on a Postgres instance's session, the way pgxsinkit's
  * `@pgxsinkit/pgwasm-pg-dump` runs it: a fresh module per run, libpq's socket reads and writes routed to the host
- * (pglitec.c's `pgl_set_rw_cbs`), every whole frontend message it sends handed to the session as one exchange, and
- * the reply queued for its reads. libpq connects over its default Unix socket, whose descriptor pglitec.c makes.
+ * (pgwasmc.c's `pgwasm_set_rw_cbs`), every whole frontend message it sends handed to the session as one exchange, and
+ * the reply queued for its reads. libpq connects over its default Unix socket, whose descriptor pgwasmc.c makes.
  *
  * pg_dump leaves its read-only transaction open (a disconnect would end it), so it runs last on a session.
  */
@@ -112,7 +112,7 @@ export async function runPgDump(artefacts: Artefacts, postgres: Postgres, args: 
     }
     return written;
   }, "iii");
-  module._pgl_set_rw_cbs(read, write);
+  module._pgwasm_set_rw_cbs(read, write);
 
   const exitCode = preservingExitCode(() => module.callMain([...args, "-f", OUTPUT_PATH]));
   const output =

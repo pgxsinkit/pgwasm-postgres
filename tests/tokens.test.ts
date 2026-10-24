@@ -232,14 +232,14 @@ describe("the compile command", () => {
   test("compileCommand takes the one line of make -n that compiles the file", () => {
     const output = [
       "make: Entering directory '/build/src/backend/tcop'",
-      "/emsdk/upstream/emscripten/emcc -Wall -O2 -D__PGLITE__ -I../../../src/include  -c -o postgres.o postgres.c",
+      "/emsdk/upstream/emscripten/emcc -Wall -O2 -D__PGWASM__ -I../../../src/include  -c -o postgres.o postgres.c",
       "make: Leaving directory '/build/src/backend/tcop'",
     ].join("\n");
     expect(compileCommand(output, "postgres.c", "postgres.o")).toEqual([
       "/emsdk/upstream/emscripten/emcc",
       "-Wall",
       "-O2",
-      "-D__PGLITE__",
+      "-D__PGWASM__",
       "-I../../../src/include",
       "-c",
       "-o",
@@ -276,7 +276,7 @@ describe("the compile command", () => {
       "/tokens/a.i",
       "postgres.c",
     ]);
-    expect(PREPROCESS_FLAGS).toEqual(["-E", "-P", "-D__PGLITE__", "-D__LINE__=0", "-Wno-builtin-macro-redefined"]);
+    expect(PREPROCESS_FLAGS).toEqual(["-E", "-P", "-D__PGWASM__", "-D__LINE__=0", "-Wno-builtin-macro-redefined"]);
   });
 
   test("the containers mount the configured tree read-only where the build ran, and a side over its postgres.c", () => {

@@ -32,6 +32,14 @@ function manifest(): GateManifest {
 }
 
 describe("the release tag", () => {
+  test("a port's gated release candidate cannot be published as a final release", () => {
+    const facts = { tag: "19.0.0-rc.1", tagCommit: HEAD, head: HEAD, candidate: "19.0.0-rc.1" };
+    expect(releaseTagProblems(facts)).toEqual([
+      "19.0.0-rc.1 is not a release tag (N.N.N, unprefixed, no leading zeros).",
+    ]);
+    expect(releaseTagProblems({ ...facts, tag: "19.0.0" })[0]).toContain("which is 19.0.0-rc.1");
+  });
+
   test("must be N.N.N, on the checkout, and the checkout's candidate version", () => {
     const facts = { tag: "18.3.0", tagCommit: HEAD, head: HEAD, candidate: "18.3.0" };
     expect(releaseTagProblems(facts)).toEqual([]);

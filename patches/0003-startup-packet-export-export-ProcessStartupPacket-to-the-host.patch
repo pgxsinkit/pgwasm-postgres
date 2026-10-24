@@ -15,7 +15,7 @@ Derived from electric-sql/postgres-pglite b133782cd759f08b3aeb263b80a963b39c7b7a
  1 file changed, 12 insertions(+)
 
 diff --git a/src/backend/tcop/backend_startup.c b/src/backend/tcop/backend_startup.c
-index 8ad4808e53748c6c78344dcf7847ddf31702e74c..2f8c9e64e108300916803bb14e0e4bb975029635 100644
+index 912ad7dc9574cd0337db84e89e35f561bebda4b3..03300f7f402ba5323ece02eee2c74dbc241d5888 100644
 --- a/src/backend/tcop/backend_startup.c
 +++ b/src/backend/tcop/backend_startup.c
 @@ -42,6 +42,10 @@
@@ -34,22 +34,22 @@ index 8ad4808e53748c6c78344dcf7847ddf31702e74c..2f8c9e64e108300916803bb14e0e4bb9
  static void BackendInitialize(ClientSocket *client_sock, CAC_state cac);
  static int	ProcessSSLStartup(Port *port);
 +#if defined(__EMSCRIPTEN__)
-+int	ProcessStartupPacket(Port *port, bool ssl_done, bool gss_done);
++int	ProcessStartupPacket(Port *port);
 +#else
- static int	ProcessStartupPacket(Port *port, bool ssl_done, bool gss_done);
+ static int	ProcessStartupPacket(Port *port);
 +#endif
  static void ProcessCancelRequestPacket(Port *port, void *pkt, int pktlen);
  static void SendNegotiateProtocolVersion(List *unrecognized_protocol_options);
  static void process_startup_packet_die(SIGNAL_ARGS);
-@@ -488,7 +496,11 @@ reject:
-  * should make no assumption here about the order in which the client may make
-  * requests.
+@@ -482,7 +490,11 @@ reject:
+  * if we detect a communications failure.)
+  *
   */
 +#if defined(__EMSCRIPTEN__)
 +int EMSCRIPTEN_KEEPALIVE
 +#else
  static int
 +#endif
- ProcessStartupPacket(Port *port, bool ssl_done, bool gss_done)
+ ProcessStartupPacket(Port *port)
  {
  	int32		len;

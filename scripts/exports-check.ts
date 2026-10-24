@@ -3,7 +3,7 @@
  *
  * The engine gate's export-list diff (ADR-0001 decision 6): the export list a build linked postgres.wasm with
  * (`exported_functions.txt` in its `dist/`) against the reference, `exported_functions.txt` at the repository
- * root. It fails when the build's list lacks a core symbol (one of `overlay/pglite/static/included.pglite.exports`,
+ * root. It fails when the build's list lacks a core symbol (one of `overlay/pgwasm/static/included.pgwasm.exports`,
  * what the host calls); symbols added or removed otherwise (a shipped module's imports changed) are reported. It
  * also lists the symbols the JavaScript glue provides rather than postgres.wasm.
  *
@@ -45,7 +45,7 @@ runCli(() => {
   const buildFile = locate(dir, ".", LIST);
   const build = readExportList(buildFile);
   const core = coreSymbols(
-    readFileSync(join(layout.overlayDir, "pglite", "static", "included.pglite.exports"), "utf8"),
+    readFileSync(join(layout.overlayDir, "pgwasm", "static", "included.pgwasm.exports"), "utf8"),
   );
 
   if (record) {

@@ -14,9 +14,14 @@
 # kept (see its pin). The steps, flags, install prefix (/install/libs) and source directory names of what it builds
 # are otherwise 3.1.74-p2's: they reach the artefacts, since the libraries built here are linked into pglite.wasm.
 #
+# 6.0.13-p1 is the PostgreSQL 19 port's image: Emscripten 6.0.13 and ICU 79.1, the latest releases verified on
+# 2026-10-24, with the Ubuntu snapshot advanced to that date. zlib 1.3.2 and libxml2 2.15.4 remain the latest.
+# The port regenerates its minimal ICU data for 79.1 and declares a new dataFormat; ICU then stays fixed for
+# the lifetime of this Postgres major.
+#
 # PINNING POLICY. The build's releases must be reproducible, so every input is pinned: the toolchain image by
 # digest, apt by a dated snapshot, every source by checksum. The versions are the latest at the time of pinning
-# (2026-09-28), except ICU, which moves only with a Postgres major (see its pin). A pin moves only as a deliberate
+# (2026-10-24), except ICU, which moves only with a Postgres major (see its pin). A pin moves only as a deliberate
 # C-build change, in a new image revision, released and gated like any other.
 #
 # MIRRORED SOURCES. Sources whose upstream URLs are not stable byte streams are fetched from this repository's
@@ -25,27 +30,26 @@
 # place: a further mirror goes into a new `builder-sources-<n>`.
 #
 # Build (amd64 only; JOBS changes speed, not output): `bun run builder:image`, which runs
-#   podman build --format docker -t localhost/pgwasm-postgres-builder:6.0.10-p1 builder
+#   podman build --format docker -t localhost/pgwasm-postgres-builder:6.0.13-p1 builder
 # capped at 4 CPUs and 16 GiB, with builder/bin/make turning every bare `make -j` into `make -j4`.
 # builder/dpkg-expected.txt is the runner stage's package set; the script checks it.
-# Published by .github/workflows/builder-image.yml as ghcr.io/pgxsinkit/pgwasm-builder:6.0.10-p1;
+# Published by .github/workflows/builder-image.yml as ghcr.io/pgxsinkit/pgwasm-builder:6.0.13-p1;
 # builder/image.lock.json records its digest and the content of this directory it was built from, and CI builds
 # in it by digest. A change here is a new revision (-p2), never the published tag pushed again.
 
-# PIN (toolchain): Emscripten 6.0.10, the latest release (emsdk's tags, 2026-09-28), by the digest of the
-# linux/amd64 image of docker.io/emscripten/emsdk:6.0.10 (the tag's manifest list is
-# sha256:e077d54e2b8970575ebc4f185ac1de0b95c05f2b266134d4ba27449af7aebf65; its arm64 image has a different clang
-# binary). Ubuntu 24.04 (noble) is its base. This file builds on amd64 only.
-ARG EMSDK_IMAGE=docker.io/emscripten/emsdk:6.0.10@sha256:d4d9b9a07e28f8795ebca83b4b3bf98febb65f956e1364ac32483eea3d99bd8f
+# PIN (toolchain): Emscripten 6.0.13, the latest release (emsdk's tags, 2026-10-24), by the digest of the
+# linux/amd64 image of docker.io/emscripten/emsdk:6.0.13, verified with podman manifest inspect. Its arm64
+# image has a different clang binary. Ubuntu 24.04 (noble) is its base. This file builds on amd64 only.
+ARG EMSDK_IMAGE=docker.io/emscripten/emsdk:6.0.13@sha256:badbe38bedc8f4ff88a5a24672a2d59606015ba9a3bbe69801ad2fbdf75ab500
 
 FROM ${EMSDK_IMAGE} AS toolchain
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-# PIN (reproducibility): the Ubuntu archive as snapshot.ubuntu.com served it on 2026-09-28 (the latest snapshot
+# PIN (reproducibility): the Ubuntu archive as snapshot.ubuntu.com served it on 2026-10-24 (the latest snapshot
 # when this revision was made), for noble, noble-updates, noble-backports and noble-security alike. Without it,
 # `apt upgrade` and the packages below (bison and flex generate the parsers' C; the host gcc builds the native ICU
 # tools and the regress client) would be whatever the archive serves on the day of the build. The base's sources
 # are deb822 (/etc/apt/sources.list.d/ubuntu.sources).
-ARG UBUNTU_SNAPSHOT=20260928T000000Z
+ARG UBUNTU_SNAPSHOT=20261024T000000Z
 RUN sed -i -E "s#http://(archive|security)\.ubuntu\.com/ubuntu/?#https://snapshot.ubuntu.com/ubuntu/${UBUNTU_SNAPSHOT}/#" /etc/apt/sources.list.d/ubuntu.sources \
  && apt-get update \
  && apt-get upgrade -y \
@@ -82,15 +86,16 @@ WORKDIR /src/libxml2-2.15.4
 RUN CFLAGS="${EMCC_COMMON_FLAGS}" CXXFLAGS="${EMCC_COMMON_FLAGS}" emconfigure ./configure --enable-shared=no --enable-static=yes --with-python=no --prefix=/install/libs
 RUN emmake make -j"${JOBS}" && emmake make install
 
-# PIN (source, the documented exception to the latest-versions rule): ICU 76.1 (release asset; the checksum is the
-# release's published SHASUM512.txt entry). ICU moves only with a Postgres major, never within one: a major already
+# PIN (source): ICU 79.1, the latest release at the Postgres 19 port (2026-10-24; the checksum is the release's
+# published SHASUM512.txt entry). ICU moves only with a Postgres major, never within one: a major already
 # recreates every store through its dataFormat change, so no store ever lives across an ICU change, while inside a
 # store's life an ICU upgrade would change the collation versions recorded in pg_collation and pg_database and could
 # leave indexes on ICU collations silently wrong until reindexed. The overlay's minimal ICU data
-# (pglite/static/minimal-icu/76.1) is regenerated in the same major's port.
+# (pgwasm/static/minimal-icu/79.1) is regenerated in the same major's port. Keeping 79.1 for this major is the
+# documented exception to the latest-versions rule once a newer ICU is published.
 WORKDIR /src
-RUN curl -fsSL -o /tmp/src.tgz https://github.com/unicode-org/icu/releases/download/release-76-1/icu4c-76_1-src.tgz \
- && echo "b702ab62fb37a1574d5f4a768326d0f8fa30d9db5b015605b5f8215b5d8547f83d84880c586d3dcc7b6c76f8d47ef34e04b0f51baa55908f737024dd79a42a6c  /tmp/src.tgz" | sha512sum -c - \
+RUN curl -fsSL -o /tmp/src.tgz https://github.com/unicode-org/icu/releases/download/release-79.1/icu4c-79.1-sources.tgz \
+ && echo "9098adf9ba7fbe11d92963415cc80bf09de39ce1372414dbc2561e5f8ef57479a9fe4b6f7abc61911e4659e5953be987c459297d29e61b064d1931a16195a973  /tmp/src.tgz" | sha512sum -c - \
  && tar -xzf /tmp/src.tgz && rm /tmp/src.tgz
 
 # Step 1: native ICU (the cross build needs its icupkg, gencnval, ...)
@@ -100,7 +105,7 @@ RUN cd /src/icu-native && \
     /src/icu/source/configure --disable-shared --enable-static --disable-tests --disable-samples && \
     make -j"${JOBS}"
 
-RUN mkdir -p /install/libs/share/icu/76.1/icudt76l/brkitr /install/libs/share/icu/76.1/icudt76l/coll /install/libs/share/icu/76.1/icudt76l/curr /install/libs/share/icu/76.1/icudt76l/lang /install/libs/share/icu/76.1/icudt76l/rbnf /install/libs/share/icu/76.1/icudt76l/region /install/libs/share/icu/76.1/icudt76l/translit /install/libs/share/icu/76.1/icudt76l/unit /install/libs/share/icu/76.1/icudt76l/zone
+RUN mkdir -p /install/libs/share/icu/79.1/icudt79l/brkitr /install/libs/share/icu/79.1/icudt79l/coll /install/libs/share/icu/79.1/icudt79l/curr /install/libs/share/icu/79.1/icudt79l/lang /install/libs/share/icu/79.1/icudt79l/rbnf /install/libs/share/icu/79.1/icudt79l/region /install/libs/share/icu/79.1/icudt79l/translit /install/libs/share/icu/79.1/icudt79l/unit /install/libs/share/icu/79.1/icudt79l/zone
 
 # Step 2: wasm ICU
 # --with-data-packaging: https://unicode-org.github.io/icu/userguide/icu_data/#building-and-linking-against-icu-data

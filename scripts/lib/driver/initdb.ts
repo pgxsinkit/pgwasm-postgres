@@ -115,10 +115,10 @@ async function runInitdb(
             LANG: "en_US.UTF-8",
           });
           module.onRuntimeInitialized = () => {
-            module._pgl_set_system_fn(
+            module._pgwasm_set_system_fn(
               module.addFunction((command: number) => runBackend(wordsAt(module, command)), "pi"),
             );
-            module._pgl_set_popen_fn(
+            module._pgwasm_set_popen_fn(
               module.addFunction((command: number, mode: number) => {
                 const words = wordsAt(module, command);
                 const openMode = module.UTF8ToString(mode);
@@ -133,7 +133,7 @@ async function runInitdb(
                 throw new Error(`Unexpected popen mode ${openMode}`);
               }, "ppi"),
             );
-            module._pgl_set_pclose_fn(
+            module._pgwasm_set_pclose_fn(
               module.addFunction((stream: number) => {
                 if (stream !== initdbReads && stream !== initdbWrites) return module._pclose(stream);
                 if (pendingWords !== undefined) {
@@ -145,8 +145,8 @@ async function runInitdb(
               }, "pi"),
             );
             const cstr = (text: string) => pg.stringToUTF8OnStack(text);
-            pg._pgl_freopen(cstr(BACKEND_STDIN), cstr("r"), 0);
-            pg._pgl_freopen(cstr(BACKEND_STDOUT), cstr("w"), 1);
+            pg._pgwasm_freopen(cstr(BACKEND_STDIN), cstr("r"), 0);
+            pg._pgwasm_freopen(cstr(BACKEND_STDOUT), cstr("w"), 1);
             initdbReads = module._fopen(module.stringToUTF8OnStack(BACKEND_STDOUT), module.stringToUTF8OnStack("r"));
             initdbWrites = module._fopen(module.stringToUTF8OnStack(BACKEND_STDIN), module.stringToUTF8OnStack("w"));
           };

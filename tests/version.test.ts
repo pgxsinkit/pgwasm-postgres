@@ -10,6 +10,7 @@ import {
   prereleaseVersion,
   releaseTagsAt,
   repositoryCandidate,
+  serverVersionPattern,
   upstreamVersion,
 } from "../scripts/lib/version.ts";
 import { Fixtures, thrown, write } from "./helpers.ts";
@@ -56,6 +57,68 @@ describe("the candidate version", () => {
     for (const tag of ["REL_18_6", "REL_19_0", "REL_19_ALPHA1", "18.6.0"])
       expect(prereleaseVersion(tag)).toBeUndefined();
     expect(parseReleaseTag("19.0.0-beta.4")).toBeUndefined();
+  });
+});
+
+describe("the server version", () => {
+  test("matches the pinned upstream release and exact build label", () => {
+    const pattern = serverVersionPattern("REL_18_6", "18.6.3");
+    expect(
+      pattern.test("PostgreSQL 18.6 (pgwasm-postgres 18.6.3) on wasm32-unknown-emscripten, compiled by clang"),
+    ).toBe(true);
+    expect(
+      pattern.test("PostgreSQL 18.5 (pgwasm-postgres 18.6.3) on wasm32-unknown-emscripten, compiled by clang"),
+    ).toBe(false);
+    expect(
+      pattern.test("PostgreSQL 18.6 (pgwasm-postgres 18.6.2) on wasm32-unknown-emscripten, compiled by clang"),
+    ).toBe(false);
+  });
+
+  test("matches upstream's beta and RC spellings, and final .0", () => {
+    expect(
+      serverVersionPattern("REL_19_BETA4", "19.0.0-beta.4").test(
+        "PostgreSQL 19beta4 (pgwasm-postgres 19.0.0-beta.4) on wasm32-unknown-emscripten, compiled by clang",
+      ),
+    ).toBe(true);
+    expect(
+      serverVersionPattern("REL_19_RC1", "19.0.0-rc.1").test(
+        "PostgreSQL 19rc1 (pgwasm-postgres 19.0.0-rc.1) on wasm32-unknown-emscripten, compiled by clang",
+      ),
+    ).toBe(true);
+    expect(
+      serverVersionPattern("REL_19_0", "19.0.0").test(
+        "PostgreSQL 19.0 (pgwasm-postgres 19.0.0) on wasm32-unknown-emscripten, compiled by clang",
+      ),
+    ).toBe(true);
+  });
+
+  test("without a manifest still requires a label of the pinned upstream", () => {
+    const rc = serverVersionPattern("REL_19_RC1");
+    expect(
+      rc.test("PostgreSQL 19rc1 (pgwasm-postgres 19.0.0-rc.1) on wasm32-unknown-emscripten, compiled by clang"),
+    ).toBe(true);
+    for (const version of [
+      "PostgreSQL 19rc1 (pgwasm-postgres 19.0.0-rc.2) on wasm32-unknown-emscripten, compiled by clang",
+      "PostgreSQL 19rc1 (pgwasm-postgres 19.0.0) on wasm32-unknown-emscripten, compiled by clang",
+      "PostgreSQL 19rc1 (pgwasm-postgres 18.6.3) on wasm32-unknown-emscripten, compiled by clang",
+      "PostgreSQL 19.0 (pgwasm-postgres 19.0.0-rc.1) on wasm32-unknown-emscripten, compiled by clang",
+      "PostgreSQL 19rc1 (pgwasm-postgres unknown) on wasm32-unknown-emscripten, compiled by clang",
+    ])
+      expect(rc.test(version)).toBe(false);
+    const release = serverVersionPattern("REL_18_6");
+    expect(
+      release.test("PostgreSQL 18.6 (pgwasm-postgres 18.6.10) on wasm32-unknown-emscripten, compiled by clang"),
+    ).toBe(true);
+    expect(
+      release.test("PostgreSQL 18.6 (pgwasm-postgres 19.0.0) on wasm32-unknown-emscripten, compiled by clang"),
+    ).toBe(false);
+  });
+
+  test("refuses unknown upstream tags and manifest labels belonging to another pin", () => {
+    expect(thrown(() => serverVersionPattern("REL_19_ALPHA1"))).toBeInstanceOf(UserError);
+    expect(thrown(() => serverVersionPattern("REL_19_RC1", "19.0.0-rc.2"))).toBeInstanceOf(UserError);
+    expect(thrown(() => serverVersionPattern("REL_18_6", "19.0.0"))).toBeInstanceOf(UserError);
+    expect(thrown(() => serverVersionPattern("REL_19_RC1", "19x0x0-rcx1"))).toBeInstanceOf(UserError);
   });
 });
 

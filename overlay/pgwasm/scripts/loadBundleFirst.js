@@ -7,3 +7,14 @@
 // callbacks see the bundle's files (to chmod them, or to mount storage under /pgwasm), and run after it in the order
 // they are listed. With getPreloadedPackage, the loader creates the files synchronously.
 Module['preRun'].unshift(Module['preRun'].pop());
+
+// Emscripten 6.0.13 no longer publishes FS.filesystems. Keep the interface used by
+// pgxsinkit's file and IndexedDB mounts available before any host preRun callback.
+Module['preRun'].unshift(function () {
+  var fs = Module['FS'];
+  var types = fs['filesystems'] || (fs['filesystems'] = {});
+  types['MEMFS'] = Module['MEMFS'];
+  types['IDBFS'] = Module['IDBFS'];
+  types['NODEFS'] = Module['NODEFS'];
+  types['PROXYFS'] = Module['PROXYFS'];
+});

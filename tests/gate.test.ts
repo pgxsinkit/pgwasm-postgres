@@ -42,6 +42,29 @@ function gateFixture(): { dir: string; manifest: GateManifest } {
 }
 
 describe("the gate directory", () => {
+  test("19's tuple round-trips and cannot omit its SLRU segment size", () => {
+    const { manifest } = gateFixture();
+    const next: GateManifest = {
+      ...manifest,
+      version: "19.0.0-rc.1",
+      dataFormat: 2,
+      tuple: {
+        ...manifest.tuple,
+        pg_control_version: 1905,
+        catalog_version_no: 202610061,
+        slru_pages_per_segment: 32,
+        float8ByVal: true,
+        xlp_magic: "0xD122",
+      },
+    };
+    const json = JSON.parse(formatGateManifest(next)) as Record<string, unknown>;
+    expect(parseGateManifest(json, "m")).toEqual(next);
+    const { slru_pages_per_segment: _slru, ...missing } = next.tuple;
+    expect(thrown(() => parseGateManifest({ ...json, tuple: missing }, "m")).message).toContain(
+      "must have the tuple's keys",
+    );
+  });
+
   test("its manifest lists every file by name, round-trips, and SHA256SUMS is sha256sum's format", () => {
     const { dir, manifest } = gateFixture();
     expect(manifest.files.map((file) => file.name)).toEqual([

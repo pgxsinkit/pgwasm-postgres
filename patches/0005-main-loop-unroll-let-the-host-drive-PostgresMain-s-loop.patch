@@ -57,14 +57,14 @@ Derived from electric-sql/postgres-pglite b133782cd759f08b3aeb263b80a963b39c7b7a
  1 file changed, 302 insertions(+)
 
 diff --git a/src/backend/tcop/postgres.c b/src/backend/tcop/postgres.c
-index 115a634c64191e3bb78d2194456646103d0c3391..c3ec691f88193974fbb83e33890fe4f7739a517c 100644
+index dbef734a93f15420f772e7fc1e0506d0576315c6..b36676d533ccbaa4cba6d86d4d4a442ed95245b5 100644
 --- a/src/backend/tcop/postgres.c
 +++ b/src/backend/tcop/postgres.c
-@@ -141,7 +141,11 @@ static bool DoingCommandRead = false;
+@@ -155,7 +155,11 @@ static bool DoingCommandRead = false;
   * the extended query protocol.
   */
  static bool doing_extended_query_message = false;
-+#ifdef __PGLITE__
++#ifdef __PGWASM__
 +extern bool ignore_till_sync;
 +#else
  static bool ignore_till_sync = false;
@@ -72,21 +72,21 @@ index 115a634c64191e3bb78d2194456646103d0c3391..c3ec691f88193974fbb83e33890fe4f7
  
  /*
   * If an unnamed prepared statement exists, it's stored here.
-@@ -187,6 +191,130 @@ static void log_disconnections(int code, Datum arg);
+@@ -199,6 +203,130 @@ static void log_disconnections(int code, Datum arg);
  static void enable_statement_timeout(void);
  static void disable_statement_timeout(void);
  
-+#ifdef __PGLITE__
++#ifdef __PGWASM__
 +/* ----------------------------------------------------------------
-+ *		PGlite: the host drives the main loop
++ *		pgwasm: the host drives the main loop
 + *
-+ * The host (pglite/src/pglitec/pglitec.c) runs the backend one message
++ * The host (pgwasm/src/pgwasmc/pgwasmc.c) runs the backend one message
 + * exchange at a time instead of PostgresMain() looping on a socket.  Under
-+ * __PGLITE__, PostgresMain()'s loop body is the function
++ * __PGWASM__, PostgresMain()'s loop body is the function
 + * PostgresMainLoopOnce(), its sigsetjmp error recovery the function
 + * PostgresMainLongJmp(), and PostgresSendReadyForQueryIfNecessary() is a
 + * copy of the loop's step (1); both stay where they are in PostgresMain(),
-+ * with the function boundaries in __PGLITE__ blocks.  The state the loop
++ * with the function boundaries in __PGWASM__ blocks.  The state the loop
 + * keeps across iterations lives at file scope or in the host, so that it
 + * survives between the host's calls.
 + * ----------------------------------------------------------------
@@ -98,12 +98,12 @@ index 115a634c64191e3bb78d2194456646103d0c3391..c3ec691f88193974fbb83e33890fe4f7
 +static volatile bool idle_in_transaction_timeout_enabled = false;
 +static volatile bool idle_session_timeout_enabled = false;
 +
-+#define PGLITE_EXIT_ALIVE 99
++#define PGWASM_EXIT_ALIVE 99
 +
 +extern sigjmp_buf postgresmain_sigjmp_buf;
-+extern int	pgl_sigsetjmp(sigjmp_buf env, int savesigs);
-+extern int	is_pglite_active;
-+extern int	pgl_setPGliteExitStatus(int status);
++extern int	pgwasm_sigsetjmp(sigjmp_buf env, int savesigs);
++extern int	is_pgwasm_active;
++extern int	pgwasm_setPostgresExitStatus(int status);
 +
 +/* defined after PostgresMain(), where its loop is */
 +extern void PostgresMainLongJmp(void);
@@ -135,7 +135,7 @@ index 115a634c64191e3bb78d2194456646103d0c3391..c3ec691f88193974fbb83e33890fe4f7
 +}
 +
 +void
-+pgl_startPGlite()
++pgwasm_startPostgres()
 +{
 +	initDummyPort();
 +	whereToSendOutput = DestRemote;
@@ -162,19 +162,19 @@ index 115a634c64191e3bb78d2194456646103d0c3391..c3ec691f88193974fbb83e33890fe4f7
 +}
 +
 +void
-+pgl_pq_flush()
++pgwasm_pq_flush()
 +{
 +	pq_flush();
 +}
 +
 +struct Port *
-+pgl_getMyProcPort()
++pgwasm_getMyProcPort()
 +{
 +	return MyProcPort;
 +}
 +
 +void
-+pgl_sendConnData()
++pgwasm_sendConnData()
 +{
 +	ClientAuthInProgress = false;
 +
@@ -198,29 +198,29 @@ index 115a634c64191e3bb78d2194456646103d0c3391..c3ec691f88193974fbb83e33890fe4f7
 +	}
 +	ReadyForQuery(DestRemote);
 +}
-+#endif							/* __PGLITE__ */
++#endif							/* __PGWASM__ */
 +
  
  /* ----------------------------------------------------------------
   *		infrastructure for valgrind debugging
-@@ -4187,7 +4315,9 @@ PostgresSingleUserMain(int argc, char *argv[],
+@@ -4273,7 +4401,9 @@ PostgresSingleUserMain(int argc, char *argv[],
  void
  PostgresMain(const char *dbname, const char *username)
  {
-+#ifndef __PGLITE__
++#ifndef __PGWASM__
  	sigjmp_buf	local_sigjmp_buf;
 +#endif
  
  	/* these must be volatile to ensure state is preserved across longjmp: */
  	volatile bool send_ready_for_query = true;
-@@ -4394,7 +4524,37 @@ PostgresMain(const char *dbname, const char *username)
+@@ -4480,7 +4610,37 @@ PostgresMain(const char *dbname, const char *username)
  	 * were inside a transaction.
  	 */
  
-+#ifdef __PGLITE__
++#ifdef __PGWASM__
 +
 +	/*
-+	 * PGlite: the host's longjmp (pgl_longjmp) returns to the host rather
++	 * pgwasm: the host's longjmp (pgwasm_longjmp) returns to the host rather
 +	 * than here, and the host calls PostgresMainLongJmp(), the recovery
 +	 * below.  The rest of PostgresMain() comes first: the loop below it is
 +	 * PostgresMainLoopOnce().
@@ -251,11 +251,11 @@ index 115a634c64191e3bb78d2194456646103d0c3391..c3ec691f88193974fbb83e33890fe4f7
  	{
  		/*
  		 * NOTE: if you are tempted to add more code in this if-block,
-@@ -4507,6 +4667,128 @@ PostgresMain(const char *dbname, const char *username)
+@@ -4593,6 +4753,128 @@ PostgresMain(const char *dbname, const char *username)
  		RESUME_INTERRUPTS();
  	}
  
-+#ifdef __PGLITE__
++#ifdef __PGWASM__
 +
 +/*
 + * The loop's step (1), for the host to send ReadyForQuery after the input it
@@ -380,7 +380,7 @@ index 115a634c64191e3bb78d2194456646103d0c3391..c3ec691f88193974fbb83e33890fe4f7
  	/* We can now handle ereport(ERROR) */
  	PG_exception_stack = &local_sigjmp_buf;
  
-@@ -4518,6 +4800,7 @@ PostgresMain(const char *dbname, const char *username)
+@@ -4604,6 +4886,7 @@ PostgresMain(const char *dbname, const char *username)
  	 */
  
  	for (;;)
@@ -388,11 +388,11 @@ index 115a634c64191e3bb78d2194456646103d0c3391..c3ec691f88193974fbb83e33890fe4f7
  	{
  		int			firstchar;
  		StringInfoData input_message;
-@@ -4747,7 +5030,11 @@ PostgresMain(const char *dbname, const char *username)
+@@ -4833,7 +5116,11 @@ PostgresMain(const char *dbname, const char *username)
  		 * Sync.
  		 */
  		if (ignore_till_sync && firstchar != EOF)
-+#ifdef __PGLITE__
++#ifdef __PGWASM__
 +			return;
 +#else
  			continue;
@@ -400,19 +400,19 @@ index 115a634c64191e3bb78d2194456646103d0c3391..c3ec691f88193974fbb83e33890fe4f7
  
  		switch (firstchar)
  		{
-@@ -5003,6 +5290,19 @@ PostgresMain(const char *dbname, const char *username)
+@@ -5089,6 +5376,19 @@ PostgresMain(const char *dbname, const char *username)
  				 * it will fail to be called during other backend-shutdown
  				 * scenarios.
  				 */
-+#ifdef __PGLITE__
++#ifdef __PGWASM__
 +
 +				/*
 +				 * PGlite: while the host drives the backend, the runtime
 +				 * stays alive for its next exchange.
 +				 */
-+				if (is_pglite_active != 0)
++				if (is_pgwasm_active != 0)
 +				{
-+					pgl_setPGliteExitStatus(PGLITE_EXIT_ALIVE);
++					pgwasm_setPostgresExitStatus(PGWASM_EXIT_ALIVE);
 +					emscripten_exit_with_live_runtime();
 +				}
 +				else
@@ -420,11 +420,11 @@ index 115a634c64191e3bb78d2194456646103d0c3391..c3ec691f88193974fbb83e33890fe4f7
  				proc_exit(0);
  
  			case PqMsg_CopyData:
-@@ -5022,7 +5322,9 @@ PostgresMain(const char *dbname, const char *username)
+@@ -5108,7 +5408,9 @@ PostgresMain(const char *dbname, const char *username)
  						 errmsg("invalid frontend message type %d",
  								firstchar)));
  		}
-+#ifndef __PGLITE__
++#ifndef __PGWASM__
  	}							/* end of input-reading loop */
 +#endif
  }

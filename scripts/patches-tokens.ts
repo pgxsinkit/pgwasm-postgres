@@ -9,9 +9,9 @@
  *   series      each side's series applied onto the pinned tag in a scratch worktree of the upstream cache
  *               (scripts/lib/tokens-series.ts); postgres.c goes to .cache/tokens/<side>/postgres.c
  *   command     the build's own compile command, from `make -n` in the build's configured tree
- *               (.cache/build/postgres-pglite: run `bun run build` first; the gate runs this after its build)
+ *               (.cache/build/postgres-pgwasm: run `bun run build` first; the gate runs this after its build)
  *   preprocess  in the builder image, with each side's postgres.c bind-mounted over the tree's: the command with
- *               `-c -o postgres.o` replaced by `-E -P -D__PGLITE__ -D__LINE__=0 -Wno-builtin-macro-redefined`,
+ *               `-c -o postgres.o` replaced by `-E -P -D__PGWASM__ -D__LINE__=0 -Wno-builtin-macro-redefined`,
  *               to .cache/tokens/<side>.i
  *   compare     the token streams, whitespace dropped, item by item (scripts/lib/tokens.ts): "identical", or the
  *               items that moved, changed (with each differing range in its context) or are on one side only

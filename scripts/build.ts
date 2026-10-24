@@ -2,10 +2,10 @@
  * bun run build [--debug] [--image <reference>]
  *
  * The build (ADR-0001 decisions 3, 5 and 9): proves the series (`patches:check`), materialises its tree into
- * .cache/build/postgres-pglite (gitignored; the previous build there is deleted), and runs `build-pglite.sh` on
+ * .cache/build/postgres-pgwasm (gitignored; the previous build there is deleted), and runs `build-pgwasm.sh` on
  * it in the builder image (see scripts/lib/build.ts): the source at /build, the candidate version of HEAD
  * (scripts/lib/version.ts), SOURCE_DATE_EPOCH = the commit time of HEAD (or the environment's), LC_ALL=C.
- * The artefacts land in .cache/build/postgres-pglite/dist, with `manifest.json` next to them (every artefact's bytes
+ * The artefacts land in .cache/build/postgres-pgwasm/dist, with `manifest.json` next to them (every artefact's bytes
  * and sha256, the version, the compatibility tuple of a fresh initdb); the full log in .cache/build/build.log.
  * Two builds of one commit, from any checkout, give identical manifests (`bun run build:verify <manifest>`).
  *
@@ -121,7 +121,7 @@ await runCliAsync(async () => {
     const tail = readFileSync(logFile, "utf8").trimEnd().split("\n").slice(-30);
     throw new UserError(
       [
-        `build: build-pglite.sh failed (exit ${exitCode}) after ${duration(wall)}. The last lines of ${relative(layout.root, logFile)}:`,
+        `build: build-pgwasm.sh failed (exit ${exitCode}) after ${duration(wall)}. The last lines of ${relative(layout.root, logFile)}:`,
         ...tail.map((line) => `  | ${line}`),
       ].join("\n"),
     );

@@ -40,13 +40,13 @@ consumes the releases. Read [README.md](README.md) and
   image pins every input (the emsdk image by digest, apt by a dated snapshot, every source by checksum) at its
   latest version when pinned, and moving a pin is a new image revision and a release.
 - **ICU moves only in a Postgres major's port, never within a major** (ADR-0001 decision 9), with the
-  overlay's `pglite/static/minimal-icu/<version>` data regenerated there: a major recreates every store through
+  overlay's `pgwasm/static/minimal-icu/<version>` data regenerated there: a major recreates every store through
   its `dataFormat` change, while an ICU upgrade inside a store's life changes the collation versions recorded in
   `pg_collation`/`pg_database` and can leave indexes on ICU collations silently wrong until reindexed. It is the
   one standing exception to the latest-versions rule; its reason stays next to the pin.
 - **The glue serves pgxsinkit's host.** `pgwasm-c` and `pgwasm-pg-dump` drive the Emscripten modules directly:
   what they read (the module options, the runtime members in `EXPORTED_RUNTIME_METHODS`, `postgres.data` loaded
-  before the first `preRun` callback) is kept across Emscripten releases in `build-pglite.sh`, and a change they
+  before the first `preRun` callback) is kept across Emscripten releases in `build-pgwasm.sh`, and a change they
   must follow is reported with the release that makes it (README, Emscripten and the browser floor).
 - **TypeScript (Bun) for scripts**, strict, covered by `bun run typecheck`; bash only where TypeScript
   cannot be made robust. oxlint and oxfmt; never eslint, prettier or biome.
@@ -66,12 +66,12 @@ consumes the releases. Read [README.md](README.md) and
   the build and driver scripts), and never while another `pgwasm-postgres-*` container runs. Two gates of one
   commit give identical `manifest.json`s, and the release job requires that; anything in the gate's manifest
   that varies between two runs is a defect. Two builds of one commit, from any checkout, must give identical
-  manifests (`bun run build:verify <manifest>`); a difference is diagnosed in the build. Build only what ships: a new contrib module is a `PGLITE_CONTRIB`
+  manifests (`bun run build:verify <manifest>`); a difference is diagnosed in the build. Build only what ships: a new contrib module is a `PGWASM_CONTRIB`
   entry and a release. Run long builds in the background and wait on the process, never with a long fixed
   `sleep`.
 - **The export list has a reference.** `exported_functions.txt` changes only through
   `bun run exports:check --record`, after a deliberate change that is reviewed in its diff; a core symbol
-  (one of `overlay/pglite/static/included.pglite.exports`) must never go missing.
+  (one of `overlay/pgwasm/static/included.pgwasm.exports`) must never go missing.
 - **The driver's scripts need a build too.** `bun run driver:smoke`, `bun run prepopulated --check` and
   `bun run data-format:check` are not in `validate`; the gate runs them, so a change that reaches the build
   or `scripts/lib/driver/` must keep them passing. `identity/prepopulated.json` changes only through
@@ -88,9 +88,9 @@ consumes the releases. Read [README.md](README.md) and
   whose instability the record missed, recorded with `--record` over enough runs to show it (8 found
   subscription's, 4 had not). The gate's bridge runs on a raised native stack (256 MiB); keep it raised.
 - Never commit PostgreSQL source, build outputs or the contents of `.cache/` or `work/`.
-- Renames of the internal PGlite names (`__PGLITE__`, the `pgl_*` symbols, `pglitec.c`, `overlay/pglite/`,
-  `build-pglite.sh` and its `PGLITE_*` variables, the `pglite` target) wait for the Postgres 19 port
-  ([docs/port-checklist.md](docs/port-checklist.md)).
+- The Postgres 19 port uses `__PGWASM__`, `pgwasm_*`, `pgwasmc.c`, `overlay/pgwasm/`,
+  `build-pgwasm.sh`, `PGWASM_*` and the `pgwasm` target. The host ABI mapping and port status are in
+  [docs/port-19.md](docs/port-19.md); historical PGlite attribution stays.
 
 ## The bump
 

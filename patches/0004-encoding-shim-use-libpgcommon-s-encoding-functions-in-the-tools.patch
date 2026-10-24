@@ -19,14 +19,14 @@ Derived from electric-sql/postgres-pglite b133782cd759f08b3aeb263b80a963b39c7b7a
  3 files changed, 66 insertions(+)
 
 diff --git a/src/bin/pg_dump/pg_backup_archiver.c b/src/bin/pg_dump/pg_backup_archiver.c
-index efcb592493572bce0421641f4dce9cdf510eccb2..a82e08e2a9ac321dbe67aaa0fe6fe7aab5c28d61 100644
+index b230a714f19132e74656f24412d8918d9f017cde..4637d0b05e478fc4618ea53973151a2b4543058c 100644
 --- a/src/bin/pg_dump/pg_backup_archiver.c
 +++ b/src/bin/pg_dump/pg_backup_archiver.c
-@@ -51,6 +51,28 @@
+@@ -53,6 +53,28 @@
  #define TOC_PREFIX_DATA		"Data for "
  #define TOC_PREFIX_STATS	"Statistics for "
  
-+#ifdef __PGLITE__
++#ifdef __PGWASM__
 +extern int	pg_char_to_encoding_private(const char *name);
 +extern const char *pg_encoding_to_char_private(int encoding);
 +extern int	pg_valid_server_encoding_id_private(int encoding);
@@ -52,14 +52,14 @@ index efcb592493572bce0421641f4dce9cdf510eccb2..a82e08e2a9ac321dbe67aaa0fe6fe7aa
  							   const pg_compress_specification compression_spec,
  							   bool dosync, ArchiveMode mode,
 diff --git a/src/bin/pg_dump/pg_dump.c b/src/bin/pg_dump/pg_dump.c
-index 618b0ea28a15f43569686a63715673624f912350..c5dc4fe74c5e64726f1a1152bcf95e444b01c0c8 100644
+index dc04c12142bdae1427c0af2c8829b9d4308465ed..ce87c869dfea02f76466b0c21f7d7577fed0721d 100644
 --- a/src/bin/pg_dump/pg_dump.c
 +++ b/src/bin/pg_dump/pg_dump.c
-@@ -71,6 +71,28 @@
- #include "pg_dump.h"
+@@ -74,6 +74,28 @@
+ #include "statistics/statistics_format.h"
  #include "storage/block.h"
  
-+#ifdef __PGLITE__
++#ifdef __PGWASM__
 +extern int	pg_char_to_encoding_private(const char *name);
 +extern const char *pg_encoding_to_char_private(int encoding);
 +extern int	pg_valid_server_encoding_id_private(int encoding);
@@ -85,14 +85,14 @@ index 618b0ea28a15f43569686a63715673624f912350..c5dc4fe74c5e64726f1a1152bcf95e44
  {
  	Oid			roleoid;		/* role's OID */
 diff --git a/src/interfaces/libpq/fe-exec.c b/src/interfaces/libpq/fe-exec.c
-index 20e1a58a527d29ef8284c97598c03887b27aef7a..a8801d7abd32492ef7664fc4d24619de03fd5145 100644
+index 7b8edacbfdef2615a6a235ebdc9753463e34953e..27d634d95c0d7f6afeb93bf536b6a1bf5d220a0c 100644
 --- a/src/interfaces/libpq/fe-exec.c
 +++ b/src/interfaces/libpq/fe-exec.c
 @@ -29,6 +29,28 @@
  #include "libpq-int.h"
  #include "mb/pg_wchar.h"
  
-+#ifdef __PGLITE__
++#ifdef __PGWASM__
 +extern int	pg_char_to_encoding_private(const char *name);
 +extern const char *pg_encoding_to_char_private(int encoding);
 +extern int	pg_valid_server_encoding_id_private(int encoding);

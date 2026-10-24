@@ -21,7 +21,7 @@ describe("the build command", () => {
   test("mounts the source at /build, whatever the checkout's path, and passes the release inputs", () => {
     const command = buildCommand(BUILDER_IMAGE, inputs, paths);
     expect(command.slice(0, 5)).toEqual(["nice", "-n", "10", "podman", "run"]);
-    expect(command.slice(-2)).toEqual([BUILDER_IMAGE, "./build-pglite.sh"]);
+    expect(command.slice(-2)).toEqual([BUILDER_IMAGE, "./build-pgwasm.sh"]);
     const joined = command.join(" ");
     for (const part of [
       "--rm",
@@ -31,8 +31,8 @@ describe("the build command", () => {
       "--cpus 4 --memory 16g",
       "-e DEBUG=false -e PGWASM_POSTGRES_VERSION=18.3.0 -e SOURCE_DATE_EPOCH=1790501297 -e LC_ALL=C",
       `--workdir=${SOURCE_MOUNT}`,
-      "-v /repo/.cache/build/postgres-pglite:/build:rw",
-      "-v /repo/.cache/build/postgres-pglite/dist:/pgwasm:rw",
+      "-v /repo/.cache/build/postgres-pgwasm:/build:rw",
+      "-v /repo/.cache/build/postgres-pgwasm/dist:/pgwasm:rw",
       "-v /repo/builder/bin/make:/usr/local/bin/make:ro",
     ]) {
       expect(joined).toContain(part);
@@ -61,7 +61,7 @@ describe("the build command", () => {
       PGWASM_POSTGRES_VERSION: "18.3.0",
       SOURCE_DATE_EPOCH: "1790501297",
       LC_ALL: "C",
-      HOST_SOURCE_DIR: "/repo/.cache/build/postgres-pglite",
+      HOST_SOURCE_DIR: "/repo/.cache/build/postgres-pgwasm",
     });
   });
 });

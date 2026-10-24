@@ -248,7 +248,7 @@ function gateFindings(layout: Layout, commit: string, to: TagRef, from: string):
   const reference = readExportList(layout.exportsReference);
   const listed = readExportList(join(layout.buildDist, "exported_functions.txt"));
   const core = coreSymbols(
-    readFileSync(join(layout.overlayDir, "pglite", "static", "included.pglite.exports"), "utf8"),
+    readFileSync(join(layout.overlayDir, "pgwasm", "static", "included.pgwasm.exports"), "utf8"),
   );
   const exportsDiff = diffExports(reference, listed, core);
   const declaration = readDataFormat(layout);

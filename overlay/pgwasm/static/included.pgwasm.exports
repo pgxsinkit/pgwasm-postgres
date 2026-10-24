@@ -284,7 +284,6 @@ fileno
 find_coercion_pathway
 find_option
 fiprintf
-Float8GetDatum
 fmax
 fmin
 fmod
@@ -357,7 +356,6 @@ index_close
 index_open
 init_MultiFuncCall
 initStringInfo
-Int64GetDatum
 InterruptPending
 ioctl
 iprintf
@@ -459,11 +457,11 @@ pg_sprintf
 pg_strcasecmp
 pg_strong_random
 pg_vsnprintf
-pgl_getMyProcPort
-pgl_pq_flush
-pgl_sendConnData
-pgl_setPGliteActive
-pgl_startPGlite
+pgwasm_getMyProcPort
+pgwasm_pq_flush
+pgwasm_sendConnData
+pgwasm_setPostgresActive
+pgwasm_startPostgres
 post_parse_analyze_hook
 PostgresMainLongJmp
 PostgresMainLoopOnce

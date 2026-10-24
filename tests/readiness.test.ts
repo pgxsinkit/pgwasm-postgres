@@ -121,7 +121,7 @@ describe("upstream's tags", () => {
   });
 });
 
-const PATCHES = ["0001-build-emscripten-add-the-port.patch", "0002-backend-pglite-hooks.patch"];
+const PATCHES = ["0001-build-emscripten-add-the-port.patch", "0002-backend-pgwasm-hooks.patch"];
 const FROM = { tag: "REL_18_6", commit: "724edf9bde9d356724ad384a2e196edc3c9f80f7" };
 const TO = { tag: "REL_19_BETA4", commit: "b73d13c32c834a2c8e1c60cb92f79530376cedf1" };
 const SERIES = "dc9576e1c2f3aaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -129,7 +129,7 @@ const SERIES = "dc9576e1c2f3aaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 function input(overrides: Partial<ReadinessInput>): ReadinessInput {
   const apply: ApplyLog = {
     patches: PATCHES.map((patch) => ({ patch, result: "applied cleanly" as const })),
-    output: "Applying: build-emscripten: add the port\nApplying: backend: pglite hooks",
+    output: "Applying: build-emscripten: add the port\nApplying: backend: pgwasm hooks",
   };
   return {
     from: FROM,
@@ -225,17 +225,17 @@ describe("the readiness report", () => {
 
   test("a failed build names the step and its last errors", () => {
     const log = [
-      "pglite: building release version.",
+      "pgwasm: building release version.",
       "emcc -O2 -Werror=vla -c foo.c",
       "foo.c:12:3: error: use of undeclared identifier 'PostgresMainLoopOnce'",
       "foo.c:12:3: error: use of undeclared identifier 'PostgresMainLoopOnce'",
-      "wasm-ld: error: undefined symbol: pgl_socket",
+      "wasm-ld: error: undefined symbol: pgwasm_socket",
       "make[2]: *** [Makefile:12: foo.o] Error 1",
       "error: emmake make PORTNAME=emscripten -j",
     ].join("\n");
     expect(compilerErrors(log)).toEqual([
       "foo.c:12:3: error: use of undeclared identifier 'PostgresMainLoopOnce'",
-      "wasm-ld: error: undefined symbol: pgl_socket",
+      "wasm-ld: error: undefined symbol: pgwasm_socket",
       "make[2]: *** [Makefile:12: foo.o] Error 1",
       "error: emmake make PORTNAME=emscripten -j",
     ]);
@@ -256,8 +256,8 @@ describe("the readiness report", () => {
     expect(readinessStatus(failed)).toMatchObject({ apply: "applies", build: "fails: make", regress: "not run" });
     const report = readinessReport(failed);
     expect(report).toContain("**The series applies, but the build fails** at the tree (`emmake make`).");
-    expect(report).toContain("build-pglite.sh stopped at the tree (`emmake make`) (exit 21) after 5m12s.");
-    expect(report).toContain("wasm-ld: error: undefined symbol: pgl_socket");
+    expect(report).toContain("build-pgwasm.sh stopped at the tree (`emmake make`) (exit 21) after 5m12s.");
+    expect(report).toContain("wasm-ld: error: undefined symbol: pgwasm_socket");
     expect(report).not.toContain("## Compatibility tuple");
   });
 
@@ -315,6 +315,29 @@ describe("the readiness report", () => {
     expect(report).toContain("- Failed in the baseline, pass now: `euc_kr`");
   });
 
+  test("19's SLRU size is reported as a new field rather than an undefined historical value", () => {
+    const report = readinessReport(
+      input({
+        to: { ...TO, tag: "REL_19_RC1" },
+        build: { exitCode: 0, scriptExitCode: 0, seconds: 540, version: "19.0.0-rc.1", errors: [], tail: [] },
+        tuple: {
+          tuple: {
+            ...TUPLE,
+            pg_control_version: 1905,
+            catalog_version_no: 202610061,
+            slru_pages_per_segment: 32,
+            float8ByVal: true,
+            xlp_magic: "0xD122",
+          },
+          declared: { dataFormat: 1, tuple: TUPLE },
+        },
+      }),
+    );
+    expect(report).toContain("5 of the 14 values differ from dataFormat 1's (**bold**)");
+    expect(report).toContain("| `slru_pages_per_segment` | `not present` | **`32`** |");
+    expect(report).not.toContain("`undefined`");
+  });
+
   test("a tuple without a layout here still reports the version, the catalog version and the WAL magic", () => {
     const control = new Uint8Array(64);
     const view = new DataView(control.buffer);
@@ -344,9 +367,9 @@ describe("the readiness report", () => {
   });
 
   test("an overlay collision stops before the build", () => {
-    const collided = input({ collisions: ["pglite/Makefile"] });
+    const collided = input({ collisions: ["pgwasm/Makefile"] });
     expect(readinessStatus(collided).apply).toBe("applies; the overlay collides (1 path)");
-    expect(readinessReport(collided)).toContain("- `pglite/Makefile`");
+    expect(readinessReport(collided)).toContain("- `pgwasm/Makefile`");
   });
 });
 

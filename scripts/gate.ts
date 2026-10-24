@@ -20,7 +20,7 @@
  * step ended goes to .cache/gate/<commit>.steps.json, passed or not.
  *
  * The builder image:
- *   (default)     localhost/pgwasm-postgres-builder:6.0.10-p1, which must be in podman's local storage;
+ *   (default)     localhost/pgwasm-postgres-builder:6.0.13-p1, which must be in podman's local storage;
  *   --image       another image in podman's local storage;
  *   --lock        builder/image.lock.json decides, as in CI: the published image, pulled by digest, when the lock
  *                 records builder/'s content published; otherwise the image built from builder/ here;
@@ -252,7 +252,7 @@ await runCliAsync(async () => {
   const reference = readExportList(layout.exportsReference);
   const listed = readExportList(join(dist, "exported_functions.txt"));
   const core = coreSymbols(
-    readFileSync(join(layout.overlayDir, "pglite", "static", "included.pglite.exports"), "utf8"),
+    readFileSync(join(layout.overlayDir, "pgwasm", "static", "included.pgwasm.exports"), "utf8"),
   );
   const exportsDiff = diffExports(reference, listed, core);
 

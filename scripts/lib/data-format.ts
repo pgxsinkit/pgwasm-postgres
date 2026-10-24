@@ -19,6 +19,7 @@ import {
   parseControlFile,
   parseWalLongPageHeader,
   TUPLE_KEYS,
+  tupleKeys,
   type CompatibilityTuple,
 } from "./pg-control.ts";
 
@@ -41,11 +42,12 @@ function readTuple(json: unknown, where: string): CompatibilityTuple {
     throw new UserError(`${where} must be an object.`);
   const object = json as Json;
   const keys = Object.keys(object).sort();
-  const expected = [...TUPLE_KEYS].sort();
+  const required = tupleKeys(object["pg_control_version"]);
+  const expected = [...required].sort();
   if (keys.join(",") !== expected.join(",")) {
-    throw new UserError(`${where} must have exactly the keys ${TUPLE_KEYS.join(", ")}; it has ${keys.join(", ")}.`);
+    throw new UserError(`${where} must have exactly the keys ${required.join(", ")}; it has ${keys.join(", ")}.`);
   }
-  for (const key of TUPLE_KEYS) {
+  for (const key of required) {
     const value = object[key];
     const valid =
       key === "float8ByVal"

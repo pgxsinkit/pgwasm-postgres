@@ -3,9 +3,9 @@
  *
  * Drives a build's artefacts end to end with the minimal driver (ADR-0001 decision 10): initdb into MEMFS
  * (or, with --from, a prepopulated data directory archive unpacked into it), a single-user start, and over
- * the wire protocol: `SELECT version()` (which must name the build's release: its manifest's version, or any
- * `pgwasm-postgres N.N.N` without one), a DDL/DML round trip with an error in the middle of it,
- * `CREATE EXTENSION amcheck` with `bt_index_check` on catalog indexes, a `LOAD` of every shared module the build
+ * the wire protocol: `SELECT version()` (which must name the build's release: its manifest's version, or a
+ * build label of the pinned upstream without one), ICU collation data, a DDL/DML round trip with an error in the
+ * middle of it, `CREATE EXTENSION amcheck` with `bt_index_check` on catalog indexes, a `LOAD` of every shared module the build
  * ships (the core modules in postgres.data's lib/postgresql, and the extension archives'), encoding conversions:
  * every default conversion once, and non-ASCII text through several, the stack-leak check (4,000 failing
  * statements on the session each report their own error, then a normal query runs, and the wasm's shadow stack
@@ -35,7 +35,7 @@ import { UserError } from "./lib/git.ts";
 import { layoutFor, repoRoot } from "./lib/layout.ts";
 import { MANIFEST_FILE, readManifest } from "./lib/manifest.ts";
 import { unpackDataDir } from "./lib/prepopulated.ts";
-import { upstreamVersion } from "./lib/version.ts";
+import { serverVersionPattern } from "./lib/version.ts";
 
 /**
  * Non-ASCII text through conversions to other encodings and back, each through its own module. (Not JOHAB:
@@ -93,12 +93,10 @@ await runCliAsync(async () => {
   const elapsed = () => `${Math.round(performance.now() - started)} ms`;
   const artefacts = await loadArtefacts(args.artefacts ?? layout.buildDist);
   info(`driver:smoke: artefacts ${relative(layout.root, artefacts.dir) || "."}`);
-  const pin = upstreamVersion(readUpstreamPin(layout).tag);
+  const pin = readUpstreamPin(layout);
   const manifestFile = join(artefacts.dir, MANIFEST_FILE);
   const release = existsSync(manifestFile) ? readManifest(manifestFile, layout.root).version : undefined;
-  const expectedVersion = new RegExp(
-    `^PostgreSQL ${pin.major}\\.${pin.minor} \\(pgwasm-postgres ${release === undefined ? "\\d+\\.\\d+\\.\\d+" : release.replaceAll(".", "\\.")}\\) on wasm32-unknown-emscripten, `,
-  );
+  const expectedVersion = serverVersionPattern(pin.tag, release);
 
   const cluster =
     args.from === undefined ? await initdb(artefacts) : unpackDataDir(new Uint8Array(readFileSync(resolve(args.from))));
@@ -108,6 +106,15 @@ await runCliAsync(async () => {
 
   const postgres = await Postgres.create(artefacts);
   try {
+    const filesystemTypes = postgres.module.FS.filesystems;
+    expect(
+      postgres.module.NODEFS !== undefined &&
+        postgres.module.IDBFS !== undefined &&
+        filesystemTypes["NODEFS"] === postgres.module.NODEFS &&
+        filesystemTypes["IDBFS"] === postgres.module.IDBFS,
+      "the glue preserves the host's file and IndexedDB filesystem interfaces",
+      { NODEFS: typeof filesystemTypes["NODEFS"], IDBFS: typeof filesystemTypes["IDBFS"] },
+    );
     postgres.writeDataDir(cluster);
     postgres.installExtension(artefacts.extension("amcheck"));
     postgres.start();
@@ -125,6 +132,27 @@ await runCliAsync(async () => {
     const version = value("SELECT version()");
     expect(expectedVersion.test(version ?? ""), `version() matches ${String(expectedVersion)}`, version);
     info(`driver:smoke: ${version}`);
+
+    // Exercise the packaged ICU collation data, rather than merely linking ICU or accepting an initdb.
+    query("CREATE COLLATION smoke_icu (provider = icu, locale = 'und')");
+    const icu = query(
+      "SELECT collversion, pg_collation_actual_version(oid) FROM pg_catalog.pg_collation WHERE oid = 'smoke_icu'::regcollation",
+    )[0]?.rows[0];
+    expect(
+      icu !== undefined && typeof icu[0] === "string" && icu[0].length > 0 && icu[0] === icu[1],
+      "the ICU collation records the actual nonempty runtime version",
+      icu,
+    );
+    const ordered = query(
+      "SELECT note FROM (VALUES ('z'), ('é'), ('a')) AS words(note) ORDER BY note COLLATE smoke_icu",
+    )[0]?.rows;
+    expect(
+      JSON.stringify(ordered) === JSON.stringify([["a"], ["é"], ["z"]]),
+      "the ICU root collation sorts non-ASCII text using the packaged data",
+      ordered,
+    );
+    query("DROP COLLATION smoke_icu");
+    info(`driver:smoke: ICU collation version ${icu?.[0]}, non-ASCII order ok`);
 
     query("CREATE TABLE smoke (id integer PRIMARY KEY, note text NOT NULL)");
     query("INSERT INTO smoke VALUES (1, 'one'), (2, 'two'), (3, 'three')");
@@ -173,10 +201,12 @@ await runCliAsync(async () => {
     const conversions = query(
       "SELECT c.conname, convert('\\x41'::bytea, pg_encoding_to_char(c.conforencoding), pg_encoding_to_char(c.contoencoding)) FROM pg_conversion c WHERE c.condefault ORDER BY c.conname",
     )[0]?.rows;
+    // PG19 removes MULE_INTERNAL and reduces the catalog's default conversions from 128 to 98.
+    // Retain a count guard as well as exercising every remaining conversion.
     expect(
-      conversions !== undefined && conversions.length > 100 && conversions.every((row) => row[1] === "\\x41"),
-      "every default conversion converts 'A'",
-      conversions?.filter((row) => row[1] !== "\\x41"),
+      conversions !== undefined && conversions.length >= 98 && conversions.every((row) => row[1] === "\\x41"),
+      "at least 98 default conversions, each converting 'A'",
+      { count: conversions?.length, invalid: conversions?.filter((row) => row[1] !== "\\x41") },
     );
     const latin1 = value("SELECT convert('x', 'UTF8', 'LATIN1')");
     expect(latin1 === "\\x78", "convert('x', 'UTF8', 'LATIN1') is \\x78", latin1);
@@ -228,7 +258,7 @@ await runCliAsync(async () => {
     );
 
     // pg_dump, a program every release ships, on the session: its libpq connects over its default Unix socket,
-    // through pglitec.c's socket overrides. Last, since it leaves its read-only transaction open.
+    // through pgwasmc.c's socket overrides. Last, since it leaves its read-only transaction open.
     const dump = await runPgDump(artefacts, postgres, ["-U", "postgres", "--inserts", "-t", "public.smoke"]);
     const script = dump.output === undefined ? "" : new TextDecoder().decode(dump.output);
     const inserts = script.split("\n").filter((line) => line.startsWith("INSERT INTO public.smoke "));

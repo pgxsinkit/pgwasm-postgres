@@ -34,14 +34,14 @@ Derived from electric-sql/postgres-pglite b133782cd759f08b3aeb263b80a963b39c7b7a
  7 files changed, 35 insertions(+), 3 deletions(-)
 
 diff --git a/src/backend/access/transam/xlog.c b/src/backend/access/transam/xlog.c
-index 2fd06e379996b4e0912361810777534b42a3cbb4..0993d8af1dd6fbdca05e828109082af1823382c8 100644
+index f164d87bc3e4d671b3b3b0654d63a463e933d7c4..30b4bbf99579d2fd6e63a6ae029be7284477f085 100644
 --- a/src/backend/access/transam/xlog.c
 +++ b/src/backend/access/transam/xlog.c
-@@ -2496,12 +2496,14 @@ XLogWrite(XLogwrtRqst WriteRqst, TimeLineID tli, bool flexible)
+@@ -2522,12 +2522,14 @@ XLogWrite(XLogwrtRqst WriteRqst, TimeLineID tli, bool flexible)
  				 * like a checkpoint is needed, forcibly update RedoRecPtr and
  				 * recheck.
  				 */
-+#ifndef __PGLITE__					
++#ifndef __PGWASM__
  				if (IsUnderPostmaster && XLogCheckpointNeeded(openLogSegNo))
  				{
  					(void) GetRedoRecPtr();
@@ -53,21 +53,21 @@ index 2fd06e379996b4e0912361810777534b42a3cbb4..0993d8af1dd6fbdca05e828109082af1
  		}
  
 diff --git a/src/backend/port/posix_sema.c b/src/backend/port/posix_sema.c
-index 269c7460817ec74de780cb1f22eddf8ac096ea4d..9bbcbb19f8d3b701012b9027580a1d43d654ec62 100644
+index 53e4a7a5c38f9a67925b0c62446edeebbc48418c..c8edff46dfebac7d63e29d3b54d12b6892b26568 100644
 --- a/src/backend/port/posix_sema.c
 +++ b/src/backend/port/posix_sema.c
-@@ -293,6 +293,10 @@ PGSemaphoreCreate(void)
+@@ -287,6 +287,10 @@ PGSemaphoreCreate(void)
  void
  PGSemaphoreReset(PGSemaphore sema)
  {
-+#ifdef __PGLITE__
++#ifdef __PGWASM__
 +    sem_trywait(PG_SEM_REF(sema));
 +    return;
 +#else
  	/*
  	 * There's no direct API for this in POSIX, so we have to ratchet the
  	 * semaphore down to 0 with repeated trywait's.
-@@ -308,6 +312,7 @@ PGSemaphoreReset(PGSemaphore sema)
+@@ -302,6 +306,7 @@ PGSemaphoreReset(PGSemaphore sema)
  			elog(FATAL, "sem_trywait failed: %m");
  		}
  	}
@@ -76,78 +76,78 @@ index 269c7460817ec74de780cb1f22eddf8ac096ea4d..9bbcbb19f8d3b701012b9027580a1d43
  
  /*
 diff --git a/src/backend/postmaster/checkpointer.c b/src/backend/postmaster/checkpointer.c
-index 3914ac8da2622f5b2301d666f7eb68d048f79837..57ace9913d9584e00fb786ec665be2e727caba23 100644
+index 087120db0909d6ccaf7733e9a3ce104c794de7ad..dcde758f39abc3a1efda9d1cf1db7b0610abf73c 100644
 --- a/src/backend/postmaster/checkpointer.c
 +++ b/src/backend/postmaster/checkpointer.c
-@@ -1009,7 +1009,9 @@ RequestCheckpoint(int flags)
+@@ -1075,7 +1075,9 @@ RequestCheckpoint(int flags)
  	/*
  	 * If in a standalone backend, just do it ourselves.
  	 */
-+#ifndef __PGLITE__	
++#ifndef __PGWASM__
  	if (!IsPostmasterEnvironment)
 +#endif
  	{
  		/*
  		 * There's no point in doing slow checkpoints in a standalone backend,
 diff --git a/src/backend/storage/file/fd.c b/src/backend/storage/file/fd.c
-index 378c078c7c7f347e4d3c5bf00477c6804a600364..36eb6c42fbb37e505f8676012d2348292b0e2290 100644
+index 4cf4717f764b053c22ae5d35712af753ae845358..9f64caa6eda52ff977647fe40f3f385e82a99c3b 100644
 --- a/src/backend/storage/file/fd.c
 +++ b/src/backend/storage/file/fd.c
-@@ -524,6 +524,10 @@ pg_file_exists(const char *name)
+@@ -525,6 +525,10 @@ pg_file_exists(const char *name)
  void
- pg_flush_data(int fd, off_t offset, off_t nbytes)
+ pg_flush_data(int fd, pgoff_t offset, pgoff_t nbytes)
  {
-+#ifdef __PGLITE__
++#ifdef __PGWASM__
 +    //int res = sync_file_range(fd, offset, nbytes, SYNC_FILE_RANGE_WAIT_BEFORE | SYNC_FILE_RANGE_WRITE | SYNC_FILE_RANGE_WAIT_AFTER);
 +    (void)fsync(fd);
 +#else
  	/*
  	 * Right now file flushing is primarily used to avoid making later
  	 * fsync()/fdatasync() calls have less impact. Thus don't trigger flushes
-@@ -694,6 +698,7 @@ retry:
+@@ -695,6 +699,7 @@ retry:
  		return;
  	}
  #endif
-+#endif // ifdef __PGLITE__
++#endif // ifdef __PGWASM__
  }
  
  /*
 diff --git a/src/backend/utils/init/miscinit.c b/src/backend/utils/init/miscinit.c
-index df182577a19e2a95c03bc536799dfab23bcddf84..8648b8ef42cb1f7884474afb08300a527160fac7 100644
+index ba191977697979f8178e6d6d8e01515adb13a475..11a111bd17b9c5ca3e39d8842d59c3fe94202db9 100644
 --- a/src/backend/utils/init/miscinit.c
 +++ b/src/backend/utils/init/miscinit.c
-@@ -380,7 +380,7 @@ checkDataDir(void)
+@@ -330,7 +330,7 @@ checkDataDir(void)
  	 *
  	 * XXX can we safely enable this check on Windows?
  	 */
 -#if !defined(WIN32) && !defined(__CYGWIN__)
-+#if !defined(WIN32) && !defined(__CYGWIN__) && !defined(__PGLITE__)
++#if !defined(WIN32) && !defined(__CYGWIN__) && !defined(__PGWASM__)
  	if (stat_buf.st_uid != geteuid())
  		ereport(FATAL,
  				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
-@@ -400,7 +400,7 @@ checkDataDir(void)
+@@ -350,7 +350,7 @@ checkDataDir(void)
  	 * be proper support for Unix-y file permissions.  Need to think of a
  	 * reasonable check to apply on Windows.
  	 */
 -#if !defined(WIN32) && !defined(__CYGWIN__)
-+#if !defined(WIN32) && !defined(__CYGWIN__) && !defined(__PGLITE__)
++#if !defined(WIN32) && !defined(__CYGWIN__) && !defined(__PGWASM__)
  	if (stat_buf.st_mode & PG_MODE_MASK_GROUP)
  		ereport(FATAL,
  				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
-@@ -421,7 +421,7 @@ checkDataDir(void)
+@@ -371,7 +371,7 @@ checkDataDir(void)
  	 * Suppress when on Windows, because there may not be proper support for
  	 * Unix-y file permissions.
  	 */
 -#if !defined(WIN32) && !defined(__CYGWIN__)
-+#if !defined(WIN32) && !defined(__CYGWIN__) && !defined(__PGLITE__)
++#if !defined(WIN32) && !defined(__CYGWIN__) && !defined(__PGWASM__)
  	SetDataDirectoryCreatePerm(stat_buf.st_mode);
  
  	umask(pg_mode_mask);
 diff --git a/src/backend/utils/init/postinit.c b/src/backend/utils/init/postinit.c
-index c86ceefda940b8f2fb500786253f9f23ffea3f8d..6f2308ee7f2b08b489888654a013fcde3f731a80 100644
+index 17f83a88d05d3ca7b89d5caef1c2d67efddd379b..510ed00f9154f6b9a300165111b17f148ea89182 100644
 --- a/src/backend/utils/init/postinit.c
 +++ b/src/backend/utils/init/postinit.c
-@@ -708,6 +708,12 @@ BaseInit(void)
+@@ -719,6 +719,12 @@ BaseInit(void)
   *		Be very careful with the order of calls in the InitPostgres function.
   * --------------------------------
   */
@@ -160,7 +160,7 @@ index c86ceefda940b8f2fb500786253f9f23ffea3f8d..6f2308ee7f2b08b489888654a013fcde
  void
  InitPostgres(const char *in_dbname, Oid dboid,
  			 const char *username, Oid useroid,
-@@ -870,8 +876,18 @@ InitPostgres(const char *in_dbname, Oid dboid,
+@@ -891,8 +897,18 @@ InitPostgres(const char *in_dbname, Oid dboid,
  	}
  	else if (!IsUnderPostmaster)
  	{
@@ -180,18 +180,18 @@ index c86ceefda940b8f2fb500786253f9f23ffea3f8d..6f2308ee7f2b08b489888654a013fcde
  			ereport(WARNING,
  					(errcode(ERRCODE_UNDEFINED_OBJECT),
 diff --git a/src/backend/utils/misc/guc.c b/src/backend/utils/misc/guc.c
-index ce5449f287853305082c84deaf2975950fdd1c5b..f4bbc04d76517da38eff0a71a9dcad39a56b2630 100644
+index 774bbc9be5fc852f51c9ec5321ac32e8c6755afc..6a943b7497e899f2558d51fce4624d06b7ecef24 100644
 --- a/src/backend/utils/misc/guc.c
 +++ b/src/backend/utils/misc/guc.c
-@@ -2645,6 +2645,7 @@ ReportGUCOption(struct config_generic *record)
+@@ -2552,6 +2552,7 @@ ReportGUCOption(struct config_generic *record)
  		pq_sendstring(&msgbuf, val);
  		pq_endmessage(&msgbuf);
  
-+#ifndef __PGLITE__		
++#ifndef __PGWASM__
  		/*
  		 * We need a long-lifespan copy.  If guc_strdup() fails due to OOM,
  		 * we'll set last_reported to NULL and thereby possibly make a
-@@ -2652,6 +2653,7 @@ ReportGUCOption(struct config_generic *record)
+@@ -2559,6 +2560,7 @@ ReportGUCOption(struct config_generic *record)
  		 */
  		guc_free(record->last_reported);
  		record->last_reported = guc_strdup(LOG, val);

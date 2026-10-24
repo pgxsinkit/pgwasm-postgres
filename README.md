@@ -9,6 +9,11 @@ The mechanics and the plan are in [ADR-0001](docs/adr/0001-postgres-as-a-patch-s
 
 ## Status
 
+The `port-19` branch targets PostgreSQL `REL_19_RC1` (`0b8bff042a99`), with the five
+topic patches ported, the internal names changed to `pgwasm`, and a new store format.
+Its builder uses Emscripten 6.0.13 and ICU 79.1. See [the port record](docs/port-19.md)
+for validation, host API changes and the adoption steps. The history below describes the 18.x releases.
+
 The series began as the split of ElectricSQL's PGlite fork (`electric-sql/postgres-pglite` at `b133782`,
 the PostgreSQL 18.3 tree PGlite 0.5.8 was built from), proven by tree identity and by rebuilding PGlite
 0.5.8's artefacts byte for byte (steps 1 and 2); both records are retired, and the history keeps them. The
@@ -77,8 +82,8 @@ The patches, one per topic:
 | `main-loop-unroll`       | postgres.c                                                                | PostgresMain's loop split into functions the host calls once per message exchange, plus the host's entry points |
 
 `main-loop-unroll` only adds lines: PostgresMain's loop body and its error handler stay where upstream has them,
-at upstream's indentation, and `__PGLITE__` blocks put the function boundaries around them, so that a new upstream
-release rebases with small conflicts (ADR-0001 decision 4). Without `__PGLITE__`, postgres.c is upstream's.
+at upstream's indentation, and `__PGWASM__` blocks put the function boundaries around them, so that a new upstream
+release rebases with small conflicts (ADR-0001 decision 4). Without `__PGWASM__`, postgres.c is upstream's.
 
 ## Working on the series
 
@@ -101,7 +106,7 @@ bun run patches:tokens [--against <revision>]   # postgres.c's preprocessed toke
   `bun run validate` runs it.
 - **`patches:work [<tag>] [--force]`** creates `work/<tag>` (gitignored), a worktree of the cache on
   branch `work/<tag>`: the tag, with one commit per patch on top, and the overlay copied in but not
-  committed (the cache's `info/exclude` keeps it out of `git status`, except `pglite/out/.gitignore`,
+  committed (the cache's `info/exclude` keeps it out of `git status`, except `pgwasm/out/.gitignore`,
   which un-ignores itself). `<tag>` defaults to the pinned tag; any other upstream tag is fetched and the
   series applied with a 3-way merge. On a conflict the worktree is left mid-`git am` for you to resolve
   (`git add`, then `git am --continue`). `--force` recreates an existing worktree and discards its work.
@@ -114,15 +119,15 @@ bun run patches:tokens [--against <revision>]   # postgres.c's preprocessed toke
   ancestors) makes it, against postgres.c as the working series (`patches/` as it is) makes it. Both series are
   applied onto their pinned tag in scratch worktrees of the cache; two series on different upstream tags are
   refused. Each side is preprocessed in the builder image with the build's own compile command, taken from
-  `make -n` in the last build's configured tree (`.cache/build/postgres-pglite`: run `bun run build` first; it
+  `make -n` in the last build's configured tree (`.cache/build/postgres-pgwasm`: run `bun run build` first; it
   never configures a tree of its own), with `-c -o postgres.o` replaced by
-  `-E -P -D__PGLITE__ -D__LINE__=0 -Wno-builtin-macro-redefined`, so that only the code is compared, not the
+  `-E -P -D__PGWASM__ -D__LINE__=0 -Wno-builtin-macro-redefined`, so that only the code is compared, not the
   line numbers `ereport` records. The token streams are compared by top-level item: `identical`, or the items
   that moved (the same tokens elsewhere), changed (each differing range in its context) or are on one side only.
   It exits 0 whatever it finds, in about 4 seconds; the gate runs it after its build, report-only.
 
-To change a patch: `bun run patches:work`, then edit and commit in `work/REL_18_6` (`git commit --fixup`
-and `git rebase -i --autosquash REL_18_6` work as usual; a new topic is a new commit), then
+To change a patch: `bun run patches:work`, then edit and commit in `work/REL_19_RC1` (`git commit --fixup`
+and `git rebase -i --autosquash REL_19_RC1` work as usual; a new topic is a new commit), then
 `bun run patches:export` and `bun run patches:check`, and commit `patches/` here. A patch's subject is
 `<topic>: <summary>`; its body says what the patch does and why. Never edit a patch file by hand.
 Overlay files are edited in `overlay/` directly.
@@ -141,11 +146,11 @@ bun run exports:check [--record]          # diff the build's export list against
 ```
 
 - **`builder:image`** builds `builder/Containerfile` with podman as
-  `localhost/pgwasm-postgres-builder:6.0.10-p1`, capped at 4 CPUs and 16 GiB, with `builder/bin/make`
+  `localhost/pgwasm-postgres-builder:6.0.13-p1`, capped at 4 CPUs and 16 GiB, with `builder/bin/make`
   turning every bare `make -j` into `make -j4`, then checks the image's packages against
   `builder/dpkg-expected.txt`. The log goes to `.cache/builder-image.log`. The image builds what the core
-  links on Emscripten 6.0.10 (Ubuntu 24.04): zlib 1.3.2 and libxml2 2.15.4, their latest releases, and ICU
-  76.1, which moves only with a Postgres major. Every input is pinned (the emsdk image by digest, apt by a
+  links on Emscripten 6.0.13 (Ubuntu 24.04): zlib 1.3.2 and libxml2 2.15.4, their latest releases, and ICU
+  79.1, which moves only with a Postgres major. Every input is pinned (the emsdk image by digest, apt by a
   dated snapshot, every source by checksum), at its latest version when pinned; the reasons are next to the
   pins. A cap podman cannot apply (rootless podman without the `cpu` or `memory` cgroup controller delegated,
   as on a CI runner) is left out; the caps change no compiler input. `--push` publishes it (see [The engine gate, CI and
@@ -155,17 +160,17 @@ bun run exports:check [--record]          # diff the build's export list against
   `builder/` it was built from) against `builder/` now, and says whether the gate pulls the published image
   or builds one; with `--digest` and `--id` it records a publication, refusing (with `--content`) a
   `builder/` that is not the one the image was built from. The lock changes only through it.
-- **`build`** runs `patches:check`, checks the proven tree out into `.cache/build/postgres-pglite`
-  (replacing the previous build) with no `.git`, and runs the tree's `build-pglite.sh` in the builder image,
+- **`build`** runs `patches:check`, checks the proven tree out into `.cache/build/postgres-pgwasm`
+  (replacing the previous build) with no `.git`, and runs the tree's `build-pgwasm.sh` in the builder image,
   reproducibly from any checkout: the source mounted at `/build`, the candidate version of HEAD (derived
   from the tags, see [Versions and releases](#versions-and-releases)) as `PGWASM_POSTGRES_VERSION`,
   `SOURCE_DATE_EPOCH` = the commit time of HEAD (or the environment's), `LC_ALL=C`, as root with umask
   022, under the same resource caps, with `dist/` mounted at `/pgwasm`, the install prefix. It builds the core and
-  the contrib modules of `build-pglite.sh`'s `PGLITE_CONTRIB` (amcheck), each packaged as a deterministic archive
+  the contrib modules of `build-pgwasm.sh`'s `PGWASM_CONTRIB` (amcheck), each packaged as a deterministic archive
   (members sorted, mtimes at `SOURCE_DATE_EPOCH`, owner root:0), and links the backend as `postgres.js`,
-  `postgres.wasm` and `postgres.data`, exporting `pglite/static/included.pglite.exports` plus every symbol a shipped
-  module imports (the overlay's `pglite/scripts/exported-functions.sh`). The artefacts land in
-  `.cache/build/postgres-pglite/dist/` (the backend's in `pgwasm/`, apart from the build tree's own `bin/postgres.js`;
+  `postgres.wasm` and `postgres.data`, exporting `pgwasm/static/included.pgwasm.exports` plus every symbol a shipped
+  module imports (the overlay's `pgwasm/scripts/exported-functions.sh`). The artefacts land in
+  `.cache/build/postgres-pgwasm/dist/` (the backend's in `pgwasm/`, apart from the build tree's own `bin/postgres.js`;
   initdb's and pg_dump's in `bin/`; the extension archives in `extensions/`) with `manifest.json` next to them:
   the version, commit, tree, epoch, builder image, the compatibility tuple of a fresh initdb and its `dataFormat`,
   and every release artefact's bytes and sha256. The log goes to `.cache/build/build.log`. `--debug` makes a
@@ -178,7 +183,7 @@ bun run exports:check [--record]          # diff the build's export list against
   version, epoch and tuple of the dist's own manifest. It prints a table and exits 1 on any difference.
   Two builds of one commit, from any checkout, reproduce each other.
 - **`exports:check [--artefacts <dir>] [--record]`** diffs the build's `exported_functions.txt` against the
-  reference at the repository root: a core symbol (one of `included.pglite.exports`) missing fails, any
+  reference at the repository root: a core symbol (one of `included.pgwasm.exports`) missing fails, any
   other symbol added or removed is reported. `--record` rewrites the reference after a deliberate change.
 
 None of them runs in `validate`: they take too long. The engine gate (`bun run gate`, below) runs them in CI
@@ -408,7 +413,7 @@ locally.
 | `poll.yml`          | Mondays 06:00 UTC; on demand (`dry_run`)                                    | `poll --lock` from develop: a bump's branch and pull request (or issue), the readiness issue's comment and table                   |
 
 The builder image is published from `builder/` by `builder-image.yml` as
-`ghcr.io/pgxsinkit/pgwasm-builder:<tag>` (`6.0.10-p1`, the local image's tag), in Docker's v2s2 format so that
+`ghcr.io/pgxsinkit/pgwasm-builder:<tag>` (`6.0.13-p1`, the local image's tag), in Docker's v2s2 format so that
 a pull by digest gives the local image's id. It publishes a content of `builder/` once per tag: when the lock
 already records it, nothing is pushed, and when the lock records the tag published from other content, it
 refuses. A change to `builder/` is therefore a new tag (`-p2`: `BUILDER_IMAGE` in `scripts/lib/builder.ts`
@@ -549,7 +554,7 @@ a tag upstream does not have, and a working tree with changes. It never commits 
 - On a clean apply it builds in a scratch copy of the repository at HEAD (a detached worktree under `.cache/`,
   sharing the upstream cache) with the series re-exported onto the tag and the pin moved to it: `bun run build`,
   whose version for a beta or a release candidate is the pre-release `19.0.0-beta.4` (never a release: release
-  tags are `N.N.N`). A failed build is reported with build-pglite.sh's step and its last errors.
+  tags are `N.N.N`). A failed build is reported with build-pgwasm.sh's step and its last errors.
 - Once it builds: the compatibility tuple of a fresh initdb against `data-format.json` (a major is expected to
   change it: the report gives the new values), the export list against `exported_functions.txt`, and
   `bun run regress` against the pinned major's baseline (the counts, and the new failures by name).

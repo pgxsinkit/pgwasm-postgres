@@ -11,7 +11,7 @@ import { join, relative } from "node:path";
 
 import { field, readJson, SHA, stringField, type Json } from "./config.ts";
 import { UserError } from "./git.ts";
-import { TUPLE_KEYS, type CompatibilityTuple } from "./pg-control.ts";
+import { tupleKeys, type CompatibilityTuple } from "./pg-control.ts";
 
 export const MANIFEST_FILE = "manifest.json";
 
@@ -118,7 +118,8 @@ export function readManifest(file: string, root: string): BuildManifest {
     throw new UserError(`${name}: \`tuple\` must be an object.`);
   }
   const keys = Object.keys(tuple).sort().join(",");
-  if (keys !== [...TUPLE_KEYS].sort().join(",")) throw new UserError(`${name}: \`tuple\` must have the tuple's keys.`);
+  if (keys !== [...tupleKeys((tuple as Json)["pg_control_version"])].sort().join(","))
+    throw new UserError(`${name}: \`tuple\` must have the tuple's keys.`);
   const dataFormat = field(json, "dataFormat", name);
   if (dataFormat !== null && (typeof dataFormat !== "number" || !Number.isSafeInteger(dataFormat))) {
     throw new UserError(`${name}: \`dataFormat\` must be a number or null.`);

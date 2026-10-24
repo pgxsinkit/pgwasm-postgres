@@ -28,7 +28,7 @@ export interface EmscriptenFS {
   unlink(path: string): void;
   /** A character device whose reads call `input` once per byte. */
   createDevice(parent: string, name: string, input: () => number | null): unknown;
-  /** The filesystem types the runtime was built with (`MEMFS`, `NODEFS`, …), for `mount`. */
+  /** Published before host preRun by the glue compatibility adapter. */
   readonly filesystems: Readonly<Record<string, unknown>>;
 }
 
@@ -64,26 +64,29 @@ export interface ModuleBase {
   stringToUTF8OnStack(value: string): number;
   _fopen(path: number, mode: number): number;
   _fclose(stream: number): number;
-  _pgl_set_system_fn(fn: number): void;
-  _pgl_set_popen_fn(fn: number): void;
-  _pgl_set_pclose_fn(fn: number): void;
-  _pgl_freopen(path: number, mode: number, stream: number): number;
+  _pgwasm_set_system_fn(fn: number): void;
+  _pgwasm_set_popen_fn(fn: number): void;
+  _pgwasm_set_pclose_fn(fn: number): void;
+  _pgwasm_freopen(path: number, mode: number, stream: number): number;
 }
 
 /** `postgres.js`: the backend, with the host entry points the series' patches export. */
 export interface PostgresModule extends ModuleBase {
-  _pgl_set_rw_cbs(read: number, write: number): void;
-  _pgl_pq_flush(): void;
-  _pgl_setPGliteActive(value: number): number;
-  _pgl_startPGlite(): void;
-  _pgl_getMyProcPort(): number;
-  _pgl_sendConnData(): void;
-  _pgl_run_atexit_funcs(): void;
-  _pgl_setPGliteExitStatus(status: number): number;
+  /** Exported explicitly: Emscripten 6.0.13 no longer exposes filesystem types on FS.filesystems. */
+  readonly NODEFS: unknown;
+  readonly IDBFS: unknown;
+  _pgwasm_set_rw_cbs(read: number, write: number): void;
+  _pgwasm_pq_flush(): void;
+  _pgwasm_setPostgresActive(value: number): number;
+  _pgwasm_startPostgres(): void;
+  _pgwasm_getMyProcPort(): number;
+  _pgwasm_sendConnData(): void;
+  _pgwasm_run_atexit_funcs(): void;
+  _pgwasm_setPostgresExitStatus(status: number): number;
   _PostgresMainLoopOnce(): void;
   _PostgresMainLongJmp(): void;
   _PostgresSendReadyForQueryIfNecessary(): void;
-  _ProcessStartupPacket(port: number, sslDone: boolean, gssDone: boolean): number;
+  _ProcessStartupPacket(port: number): number;
   _pq_buffer_remaining_data(): number;
   _emscripten_force_exit(status: number): void;
 }
@@ -93,14 +96,14 @@ export interface InitdbModule extends ModuleBase {
   _pclose(stream: number): number;
 }
 
-/** `pg_dump.js`: libpq's socket reads and writes go to two functions from `addFunction` (pglitec.c). */
+/** `pg_dump.js`: libpq's socket reads and writes go to two functions from `addFunction` (pgwasmc.c). */
 export interface PgDumpModule {
   readonly FS: EmscriptenFS;
   readonly ENV: Record<string, string>;
   readonly HEAPU8: Uint8Array;
   callMain(args: string[]): number;
   addFunction(fn: (...args: number[]) => number | void, signature: string): number;
-  _pgl_set_rw_cbs(read: number, write: number): void;
+  _pgwasm_set_rw_cbs(read: number, write: number): void;
 }
 
 /** What `pg_dump.js`'s factory accepts; only the members the driver sets. */

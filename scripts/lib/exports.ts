@@ -1,7 +1,7 @@
 /**
  * postgres.wasm's export list (ADR-0001 decision 6). The build links postgres.wasm with -sMAIN_MODULE=2, which exports
- * only the symbols `exported_functions.txt` lists: `pglite/static/included.pglite.exports` (the core set: what the
- * host calls) and the imports of every module the build ships (overlay `pglite/scripts/exported-functions.sh`).
+ * only the symbols `exported_functions.txt` lists: `pgwasm/static/included.pgwasm.exports` (the core set: what the
+ * host calls) and the imports of every module the build ships (overlay `pgwasm/scripts/exported-functions.sh`).
  * The build writes the list into `dist/`; `exported_functions.txt` at the repository root is the reference the
  * engine gate diffs it against. A core symbol missing from the build's list fails; anything else is reported.
  */
@@ -16,7 +16,7 @@ export function parseExportList(text: string): string[] {
   return [...new Set(symbols)].sort((a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b)));
 }
 
-/** `included.pglite.exports` holds bare names; the export list has them with the leading underscore. */
+/** `included.pgwasm.exports` holds bare names; the export list has them with the leading underscore. */
 export function coreSymbols(includedText: string): string[] {
   return parseExportList(includedText).map((name) => `_${name}`);
 }
@@ -34,7 +34,7 @@ export interface ExportsDiff {
   readonly added: readonly string[];
   /** In the reference, not in the build's list. */
   readonly removed: readonly string[];
-  /** Core symbols (included.pglite.exports) the build's list lacks: the gate fails on any. */
+  /** Core symbols (included.pgwasm.exports) the build's list lacks: the gate fails on any. */
   readonly missingCore: readonly string[];
 }
 

@@ -17,6 +17,7 @@ import {
   crc32c,
   parseControlFile,
   parseWalLongPageHeader,
+  tupleKeys,
   walRecords,
 } from "../scripts/lib/pg-control.ts";
 import { Fixtures, thrown, write } from "./helpers.ts";
@@ -28,6 +29,20 @@ afterEach(() => fixtures.cleanup());
 const fixtureDir = join(import.meta.dir, "fixtures", "data-format");
 const pgControl = () => new Uint8Array(readFileSync(join(fixtureDir, "pg_control")));
 const walPage = () => new Uint8Array(readFileSync(join(fixtureDir, "wal-first-page")));
+
+/**
+ * A synthetic control file written by C using REL_19_RC1's structs verbatim. clang's wasm32 layout
+ * verified its offsets (312-byte struct, crc at 308); the native writer asserted the same layout.
+ * Its 64-bit nextMultiOffset and differing checksum states catch the fields 19 added or widened.
+ */
+const pg19Control = () => new Uint8Array(readFileSync(join(fixtureDir, "19-pg_control")));
+const pg19WalHeader = () => {
+  const page = walPage().slice(0, 40);
+  const view = new DataView(page.buffer);
+  view.setUint16(0, 0xd122, true);
+  view.setBigUint64(24, 0x0102030405060708n, true);
+  return page;
+};
 
 describe("pg_control", () => {
   test("CRC-32C is Castagnoli's", () => {
@@ -77,6 +92,41 @@ describe("pg_control", () => {
     expect(thrown(() => parseControlFile(foreign)).message).toContain("PG_CONTROL_VERSION 1700, which has no layout");
     expect(thrown(() => parseControlFile(pgControl().subarray(0, 200))).message).toContain("too short");
   });
+
+  test("parses 1905's added fields, wider multixact offset and shifted compatibility fields", () => {
+    const control = parseControlFile(pg19Control());
+    expect(control.crcOffset).toBe(308);
+    expect(control.size).toBe(312);
+    expect(Object.fromEntries(control.fields)).toMatchObject({
+      system_identifier: 0x0102030405060708n,
+      pg_control_version: 1905,
+      catalog_version_no: 202610061,
+      state: 1,
+      "checkPointCopy.logicalDecodingEnabled": true,
+      "checkPointCopy.nextXid": 0x100000003n,
+      "checkPointCopy.nextMultiOffset": 0x100000002n,
+      "checkPointCopy.oldestXid": 3,
+      "checkPointCopy.time": 1792828800n,
+      maxAlign: 8,
+      floatFormat: 1234567,
+      blcksz: 8192,
+      slru_pages_per_segment: 32,
+      xlog_blcksz: 8192,
+      nameDataLen: 64,
+      float8ByVal: true,
+      data_checksum_version_init: 1,
+      data_checksum_version: 0,
+      default_char_signedness: true,
+      mock_authentication_nonce: new Uint8Array(32).fill(0xa5),
+    });
+    expect(control.offsets.get("checkPointCopy.nextMultiOffset")).toBe(88);
+    expect(control.offsets.get("slru_pages_per_segment")).toBe(232);
+    expect(control.offsets.get("data_checksum_version_init")).toBe(264);
+    const corrupt = pg19Control();
+    corrupt[232] = (corrupt[232] ?? 0) ^ 1;
+    expect(thrown(() => parseControlFile(corrupt)).message).toContain("CRC-32C does not match");
+    expect(thrown(() => parseControlFile(pg19Control().subarray(0, 300))).message).toContain("too short");
+  });
 });
 
 describe("the WAL page header", () => {
@@ -112,11 +162,30 @@ describe("the WAL page header", () => {
 describe("the compatibility tuple", () => {
   const tuple = () => compatibilityTuple(parseControlFile(pgControl()), parseWalLongPageHeader(walPage()));
 
-  test("is the committed declaration's", () => {
+  test("is retained in the committed declaration for historical format 1", () => {
     const declaration = readDataFormat(layoutFor(repoRoot));
     expect(declarationProblems(declaration)).toEqual([]);
-    expect(tupleDifferences(declaration.tuple, tuple())).toEqual([]);
+    const format = [...declaration.previous, declaration].find((entry) => entry.dataFormat === 1);
+    expect(format).toBeDefined();
+    expect(tupleDifferences(format!.tuple, tuple())).toEqual([]);
     expect(tuple().xlp_magic).toBe("0xD118");
+  });
+
+  test("19 includes the SLRU segment size without adding it to historical tuples", () => {
+    const next = compatibilityTuple(parseControlFile(pg19Control()), parseWalLongPageHeader(pg19WalHeader()));
+    expect(next).toEqual({
+      ...tuple(),
+      pg_control_version: 1905,
+      catalog_version_no: 202610061,
+      slru_pages_per_segment: 32,
+      float8ByVal: true,
+      xlp_magic: "0xD122",
+    });
+    expect(tupleKeys(1905)).toContain("slru_pages_per_segment");
+    expect(tupleKeys(1800)).not.toContain("slru_pages_per_segment");
+    expect(tupleDifferences(next, { ...next, slru_pages_per_segment: 64 })).toEqual([
+      { key: "slru_pages_per_segment", declared: "32", actual: "64" },
+    ]);
   });
 
   test("refuses a WAL segment of another system", () => {
@@ -152,7 +221,12 @@ describe("the compatibility tuple", () => {
 });
 
 describe("the declaration's rules", () => {
-  const base = readDataFormat(layoutFor(repoRoot));
+  const base: DataFormatDeclaration = {
+    file: "data-format.json",
+    dataFormat: 1,
+    tuple: compatibilityTuple(parseControlFile(pgControl()), parseWalLongPageHeader(walPage())),
+    previous: [],
+  };
   const declaration = (overrides: Partial<DataFormatDeclaration>): DataFormatDeclaration => ({ ...base, ...overrides });
 
   test("formats are numbered 1, 2, … in order", () => {
@@ -190,5 +264,25 @@ describe("the declaration's rules", () => {
     expect(thrown(() => readDataFormat(layout)).message).toContain("positive integer");
     write(layout.dataFormatFile, JSON.stringify({ ...valid, previous: {} }));
     expect(thrown(() => readDataFormat(layout)).message).toContain("`previous` must be an array");
+  });
+
+  test("19 requires a positive SLRU segment size and 18 keeps exactly its old keys", () => {
+    const root = fixtures.dir("data-format-19");
+    const layout = layoutFor(root);
+    const next = compatibilityTuple(parseControlFile(pg19Control()), parseWalLongPageHeader(pg19WalHeader()));
+    const json = { dataFormat: 2, tuple: next, previous: [{ dataFormat: 1, tuple: base.tuple }] };
+    write(layout.dataFormatFile, JSON.stringify(json));
+    expect(readDataFormat(layout).tuple).toEqual(next);
+    expect(declarationProblems(readDataFormat(layout))).toEqual([]);
+    const { slru_pages_per_segment: _slru, ...missing } = next;
+    write(layout.dataFormatFile, JSON.stringify({ ...json, tuple: missing }));
+    expect(thrown(() => readDataFormat(layout)).message).toContain("must have exactly the keys");
+    write(layout.dataFormatFile, JSON.stringify({ ...json, tuple: { ...next, slru_pages_per_segment: 0 } }));
+    expect(thrown(() => readDataFormat(layout)).message).toContain("slru_pages_per_segment");
+    write(
+      layout.dataFormatFile,
+      JSON.stringify({ ...json, previous: [{ dataFormat: 1, tuple: { ...base.tuple, slru_pages_per_segment: 32 } }] }),
+    );
+    expect(thrown(() => readDataFormat(layout)).message).toContain("must have exactly the keys");
   });
 });

@@ -46,6 +46,27 @@ export function upstreamVersion(tag: string): { major: number; minor: number } {
   return { major: Number(match[1]), minor: Number(match[2]) };
 }
 
+/** `version()` must name the pinned upstream release, beta or RC and the manifest's exact build label. */
+export function serverVersionPattern(upstreamTag: string, release?: string): RegExp {
+  const escape = (text: string): string => text.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const prerelease = UPSTREAM_PRERELEASE_TAG.exec(upstreamTag);
+  let upstream: string;
+  let defaultLabel: string;
+  if (prerelease === null) {
+    const pin = upstreamVersion(upstreamTag);
+    upstream = `${pin.major}.${pin.minor}`;
+    defaultLabel = `${pin.major}\\.${pin.minor}\\.(?:0|[1-9]\\d*)`;
+  } else {
+    upstream = `${Number(prerelease[1])}${(prerelease[2] ?? "").toLowerCase()}${Number(prerelease[3])}`;
+    defaultLabel = escape(prereleaseVersion(upstreamTag) ?? "");
+  }
+  if (release !== undefined && !new RegExp(`^${defaultLabel}$`).test(release)) {
+    throw new UserError(`The build label ${release} does not belong to the pinned upstream tag ${upstreamTag}.`);
+  }
+  const label = release === undefined ? defaultLabel : escape(release);
+  return new RegExp(`^PostgreSQL ${escape(upstream)} \\(pgwasm-postgres ${label}\\) on wasm32-unknown-emscripten, `);
+}
+
 export function formatVersion(version: Version): string {
   return `${version.major}.${version.minor}.${version.revision}`;
 }

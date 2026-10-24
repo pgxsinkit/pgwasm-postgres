@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { runInNewContext } from "node:vm";
 
 import { DRIVER_FILES, locateDriverFiles } from "../scripts/lib/driver/artefacts.ts";
 import { commandWords } from "../scripts/lib/driver/command-line.ts";
@@ -25,6 +27,42 @@ import { Fixtures, thrown, write } from "./helpers.ts";
 
 const fixtures = new Fixtures();
 afterEach(() => fixtures.cleanup());
+
+describe("the host's preRun filesystem contract", () => {
+  test.each([false, true])("publishes filesystem types before host callbacks (existing map: %s)", (existing) => {
+    const order: string[] = [];
+    const extra = {};
+    const filesystems: Record<string, unknown> = existing ? { CUSTOM: extra } : {};
+    const module = {
+      FS: (existing ? { filesystems } : {}) as { filesystems?: Record<string, unknown> },
+      MEMFS: {},
+      IDBFS: { dbs: {} },
+      NODEFS: {},
+      PROXYFS: {},
+      preRun: [
+        () => {
+          expect(module.FS.filesystems).toMatchObject({
+            MEMFS: module.MEMFS,
+            IDBFS: module.IDBFS,
+            NODEFS: module.NODEFS,
+            PROXYFS: module.PROXYFS,
+          });
+          if (existing) {
+            expect(module.FS.filesystems).toBe(filesystems);
+            expect(module.FS.filesystems?.["CUSTOM"]).toBe(extra);
+          }
+          order.push("host-1");
+        },
+        () => order.push("host-2"),
+        () => order.push("bundle"),
+      ],
+    };
+    const script = readFileSync(join(repoRoot, "overlay/pgwasm/scripts/loadBundleFirst.js"), "utf8");
+    runInNewContext(script, { Module: module });
+    for (const callback of module.preRun) callback();
+    expect(order).toEqual(["bundle", "host-1", "host-2"]);
+  });
+});
 
 describe("the artefacts the driver loads", () => {
   test("are found in a build's dist/, the backend's in pgwasm/ and never the build tree's bin/postgres.js", () => {

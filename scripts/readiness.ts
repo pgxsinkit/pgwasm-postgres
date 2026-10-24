@@ -169,7 +169,7 @@ function exportsOf(layout: Layout, scratch: Layout): ExportFindings {
     const reference = readExportList(layout.exportsReference);
     const listed = readExportList(join(scratch.buildDist, "exported_functions.txt"));
     const core = coreSymbols(
-      readFileSync(join(layout.overlayDir, "pglite", "static", "included.pglite.exports"), "utf8"),
+      readFileSync(join(layout.overlayDir, "pgwasm", "static", "included.pgwasm.exports"), "utf8"),
     );
     const diff = diffExports(reference, listed, core);
     return {

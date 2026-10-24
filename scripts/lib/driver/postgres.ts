@@ -19,7 +19,7 @@ const ICU_DATA_PATH = `${PG_ROOT}/icu`;
 /** What `locale -a` prints, shipped in the filesystem bundle. */
 const LOCALE_LIST_PATH = `${PG_ROOT}/locale-a`;
 
-/** Postgres' error longjmp, as the overlay's host C code reports it (pglitec.c's POSTGRES_MAIN_LONGJMP). */
+/** Postgres' error longjmp, as the overlay's host C code reports it (pgwasmc.c's POSTGRES_MAIN_LONGJMP). */
 const POSTGRES_MAIN_LONGJMP = 100;
 /** The exit status single-user mode reports when it started and stays alive. */
 const EXIT_ALIVE = 99;
@@ -247,8 +247,8 @@ export class Postgres {
 
   #installCallbacks(): void {
     const mod = this.module;
-    mod._pgl_set_system_fn(this.#addFunction(() => 1, "pi"));
-    mod._pgl_set_popen_fn(
+    mod._pgwasm_set_system_fn(this.#addFunction(() => 1, "pi"));
+    mod._pgwasm_set_popen_fn(
       this.#addFunction((command: number, mode: number) => {
         const text = mod.UTF8ToString(command);
         const openMode = mod.UTF8ToString(mode);
@@ -257,7 +257,7 @@ export class Postgres {
         return this.#commandStream;
       }, "ppp"),
     );
-    mod._pgl_set_pclose_fn(
+    mod._pgwasm_set_pclose_fn(
       this.#addFunction((stream: number) => {
         if (stream !== this.#commandStream) throw new Error(`Unhandled pclose of stream ${stream}`);
         mod._fclose(stream);
@@ -283,7 +283,7 @@ export class Postgres {
       else this.#stream.write(chunk);
       return length;
     }, "iii");
-    mod._pgl_set_rw_cbs(read, write);
+    mod._pgwasm_set_rw_cbs(read, write);
   }
 
   /** The last lines the backend printed. */
@@ -369,13 +369,13 @@ export class Postgres {
   start(params: readonly string[] = START_PARAMS): void {
     if (this.#started) throw new Error("The backend is already started");
     const mod = this.module;
-    mod._pgl_setPGliteActive(1);
+    mod._pgwasm_setPostgresActive(1);
     this.callMain([...params, "-D", PGDATA, this.#database]);
-    const status = mod._pgl_setPGliteExitStatus(-3);
+    const status = mod._pgwasm_setPostgresExitStatus(-3);
     if (status !== EXIT_ALIVE) {
       throw new Error(`Postgres failed to start (single-user mode exit status ${status}):\n${this.recentOutput}`);
     }
-    mod._pgl_startPGlite();
+    mod._pgwasm_startPostgres();
     this.#started = true;
   }
 
@@ -418,7 +418,7 @@ export class Postgres {
    */
   mountHostDirectory(path: string): void {
     const FS = this.module.FS;
-    const nodefs = FS.filesystems["NODEFS"];
+    const nodefs = this.module.NODEFS;
     if (nodefs === undefined) throw new Error("This build's runtime has no NODEFS");
     if (!FS.analyzePath(path).exists) FS.mkdirTree(path);
     FS.mount(nodefs, { root: path }, path);
@@ -432,11 +432,11 @@ export class Postgres {
     }
     if (code === CANCEL_REQUEST) return;
     const mod = this.module;
-    if (mod._ProcessStartupPacket(mod._pgl_getMyProcPort(), true, true) !== 0) {
+    if (mod._ProcessStartupPacket(mod._pgwasm_getMyProcPort()) !== 0) {
       throw new Error(`Postgres rejected the startup packet:\n${this.recentOutput}`);
     }
-    mod._pgl_sendConnData();
-    mod._pgl_pq_flush();
+    mod._pgwasm_sendConnData();
+    mod._pgwasm_pq_flush();
   }
 
   #runMainLoop(): void {
@@ -451,11 +451,11 @@ export class Postgres {
         this.#stack.restore(stack);
         if (!isUnwind(error)) throw error;
         // An ERROR: Postgres' siglongjmp into its main loop was intercepted; its handler runs here.
-        if (mod._pgl_setPGliteExitStatus(-2) === POSTGRES_MAIN_LONGJMP) mod._PostgresMainLongJmp();
+        if (mod._pgwasm_setPostgresExitStatus(-2) === POSTGRES_MAIN_LONGJMP) mod._PostgresMainLongJmp();
       }
     }
     mod._PostgresSendReadyForQueryIfNecessary();
-    mod._pgl_pq_flush();
+    mod._pgwasm_pq_flush();
   }
 
   /** Shuts the backend down cleanly (its exit callbacks: the shutdown checkpoint), then disposes of it. */
@@ -473,8 +473,8 @@ export class Postgres {
       this.#stopped = true;
       try {
         preservingExitCode(() => {
-          this.module._pgl_setPGliteActive(0);
-          this.module._pgl_run_atexit_funcs();
+          this.module._pgwasm_setPostgresActive(0);
+          this.module._pgwasm_run_atexit_funcs();
         });
       } catch (error) {
         const exit = error as { name?: unknown; status?: unknown };
