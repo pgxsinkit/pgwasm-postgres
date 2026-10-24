@@ -23,7 +23,14 @@ import { UserError } from "../git.ts";
 import type { Layout } from "../layout.ts";
 import { CONTAINER_PREFIX, removeBuildOutput, removeContainer } from "../podman.ts";
 import type { RunResults, TestRun } from "./baseline.ts";
-import { backendFailures, normaliseDiff, parseStatusLines, splitDiffs, type BackendFailure } from "./results.ts";
+import {
+  backendFailures,
+  normaliseDiff,
+  parseSummary,
+  splitDiffs,
+  type BackendFailure,
+  type TestStatus,
+} from "./results.ts";
 import { TOOLS_PREFIX, type ToolsPaths } from "./tools.ts";
 
 export const REGRESS_CONTAINER = `${CONTAINER_PREFIX}regress`;
@@ -163,6 +170,17 @@ async function stopBridge(bridge: Bun.Subprocess): Promise<void> {
   }
 }
 
+/**
+ * Read pg_regress's canonical summary. Its combined stdout/stderr log is diagnostic only: PG19's live
+ * diff diagnostics can interleave with status writes and turn real failures into comment fragments.
+ */
+export function readRunStatuses(runDir: string): TestStatus[] {
+  const summary = join(runDir, "regression.out");
+  if (!existsSync(summary))
+    throw new UserError(`regress: pg_regress wrote no regression.out; see ${join(runDir, "pg_regress.log")}.`);
+  return parseSummary(readFileSync(summary, "utf8"));
+}
+
 export async function runSuite(input: RunInput): Promise<RunOutput> {
   const { layout, tools, runDir } = input;
   if (input.regressLib !== undefined && !existsSync(input.regressLib)) {
@@ -226,11 +244,7 @@ export async function runSuite(input: RunInput): Promise<RunOutput> {
   }
   const seconds = Math.round((Date.now() - started) / 1000);
 
-  const statuses = parseStatusLines(readFileSync(regressLog, "utf8"));
-  if (statuses.length === 0) {
-    const tail = readFileSync(regressLog, "utf8").trimEnd().split("\n").slice(-20);
-    throw new UserError(["regress: pg_regress reported no test:", ...tail.map((line) => `  | ${line}`)].join("\n"));
-  }
+  const statuses = readRunStatuses(runDir);
   const diffsFile = join(runDir, "regression.diffs");
   // latin1 reads and writes bytes as they are: a diff may hold output in another encoding.
   const diffs = splitDiffs(existsSync(diffsFile) ? readFileSync(diffsFile, "latin1") : "");

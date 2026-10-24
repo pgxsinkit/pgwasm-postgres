@@ -2,6 +2,7 @@
  * What a pg_regress run leaves behind, read back: its TAP status lines, its `regression.diffs` split per test
  * and normalised so that two runs of the same build give the same bytes, and the bridge's backend failures.
  */
+import { UserError } from "../git.ts";
 
 export interface TestStatus {
   readonly name: string;
@@ -10,16 +11,47 @@ export interface TestStatus {
 }
 
 /** pg_regress's status lines: `ok 12   + boolean   85 ms`, `not ok 13   - char   40 ms` (test_status_print). */
-const STATUS_LINE = /^(not )?ok\s+\d+\s+[+-] (\S+)\s+(\d+) ms$/;
+const STATUS_LINE = /^(not )?ok\s+(\d+)\s+[+-] (\S+)\s+(\d+) ms$/;
 
 export function parseStatusLines(output: string): TestStatus[] {
   const tests: TestStatus[] = [];
   for (const line of output.split("\n")) {
     const match = STATUS_LINE.exec(line.trimEnd());
     if (match === null) continue;
-    tests.push({ name: match[2] ?? "", ok: match[1] === undefined, ms: Number(match[3]) });
+    tests.push({ name: match[3] ?? "", ok: match[1] === undefined, ms: Number(match[4]) });
   }
   return tests;
+}
+
+/** A complete canonical regression.out: its one TAP plan must account for every status line. */
+export function parseSummary(output: string): TestStatus[] {
+  const plans = output
+    .split("\n")
+    .map((line) => /^1\.\.(\d+)\s*$/.exec(line))
+    .filter((match) => match !== null);
+  if (plans.length !== 1) throw new UserError("regress: regression.out must contain exactly one TAP plan (1..N).");
+  const planned = Number(plans[0]?.[1]);
+  if (!Number.isSafeInteger(planned) || planned < 1)
+    throw new UserError("regress: regression.out's TAP plan must declare at least one test.");
+  const statuses = parseStatusLines(output);
+  if (statuses.length !== planned)
+    throw new UserError(`regress: TAP plan declares ${planned} tests but ${statuses.length} status lines were read.`);
+  const names = new Set<string>();
+  for (const status of statuses) {
+    if (names.has(status.name)) throw new UserError(`regress: regression.out has duplicate test name ${status.name}.`);
+    names.add(status.name);
+  }
+  const numbers = new Set<number>();
+  for (const line of output.split("\n")) {
+    const match = STATUS_LINE.exec(line.trimEnd());
+    if (match === null) continue;
+    const number = Number(match[2]);
+    if (!Number.isSafeInteger(number) || number < 1 || number > planned)
+      throw new UserError(`regress: test number ${number} outside TAP plan 1..${planned}.`);
+    if (numbers.has(number)) throw new UserError(`regress: regression.out has duplicate test number ${number}.`);
+    numbers.add(number);
+  }
+  return statuses;
 }
 
 /** The directories and port of a run, which a normalised diff replaces with placeholders. */

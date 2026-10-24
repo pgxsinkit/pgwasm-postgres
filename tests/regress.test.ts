@@ -1,5 +1,6 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import { layoutFor, repoRoot } from "../scripts/lib/layout.ts";
 import {
@@ -15,11 +16,41 @@ import {
   type RunResults,
   type TestRun,
 } from "../scripts/lib/regress/baseline.ts";
-import { backendFailures, normaliseDiff, parseStatusLines, splitDiffs } from "../scripts/lib/regress/results.ts";
-import { BRIDGE_STACK_KIB, bridgeCommand, bridgeEnvironment, DATABASE_SETUP } from "../scripts/lib/regress/run.ts";
+import {
+  backendFailures,
+  normaliseDiff,
+  parseStatusLines,
+  parseSummary,
+  splitDiffs,
+} from "../scripts/lib/regress/results.ts";
+import {
+  BRIDGE_STACK_KIB,
+  bridgeCommand,
+  bridgeEnvironment,
+  DATABASE_SETUP,
+  readRunStatuses,
+} from "../scripts/lib/regress/run.ts";
 import { CONFIGURE_FLAGS, toolsBuildScript } from "../scripts/lib/regress/tools.ts";
+import { Fixtures, write } from "./helpers.ts";
+
+const fixtures = new Fixtures();
+afterEach(() => fixtures.cleanup());
 
 describe("pg_regress's output", () => {
+  test("requires a complete TAP plan, including on an otherwise valid or empty summary", () => {
+    expect(() => parseSummary("ok 1 + boolean 1 ms\n")).toThrow("exactly one TAP plan");
+    expect(() => parseSummary("ok 1 + boolean 1 ms\n1..1\n1..1\n")).toThrow("exactly one TAP plan");
+    expect(() => parseSummary("1..0\n")).toThrow("at least one test");
+    expect(() => parseSummary("1..1\n")).toThrow("1 tests but 0 status lines");
+  });
+
+  test("rejects repeated or out-of-plan test numbers even when names and counts look complete", () => {
+    expect(() => parseSummary("ok 1 + boolean 1 ms\nok 1 + char 1 ms\n1..2\n")).toThrow("duplicate test number 1");
+    expect(() => parseSummary("ok 1 + boolean 1 ms\nok 3 + char 1 ms\n1..2\n")).toThrow(
+      "test number 3 outside TAP plan 1..2",
+    );
+  });
+
   test("status lines give each test's outcome, in order", () => {
     const output = [
       "# using postmaster on 127.0.0.1, port 41234",
@@ -207,6 +238,45 @@ describe("the baseline", () => {
 });
 
 describe("the run", () => {
+  test("reads all 239 canonical statuses when PG19's combined diagnostics obscure two failures", () => {
+    const runDir = fixtures.dir("regress-statuses");
+    const canonical = Array.from({ length: 239 }, (_, index) => `ok ${index + 1} + test_${index + 1} 1 ms`);
+    canonical[46] = "not ok 47    + opr_sanity                                245 ms";
+    canonical[232] = "not ok 233   + compression_pglz                            8 ms";
+    canonical.push("1..239", "# 2 of 239 tests failed.");
+    const interleaved = [...canonical];
+    // Actual PG19 combined-log lines: diagnostic writes and test status writes share a descriptor.
+    interleaved[46] = "#       OR o1.oprleft != 0);not ok 47    + opr_sanity                                245 ms";
+    interleaved[232] = "# not ok 233   + compression_pglz                            8 ms";
+    write(join(runDir, "regression.out"), canonical.join("\n"));
+    write(join(runDir, "pg_regress.log"), interleaved.join("\n"));
+
+    const statuses = readRunStatuses(runDir);
+    expect(statuses).toHaveLength(239);
+    expect(statuses.filter((status) => !status.ok)).toEqual([
+      { name: "opr_sanity", ok: false, ms: 245 },
+      { name: "compression_pglz", ok: false, ms: 8 },
+    ]);
+  });
+
+  test("refuses a truncated canonical summary instead of accepting a partial run", () => {
+    const runDir = fixtures.dir("regress-truncated");
+    write(join(runDir, "regression.out"), "ok 1 + boolean 1 ms\n1..2\n");
+    expect(() => readRunStatuses(runDir)).toThrow("TAP plan declares 2 tests but 1 status lines were read");
+  });
+
+  test("refuses duplicate test names before they can overwrite a run result", () => {
+    const runDir = fixtures.dir("regress-duplicate");
+    write(join(runDir, "regression.out"), "ok 1 + boolean 1 ms\nnot ok 2 - boolean 2 ms\n1..2\n");
+    expect(() => readRunStatuses(runDir)).toThrow("duplicate test name boolean");
+  });
+
+  test("never substitutes the combined log for a missing canonical summary", () => {
+    const runDir = fixtures.dir("regress-missing-summary");
+    write(join(runDir, "pg_regress.log"), "ok 1 + boolean 1 ms\n1..1\n");
+    expect(() => readRunStatuses(runDir)).toThrow("pg_regress wrote no regression.out");
+  });
+
   test("creates the regression database as pg_regress's create_database() at REL_18_3 would", () => {
     expect(DATABASE_SETUP).toEqual([
       'CREATE DATABASE "regression" TEMPLATE=template0',
