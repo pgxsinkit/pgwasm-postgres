@@ -148,14 +148,20 @@ await runCliAsync(async () => {
     const timezone = value("SHOW TimeZone");
     const logTimezone = value("SHOW log_timezone");
     if (args.from === undefined) {
-      const config = new TextDecoder().decode(cluster.find((entry) => entry.path === "/postgresql.conf")?.data);
+      const configured = query(
+        "SELECT lower(name), setting FROM pg_file_settings " +
+          "WHERE lower(name) IN ('timezone', 'log_timezone') AND applied ORDER BY lower(name)",
+      )[0]?.rows;
       expect(
         timezone === "UTC" &&
           logTimezone === "UTC" &&
-          /^timezone = 'UTC'/m.test(config) &&
-          /^log_timezone = 'UTC'/m.test(config),
+          JSON.stringify(configured) ===
+            JSON.stringify([
+              ["log_timezone", "UTC"],
+              ["timezone", "UTC"],
+            ]),
         "initdb writes UTC defaults under a non-UTC host timezone",
-        { timezone, logTimezone },
+        { timezone, logTimezone, configured },
       );
     }
     const timestamps = query(
