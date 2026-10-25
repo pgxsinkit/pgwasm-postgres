@@ -8,25 +8,21 @@
   "runs": 8,
   "recordedWith": {
     "postgres.js": "49f427bd890b89ba5b29cf96e3032dcc13cbaf5aadf62b782290480317ea0178",
-    "postgres.wasm": "582eba0f5c42f5f01e8ce0a031454b43f0fd2edb6bfc99ef16e60904b2787980",
+    "postgres.wasm": "3caccc979114e3ac7177a77bdc4511dab775738ea397bcdde04e6959ce682eb3",
     "postgres.data": "be7b9fd708ddffcc627aefaff8fdc35310978d8f274a87046cfd232e306a861b",
     "initdb.js": "cf3fff4109879f3be1ba321f19b126c4f8d518d9909846927d3104b1ec0a8129",
-    "initdb.wasm": "50d9c51650a64f08acfe3b51a28a1d43968e02604bd881fc81b57e5f2d85b5d9"
+    "initdb.wasm": "71b468843c8b75dea04a5c3775606ca8d0612f0d3240953159b44132d29e0015"
   },
   "summary": {
     "tests": 239,
-    "passed": 185,
+    "passed": 187,
     "failed": 50,
-    "unstable": 4
+    "unstable": 2
   },
   "groups": {
     "clock-resolution": {
       "reason": "Unstable. The wasm's wall clock has millisecond resolution (Emscripten's clock_gettime(CLOCK_REALTIME) reads Date.now()), so stats' `stats_reset > <the previous reset>` checks fail whenever two resets fall in the same millisecond. Its diff also carries single-process (no checkpointer, and checkpoint, WAL and I/O counters that do not move as it expects) and session-persistence (temp_buffers after \\c).",
       "tests": ["stats"]
-    },
-    "extended-protocol-ready": {
-      "reason": "Unstable. An error in an extended-query batch sends a ReadyForQuery before the batch's Sync: pgwasm_longjmp (overlay pgwasm/src/pgwasmc/pgwasmc.c) sets send_ready_for_query before PostgresMainLongJmp sets ignore_till_sync, and PostgresMainLoopOnce sends it ahead of its next message. psql reports 'message type 0x5a arrived from server while idle' and then pairs results with the wrong queries; where it catches up depends on how the bytes are split between reads, so the diff differs from run to run.",
-      "tests": ["psql", "psql_pipeline"]
     },
     "icu-locales": {
       "reason": "The only ICU collations are und-x-icu and unicode: initdb imports no language locale from the build's ICU data. collate.icu.utf8 skips itself only when there is no ICU collation at all, so it runs and fails on en-x-icu, sv-x-icu, tr-x-icu, …. The PG19 port uses ICU 79.1 but keeps the root-only data selection: unicode is still ICU and und-x-icu still makes the upstream test run. Runtime smoke separately verifies that root collation versions agree and non-ASCII sorting works.",
@@ -262,9 +258,9 @@
     "without_overlaps": "ok",
     "generated_virtual": "ok",
     "rules": "failed",
-    "psql": "unstable",
+    "psql": "ok",
     "psql_crosstab": "ok",
-    "psql_pipeline": "unstable",
+    "psql_pipeline": "ok",
     "amutils": "ok",
     "stats_ext": "failed",
     "collate.linux.utf8": "ok",
