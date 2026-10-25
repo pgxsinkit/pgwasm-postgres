@@ -126,7 +126,7 @@ conversion and all seventeen non-ASCII round-trip encodings.
 ## Validation
 
 The builder was compiled and its 225 installed packages checked. All five
-patches apply and round-trip on RC1; format, typecheck, lint and all 195 unit
+patches apply and round-trip on RC1; format, typecheck, lint and all 199 unit
 tests pass. A real initdb verifies format 2's complete fourteen-field tuple.
 
 Runtime smoke passes exact version matching, filesystem interface identity,
@@ -137,10 +137,16 @@ prepopulated archive boots with 999 entries and 421 catalog relations, and its
 record reproduces under Bun 1.4.4. Export, identity and regression records are
 separate commits.
 
-Eight complete native regression runs each executed 239 tests: 185 passed and
-54 failed, with no backend failure. Their combined baseline records 185 passed,
-50 stable failures and the same four unstable tests as PG18 (`psql`,
-`psql_pipeline`, `subscription`, `stats`). Of eight new tests, seven pass; the
+The initial port's eight native regression runs each executed 239 tests: 185
+passed and 54 failed, with no backend failure. After the extended-query recovery
+fix, eight further runs each report 187 passed and 52 failed, with no backend
+failure. Both `psql` and `psql_pipeline` pass all eight runs. The tightened
+baseline records 187 passed, 50 unchanged stable failures and two unstable tests
+(`subscription`, `stats`); a passing gate means that these documented remaining
+failures have not regressed, not complete PostgreSQL conformance. The
+[audit's failure breakdown](pglite-fixes-2026-10.md#remaining-postgresql-regression-failures)
+separates real defects, missing test infrastructure and architectural limitations.
+Of eight new upstream tests, seven pass; the
 new `nls` failure requires the same deliberately unshipped `regress.so` helper
 library as existing tests. `compression_lz4` matches upstream's unsupported-build
 skip and establishes no LZ4 execution coverage.
@@ -216,12 +222,11 @@ using this build. Publishing an RC alone does not migrate existing stores.
 These are follow-up options from the code audit, not additions to this port or
 maintainer policy:
 
-- **Protocol and role correctness:** reproduce the baseline's early
-  ReadyForQuery after extended-query errors, and standalone mode's incomplete
-  `RESET SESSION AUTHORIZATION`. Fix and tighten their existing baseline groups
-  separately rather than recording new failures away. The
-  [October PGlite audit](pglite-fixes-2026-10.md) identifies the exact upstream
-  readiness fix and confirms that both our PG18 and PG19 branches need it.
+- **Role correctness:** reproduce standalone mode's incomplete
+  `RESET SESSION AUTHORIZATION`, fix it and tighten its existing baseline group.
+  The early ReadyForQuery defect is fixed on both our PG18 and PG19 branches;
+  the [October PGlite audit](pglite-fixes-2026-10.md) records its resolution and
+  the accompanying host fixes.
 - **Browser memory:** pgxsinkit's C host starts at 128 MiB with a 2 GiB maximum.
   Measure smaller starting allocations, growth, OOM handling and stack limits on
   supported browsers. The regression bridge's 256 MiB native stack does not

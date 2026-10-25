@@ -7,6 +7,9 @@ build; PostgreSQL's own source never enters its history. pgxsinkit's `@pgxsinkit
 
 The mechanics and the plan are in [ADR-0001](docs/adr/0001-postgres-as-a-patch-series.md).
 
+[Known gaps and their value to clients](docs/pgwasm-remaining-gaps.md) explains
+the remaining native regression failures, coverage limits and optional work.
+
 ## Status
 
 The `port-19` branch targets PostgreSQL `REL_19_RC1` (`0b8bff042a99`), with the five
@@ -693,9 +696,10 @@ from the gated build (see
 never merged, and main is fast-forwarded from the command line.
 
 `postgres.wasm` embeds the version (`version()`), and `identity/prepopulated.json` names `postgres.wasm` by its
-sha256, so a release tag moves every later commit's build to the next candidate and makes the record stale:
-after each release, the next commit on develop is `bun run prepopulated --record` on a build of develop (the
+sha256, so a final release tag moves every later commit's build to the next candidate and makes the record stale:
+after each final release, the next commit on develop is `bun run prepopulated --record` on a build of develop (the
 gate fails at `prepopulated --check` until then). It is a record of the new label only; nothing else changed.
+An RC tag does not advance its pinned RC version and does not by itself stale the identity record.
 
 ## License
 

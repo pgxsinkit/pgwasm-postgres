@@ -1,9 +1,93 @@
 # PGlite fixes reviewed on 2026-10-24
 
-The useful changes are one C backend fix for both Postgres branches and three
-host fixes in the sibling `pgxsinkit` repository. No fix is implemented by this
-review. Apply the extended-query recovery fix first; the host changes can follow
-independently of the PG19 port.
+The audit identified one C backend fix for both Postgres branches and three
+host fixes in the sibling `pgxsinkit` repository. The source snapshots below
+record the original defects; subsequent implementation is recorded here too.
+
+## Implementation after the review
+
+- **Extended-query recovery and driver UTC initialization:** implemented in
+  `pgwasm-postgres` PG19 commit `51eb416` and PG18 commit `6ead4dc`. Patch 5 was
+  regenerated from its topic commit; upstream's main-loop body stays in place.
+  Both drivers now test Parse, Bind and Execute failures inside and outside an
+  explicit transaction, silence until Sync, exactly one readiness response,
+  transaction status, rollback and a successful following bound query. The
+  Execute case uses a volatile expression and checks both ParseComplete and
+  BindComplete, so custom-plan constant folding cannot turn it into another Bind
+  failure. Fresh initdb runs under a New York host timezone, verifies PostgreSQL's
+  parsed file settings and checks winter/summer offset-free timestamps.
+- **The three host fixes:** implemented together in sibling `pgxsinkit` commit
+  `5450aa3`. Its normal validation passed with 1,607 tests; the cached full
+  validation passed with 852 tests run and the remaining results reused. The
+  real-Wasm timezone regression, unsigned parameter boundaries and repeated
+  live-query teardown all failed before the fixes and passed afterwards.
+- **RC publication support:** PG19 commit `5e6ead2` accepts the exact upstream RC
+  candidate and publishes it with `--prerelease --latest=false`. Stable version
+  derivation still ignores prerelease tags. Port-branch pushes and manual
+  dispatch can run the CI gate; published-builder and identical-manifest checks
+  remain required. This code change does not publish an image or release.
+- **PG18 qualification tooling:** the canonical TAP-summary reader was
+  backported as `83b435b`, so interleaved diagnostic output cannot omit tests.
+  Bun's local/CI pins were aligned to the registry-verified 1.4.4 and the whole
+  single-package workspace refreshed with `bun update --latest`.
+
+The PG19 prepopulated asset was compared with the earlier qualified gate at its
+same epoch, 1792845941. Of 999 entries, 996 are byte-identical. Configuration
+changes only `timezone` and `log_timezone` from `'Etc/GMT0'` to `UTC`. The control
+file changes its generated system identifier and CRC. Both WAL streams contain
+20,164 records with identical layouts: the 659 transaction records differ only
+in timestamps and valid CRCs, with timestamp shifts of one to three microseconds.
+Masking only those fields makes the record streams identical; page headers differ
+only in the system identifier. This is consistent with the deterministic host's
+clock advancing on every read. Neither branch changes its declared data format.
+
+The incomplete standalone `RESET SESSION AUTHORIZATION` behavior remains separate
+work. Publishing the RC still requires the builder's registry digest in the lock
+and the CI/tag release steps; adopting PG19 in the consuming host still needs its
+ABI update and an explicit format-2 store policy.
+
+All eight PG18 confirmation runs execute 231 tests with 180 passes, 51 known
+failures and no backend failure. Both psql programs pass every run, as on PG19.
+The PG18 baseline now has 180 passes, 49 unchanged stable failures and two
+unstable tests (`subscription`, `stats`). Its 998-entry prepopulated archive
+differs from the earlier qualified gate in the same three metadata/configuration
+files: 995 entries are identical; both WALs have 20,337 records of identical
+layout, with only the 749 transaction timestamps/CRCs changing. All transaction
+CRCs validate. The PG18 host ABI, export list and dataFormat 1 remain unchanged.
+
+## Remaining PostgreSQL regression failures
+
+After the readiness fix, all eight PG19 runs report 187 passes and 52 failures
+out of 239 test programs. The combined baseline classifies 50 failures as stable
+and two as unstable (`subscription`, `stats`). Each program contains many
+assertions; the count is neither an application-operation failure rate nor a
+count of independent defects. The release gate checks for regressions against
+this known baseline and does not certify full PostgreSQL conformance.
+
+The [baseline groups](../regress/baseline.json) assign each remaining test one
+primary cause; several also contain secondary failures:
+
+| Programs | Primary cause                                                      | Client impact and ownership                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| -------- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 21       | Incomplete standalone `RESET SESSION AUTHORIZATION`                | Raw-SQL compatibility defect: the previous role remains active and later test fixtures cascade into permission/ownership failures. No use of these commands was found in the reviewed normal toolkit paths; its username option uses `SET ROLE`, and its RLS/security authority is server-side. Applications explicitly using session authorization are affected. These results do not demonstrate a broken RLS evaluator or ordinary toolkit security boundary. |
+| 19       | Missing C regression helper library                                | Test/build infrastructure and a coverage gap. Test-only types, functions and fixtures cannot be created. Making the helper library usable may expose further product defects; absent fixtures are not evidence that the corresponding SQL features work correctly.                                                                                                                                                                                               |
+| 6        | Parallel/background-worker and fresh-session assumptions           | Three tests expect worker processes; three expect a genuinely new backend or native session defaults. Some are deliberate single-process limitations and others are bridge limitations. Full native workers/multi-session behavior would require architectural work if those capabilities become product requirements.                                                                                                                                           |
+| 2        | Native Wasm stack recursion is invisible to the shadow-stack guard | The recorded raised-stack tests reject malformed 10,000-level JSON with a different SQL error. Earlier default-stack Bun overflow was observed; current browser thresholds are unmeasured. The host fails unexpected exceptions rather than silently swallowing them. This is deep-input hardening/coverage work, with no evidence here of silent corruption.                                                                                                    |
+| 1        | Root-only ICU data                                                 | Language-specific collations are unavailable; root Unicode collation is exercised separately.                                                                                                                                                                                                                                                                                                                                                                    |
+| 1        | Different startup settings                                         | Observable defaults, including `search_path`, differ from a native server; inherited settings deserve review. Catalog-modification settings also contribute to another test's failures.                                                                                                                                                                                                                                                                          |
+| 1        | Clock resolution/statistics                                        | Millisecond timing and single-process statistics differ from native expectations.                                                                                                                                                                                                                                                                                                                                                                                |
+| 1        | WAL receiver/libpq linkage                                         | An embedded logical subscription cannot connect correctly. The toolkit's normal Circuits delivery path does not use this mechanism.                                                                                                                                                                                                                                                                                                                              |
+
+These are primarily issues in the embedding, build and harness rather than
+identified PostgreSQL core defects. They are ours to address; waiting for
+upstream PGlite is not a prerequisite. For broader native-SQL confidence, restore
+C regression-library coverage and address the explicit session-authorization
+reset. Client-facing priorities depend on which triggers an application uses;
+deep-input hardening needs runtime-specific evidence. Worker-process
+and session-model changes need an explicit capability decision rather than
+being undertaken solely to obtain a green native-server suite. Green toolkit
+tests are useful evidence for its exercised workflows, not a substitute for
+resolving these limitations.
 
 ## Scope and evidence
 
