@@ -284,11 +284,11 @@ export function readBaseline(layout: Layout): { baseline: Baseline; diffs: Map<s
   return { baseline, diffs };
 }
 
-/** The width oxfmt formats to (.oxfmtrc.jsonc's printWidth). */
+/** The width bun fmt formats to (.oxfmtrc.jsonc's printWidth). */
 const PRINT_WIDTH = 120;
 
 /**
- * The baseline as it is written: two-space JSON with the groups sorted by id, laid out as oxfmt lays it out
+ * The baseline as it is written: two-space JSON with the groups sorted by id, laid out as bun fmt lays it out
  * (a group's test list on one line when that line fits the print width), so a record passes `bun run format`.
  */
 export function formatBaseline(baseline: Baseline): string {

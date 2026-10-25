@@ -655,7 +655,7 @@ byte-identical, the timezone files among them.
 
 | Script                    | Does                                                                                      |
 | ------------------------- | ----------------------------------------------------------------------------------------- |
-| `format` / `format:write` | oxfmt, check / write                                                                      |
+| `format` / `format:write` | `bun fmt`, check / write, using the existing `.oxfmtrc.jsonc` rules and exclusions        |
 | `lint` / `lint:fix`       | oxlint (type-aware), check / fix                                                          |
 | `typecheck`               | TypeScript 7                                                                              |
 | `test`                    | Unit tests (`bun test`)                                                                   |

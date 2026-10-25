@@ -53,7 +53,8 @@ consumes the releases. Read [README.md](README.md) and
   before the first `preRun` callback) is kept across Emscripten releases in `build-pgwasm.sh`, and a change they
   must follow is reported with the release that makes it (README, Emscripten and the browser floor).
 - **TypeScript (Bun) for scripts**, strict, covered by `bun run typecheck`; bash only where TypeScript
-  cannot be made robust. oxlint and oxfmt; never eslint, prettier or biome.
+  cannot be made robust. oxlint and Bun's built-in formatter (`bun fmt`), using `.oxfmtrc.jsonc` for
+  the formatting rules and exclusions; never eslint, prettier or biome.
 
 ## The series
 
