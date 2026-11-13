@@ -145,6 +145,21 @@ await runCliAsync(async () => {
     expect(expectedVersion.test(version ?? ""), `version() matches ${String(expectedVersion)}`, version);
     info(`driver:smoke: ${version}`);
 
+    // Exercise the actual one-argument C entry point, including both ends of RC2's cancel-key bound.
+    // The embedded adapter consumes these packets without dispatching a postmaster request or exiting.
+    for (const keyBytes of [1, 4, 256, 0, 257]) {
+      const packet = new Uint8Array(12 + keyBytes);
+      const view = new DataView(packet.buffer);
+      view.setInt32(0, packet.length);
+      view.setInt32(4, 80877102); // CANCEL_REQUEST_CODE
+      view.setInt32(8, 1);
+      packet.fill(0xa5, 12);
+      const response = postgres.exchange(packet);
+      expect(response.length === 0, `a cancel packet with ${keyBytes} key bytes produces no response`, response);
+      expect(value("SELECT version()") === version, "the session remains usable after a cancel packet", keyBytes);
+    }
+    info("driver:smoke: valid and malformed cancel packets return without dispatch or session termination");
+
     const timezone = value("SHOW TimeZone");
     const logTimezone = value("SHOW log_timezone");
     if (args.from === undefined) {

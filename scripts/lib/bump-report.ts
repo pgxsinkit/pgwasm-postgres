@@ -15,7 +15,12 @@ export interface TagRef {
   readonly commit: string;
 }
 
-export type PatchResult = "applied cleanly" | "applied with a 3-way merge" | "CONFLICT" | "not applied";
+export type PatchResult =
+  | "applied cleanly"
+  | "applied with a 3-way merge"
+  | "resolved in worktree"
+  | "CONFLICT"
+  | "not applied";
 
 export interface ApplyLog {
   readonly patches: readonly { readonly patch: string; readonly result: PatchResult }[];

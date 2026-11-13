@@ -5,8 +5,8 @@
  * commits; then the engine gate runs and the report says what it found. This module holds the refusals and the git
  * work in the upstream cache; the report is `bump-report.ts`.
  */
-import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join, relative } from "node:path";
+import { existsSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { join, relative, resolve } from "node:path";
 
 import type { ApplyLog } from "./bump-report.ts";
 import { collisionError, overlayCollisions, scratchDir } from "./commands.ts";
@@ -24,15 +24,21 @@ export interface UpstreamTag {
   readonly major: number;
   /** undefined for a beta or a release candidate. */
   readonly minor: number | undefined;
+  /** Present only for a release candidate; beta tags remain build-only. */
+  readonly rc?: number;
 }
 
-const UPSTREAM_TAG = /^REL_(\d+)_([A-Za-z0-9]+)$/;
+const UPSTREAM_TAG = /^REL_([1-9]\d*)_((?:0|[1-9]\d*)|BETA[1-9]\d*|RC[1-9]\d*)$/;
 
 export function parseUpstreamTag(tag: string): UpstreamTag | undefined {
   const match = UPSTREAM_TAG.exec(tag);
   if (match === null) return undefined;
-  const minor = /^\d+$/.test(match[2] ?? "") ? Number(match[2]) : undefined;
-  return { tag, major: Number(match[1]), minor };
+  const suffix = match[2] ?? "";
+  const major = Number(match[1]);
+  const number = Number(suffix.replace(/^(?:BETA|RC)/, ""));
+  if (!Number.isSafeInteger(major) || !Number.isSafeInteger(number)) return undefined;
+  const minor = /^\d+$/.test(suffix) ? number : undefined;
+  return suffix.startsWith("RC") ? { tag, major, minor, rc: number } : { tag, major, minor };
 }
 
 /**
@@ -42,25 +48,32 @@ export function parseUpstreamTag(tag: string): UpstreamTag | undefined {
  */
 export function bumpTagProblems(pinTag: string, tag: string): string[] {
   const pin = parseUpstreamTag(pinTag);
-  if (pin === undefined || pin.minor === undefined) {
-    return [`upstream.json pins ${pinTag}, which is not an upstream release tag (REL_<major>_<minor>).`];
+  if (pin === undefined || (pin.minor === undefined && pin.rc === undefined)) {
+    return [`upstream.json pins ${pinTag}, which is not an upstream release or release-candidate tag.`];
   }
   const target = parseUpstreamTag(tag);
   if (target === undefined) {
-    return [`${JSON.stringify(tag)} is not an upstream tag of the form REL_<major>_<minor> (\`REL_${pin.major}_7\`).`];
+    return [`${JSON.stringify(tag)} is not an upstream tag of the form REL_<major>_<minor> or REL_<major>_RC<n>.`];
   }
   if (target.major !== pin.major) {
     return [
       `${tag} is PostgreSQL ${target.major}, but the pin is PostgreSQL ${pin.major} (${pinTag}). A bump stays in the pinned major: a new major is adopted deliberately, through a port-${target.major} branch rebased onto main (ADR-0001 decision 8), never by \`bun run bump\`.`,
     ];
   }
+  if (target.tag === pin.tag) return [`upstream.json already pins ${tag}.`];
+  if (pin.rc !== undefined) {
+    if (target.minor !== undefined || (target.rc !== undefined && target.rc > pin.rc)) return [];
+    if (target.rc !== undefined) {
+      return [`${tag} is older than the pinned ${pinTag}: a bump moves the pin forward.`];
+    }
+    return [`${tag} is not a release or release candidate of PostgreSQL ${pin.major}: beta tags are build-only.`];
+  }
   if (target.minor === undefined) {
     return [
       `${tag} is not a release of PostgreSQL ${pin.major} (REL_${pin.major}_<minor>): a bump moves to a release.`,
     ];
   }
-  if (target.minor === pin.minor) return [`upstream.json already pins ${tag}.`];
-  if (target.minor < pin.minor) {
+  if (pin.minor !== undefined && target.minor < pin.minor) {
     return [`${tag} is older than the pinned ${pinTag}: a bump moves the pin forward, to a newer minor release.`];
   }
   return [];
@@ -150,6 +163,58 @@ export interface Rebased {
   readonly head: string;
   readonly applied: readonly PatchApplied[];
   readonly failure: AmFailure | undefined;
+  /** The series was deliberately resolved and validated in work/<tag>. */
+  readonly resolved?: boolean;
+}
+
+/** A completed, linear resolution from the documented work/<tag> worktree, without changing the pin. */
+export function resolvedSeries(layout: Layout, tag: string, base: string, patches: readonly string[]): Rebased {
+  if (parseUpstreamTag(tag) === undefined) throw new UserError(`bump: invalid resolved tag ${JSON.stringify(tag)}.`);
+  const worktree = join(layout.workDir, tag);
+  const where = relative(layout.root, worktree);
+  if (!existsSync(worktree)) {
+    throw new UserError(
+      `bump: ${where} does not exist; resolve the series with \`bun run patches:work ${tag}\` first.`,
+    );
+  }
+  const common = gitTree(layout, worktree, ["rev-parse", "--path-format=absolute", "--git-common-dir"]).stdout.trim();
+  const top = gitTree(layout, worktree, ["rev-parse", "--show-toplevel"]).stdout.trim();
+  if (realpathSync(common) !== realpathSync(layout.cacheRepo) || realpathSync(top) !== realpathSync(worktree)) {
+    throw new UserError(`bump: ${where} is not a worktree of the upstream cache.`);
+  }
+  const branch = gitTree(layout, worktree, ["symbolic-ref", "--quiet", "--short", "HEAD"], {
+    allowFailure: true,
+  }).stdout.trim();
+  if (branch !== `work/${tag}`) throw new UserError(`bump: ${where} must be on branch work/${tag}.`);
+  const operations = ["rebase-apply", "rebase-merge", "MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD"].filter(
+    (name) => {
+      const path = gitTree(layout, worktree, ["rev-parse", "--git-path", name]).stdout.trim();
+      return existsSync(resolve(worktree, path));
+    },
+  );
+  if (operations.length > 0) {
+    throw new UserError(`bump: ${where} has an operation in progress (${operations.join(", ")}); finish it first.`);
+  }
+  const dirty = gitTree(layout, worktree, ["status", "--porcelain", "--untracked-files=no"]).stdout.trim();
+  if (dirty !== "") throw new UserError(`bump: ${where} has uncommitted changes to tracked files; commit them first.`);
+  const tagCommit = gitTree(layout, worktree, ["rev-parse", "--verify", `refs/tags/${tag}^{commit}`]).stdout.trim();
+  if (tagCommit !== base) throw new UserError(`bump: ${where}'s ${tag} does not match the fetched target ${base}.`);
+  const overlay = listOverlay(layout.overlayDir);
+  const collisions = overlayCollisions(layout, worktree, overlay);
+  if (collisions.length > 0) throw collisionError(collisions, `${where}'s HEAD`);
+  const staging = scratchDir(layout, "bump-resolved");
+  try {
+    // formatSeries also refuses a wrong base and merge commits; count empty commits too.
+    const written = formatSeries(layout, worktree, base, staging);
+    const count = Number(gitTree(layout, worktree, ["rev-list", "--count", `${base}..HEAD`]).stdout.trim());
+    if (count !== patches.length || written.join("\n") !== patches.join("\n")) {
+      throw new UserError(`bump: ${where} must contain exactly the expected topic series (${patches.join(", ")}).`);
+    }
+  } finally {
+    rmSync(staging, { recursive: true, force: true });
+  }
+  const head = gitTree(layout, worktree, ["rev-parse", "HEAD"]).stdout.trim();
+  return { worktree, base, head, applied: [], failure: undefined, resolved: true };
 }
 
 /**
@@ -184,6 +249,12 @@ export function rangeDiff(layout: Layout, from: { base: string; head: string }, 
 
 /** How each patch of the series applied onto a tag, for a report. */
 export function applyLog(patches: readonly string[], rebased: Rebased): ApplyLog {
+  if (rebased.resolved === true) {
+    return {
+      patches: patches.map((patch) => ({ patch, result: "resolved in worktree" })),
+      output: `Validated the resolved topic series at ${rebased.worktree} (${rebased.head}).`,
+    };
+  }
   const results = new Map<string, ApplyLog["patches"][number]["result"]>(
     rebased.applied.map((entry) => [entry.patch, entry.threeWay ? "applied with a 3-way merge" : "applied cleanly"]),
   );

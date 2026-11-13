@@ -1,9 +1,9 @@
 /**
- * bun run bump <upstream tag> [--image <reference> | --lock] [--report <file>] [--trailer <trailer>]...
+ * bun run bump <upstream tag> [--resolved] [--image <reference> | --lock] [--report <file>] [--trailer <trailer>]...
  *
  * Moves the pin to a newer upstream release of the pinned major (ADR-0001 decision 7), and says what that changes.
  * It refuses a tag of another major (majors are adopted deliberately, through a port-<major> branch: decision 8),
- * anything but a newer release (`REL_<major>_<minor>`), a tag upstream does not have or that does not resolve to a
+ * anything but a newer release or forward RC transition, a tag upstream does not have or that does not resolve to a
  * commit, and a working tree with changes. Then:
  *
  *   apply    fetches the tag with its history since the pinned one into the upstream cache, and applies the series
@@ -24,6 +24,7 @@
  * before a release.
  *
  * --image, --lock  the builder image, as for `bun run gate` (default: the local image).
+ * --resolved       adopt the completed topic series in work/<tag> after resolving an apply conflict.
  * --report         where the report goes (default .cache/bump/<tag>.md): the bump's pull request body.
  * --trailer        a trailer for the bump commit's message (`git commit --trailer`); repeatable.
  *
@@ -56,6 +57,7 @@ import {
   patchedFiles,
   rangeDiff,
   rebaseSeries,
+  resolvedSeries,
   regressTestsChanged,
   upstreamCommits,
   where,
@@ -80,12 +82,13 @@ import { removeWorktree, resolveTag } from "./lib/upstream.ts";
 import { repositoryCandidate } from "./lib/version.ts";
 
 const USAGE =
-  "Usage: bun run bump <upstream tag> [--image <reference> | --lock] [--report <file>] [--trailer <trailer>]...";
+  "Usage: bun run bump <upstream tag> [--resolved] [--image <reference> | --lock] [--report <file>] [--trailer <trailer>]...";
 
 interface Options {
   tag: string;
   image: string | undefined;
   lock: boolean;
+  resolved: boolean;
   report: string | undefined;
   trailers: string[];
 }
@@ -93,11 +96,15 @@ interface Options {
 function options(args: readonly string[]): Options {
   const [tag, ...rest] = args;
   if (tag === undefined || tag.startsWith("-")) throw new UserError(USAGE);
-  const parsed: Options = { tag, image: undefined, lock: false, report: undefined, trailers: [] };
+  const parsed: Options = { tag, image: undefined, lock: false, resolved: false, report: undefined, trailers: [] };
   for (let index = 0; index < rest.length; index += 1) {
     const flag = rest[index];
     if (flag === "--lock") {
       parsed.lock = true;
+      continue;
+    }
+    if (flag === "--resolved") {
+      parsed.resolved = true;
       continue;
     }
     const value = rest[index + 1];
@@ -329,7 +336,20 @@ await runCliAsync(async () => {
   const newCommit = fetchTagHistory(layout, pin.repository, target.tag, pin.tag);
   const from: TagRef = { tag: pin.tag, commit: oldCommit };
   const to: TagRef = { tag: target.tag, commit: newCommit };
-  const reportFile = resolve(args.report ?? join(layout.cacheDir, "bump", `${target.tag}.md`));
+  const reportFile = resolve(
+    args.report ?? join(layout.cacheDir, "bump", `${target.tag}${args.resolved ? "-resolved" : ""}.md`),
+  );
+  // A resumed report must not erase the original explanation of the conflict.
+  if (args.resolved && existsSync(reportFile)) {
+    const original = readFileSync(reportFile, "utf8");
+    if (original.split("\n", 1)[0]?.endsWith(": CONFLICT") === true) {
+      const preserved = `${reportFile}.conflict.md`;
+      if (existsSync(preserved) && readFileSync(preserved, "utf8") !== original) {
+        throw new UserError(`bump: ${preserved} already preserves another conflict; choose a fresh --report path.`);
+      }
+      writeReport(preserved, original);
+    }
+  }
   const patches = listPatches(layout.patchesDir);
   const upstreamTotal = countCommits(layout, oldCommit, newCommit);
   info(
@@ -350,8 +370,10 @@ await runCliAsync(async () => {
     if (old.failure !== undefined) {
       throw new UserError(`bump: patches/ does not apply on the pinned ${pin.tag}; run \`bun run patches:check\`.`);
     }
-    const next = rebaseSeries(layout, "bump-new", newCommit, patches);
-    worktrees.push(next.worktree);
+    const next = args.resolved
+      ? resolvedSeries(layout, target.tag, newCommit, patches)
+      : rebaseSeries(layout, "bump-new", newCommit, patches);
+    if (next.resolved !== true) worktrees.push(next.worktree);
     apply = applyLog(patches, next);
     for (const entry of apply.patches) info(`bump: ${entry.patch}: ${entry.result}`);
 

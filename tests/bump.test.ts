@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 import {
   bumpCommitMessage,
@@ -13,21 +13,24 @@ import {
 } from "../scripts/lib/bump-report.ts";
 import {
   bumpTagProblems,
+  applyLog,
   checkBumpTag,
   conflictedFiles,
   countCommits,
   fetchTagHistory,
+  exportRebased,
   parseLsRemote,
   parseUpstreamTag,
   patchChange,
   patchedFiles,
   rangeDiff,
   rebaseSeries,
+  resolvedSeries,
   regressTestsChanged,
   upstreamCommits,
   writePin,
 } from "../scripts/lib/bump.ts";
-import { exportSeries, workSeries } from "../scripts/lib/commands.ts";
+import { checkSeries, exportSeries, workSeries } from "../scripts/lib/commands.ts";
 import { readUpstreamPin } from "../scripts/lib/config.ts";
 import { git, UserError } from "../scripts/lib/git.ts";
 import { followRange, invertHunks, oldRange, parseDiffHunks, type Hunk } from "../scripts/lib/hunks.ts";
@@ -53,6 +56,36 @@ describe("the bump's target", () => {
     expect(bumpTagProblems("REL_18_3", "REL_18_6")).toEqual([]);
     expect(bumpTagProblems("REL_18_3", "REL_18_4")).toEqual([]);
     expect(checkBumpTag("REL_18_3", "REL_18_6")).toEqual({ tag: "REL_18_6", major: 18, minor: 6 });
+  });
+
+  test("a port moves from an RC to a higher RC or a final release of the same major", () => {
+    expect(parseUpstreamTag("REL_19_RC2")).toEqual({ tag: "REL_19_RC2", major: 19, minor: undefined, rc: 2 });
+    for (const tag of ["REL_19_RC2", "REL_19_RC10", "REL_19_0", "REL_19_1"]) {
+      expect(bumpTagProblems("REL_19_RC1", tag)).toEqual([]);
+    }
+    expect(bumpTagProblems("REL_19_RC2", "REL_19_RC1")[0]).toContain("older than the pinned REL_19_RC2");
+    expect(bumpTagProblems("REL_19_RC2", "REL_19_RC2")).toEqual(["upstream.json already pins REL_19_RC2."]);
+    expect(bumpTagProblems("REL_19_RC2", "REL_19_BETA4")[0]).toContain("beta tags are build-only");
+    expect(bumpTagProblems("REL_19_RC2", "REL_20_RC1")[0]).toContain("but the pin is PostgreSQL 19");
+    expect(bumpTagProblems("REL_19_0", "REL_19_RC2")[0]).toContain("is not a release of PostgreSQL 19");
+    expect(bumpTagProblems("REL_19_BETA4", "REL_19_RC1")[0]).toContain("upstream.json pins REL_19_BETA4");
+  });
+
+  test("malformed or unsafe numeric tag components are not parsed as releases or RCs", () => {
+    for (const tag of [
+      "REL_019_RC2",
+      "REL_0_RC2",
+      "REL_19_RC0",
+      "REL_19_RC02",
+      "REL_19_RC",
+      "REL_19_BETA0",
+      "REL_19_00",
+      "REL_19_rc2",
+      "REL_19_NOTARELEASE",
+      "REL_9007199254740992_RC2",
+      "REL_19_RC9007199254740992",
+    ])
+      expect(parseUpstreamTag(tag)).toBeUndefined();
   });
 
   test("another major, a beta or a release candidate of it, is adopted through a port branch, never bumped", () => {
@@ -86,6 +119,110 @@ describe("the bump's target", () => {
     expect(parseLsRemote(annotated, "REL_18_6")).toEqual({ object: sha("a"), peeled: sha("b") });
     expect(parseLsRemote(`${sha("a")}\trefs/tags/REL_18_60\n`, "REL_18_6")).toBeUndefined();
     expect(parseLsRemote("", "REL_18_6")).toBeUndefined();
+  });
+});
+
+describe("a resolved bump worktree", () => {
+  function resolvedFixture() {
+    const fixture = makeFixture();
+    const pin = readUpstreamPin(fixture.layout);
+    const base = fetchTagHistory(fixture.layout, pin.repository, "REL_1_2", pin.tag);
+    const worktree = workSeries(fixture.layout, "REL_1_2", {}, quiet);
+    const patches = listPatches(fixture.layout.patchesDir);
+    const run = (args: string[]) => git(args, { cwd: worktree, env: fixture.env }).stdout.trim();
+    return { ...fixture, pin, base, worktree, patches, run };
+  }
+
+  test("a validated series exports and round-trips on its target without changing the original pin first", () => {
+    const { layout, pin, base, worktree, patches } = resolvedFixture();
+    const original = readFileSync(layout.upstreamFile, "utf8");
+    const rebased = resolvedSeries(layout, "REL_1_2", base, patches);
+    expect(rebased).toMatchObject({ worktree, base, resolved: true, failure: undefined });
+    expect(readFileSync(layout.upstreamFile, "utf8")).toBe(original);
+    expect(applyLog(patches, rebased).patches).toEqual([
+      { patch: "0001-topic-return-2.patch", result: "resolved in worktree" },
+    ]);
+    exportRebased(layout, rebased);
+    writePin(layout, { ...pin, tag: "REL_1_2", commit: base });
+    expect(checkSeries(layout, quiet).patches).toEqual(patches);
+  });
+
+  test("a manually completed conflict is exported on the target while keeping its topic identity", () => {
+    const { layout, env } = makeFixture();
+    const pin = readUpstreamPin(layout);
+    const base = fetchTagHistory(layout, pin.repository, "REL_1_3", pin.tag);
+    expect(thrown(() => workSeries(layout, "REL_1_3", {}, quiet)).message).toContain("left mid-`git am`");
+    const worktree = join(layout.workDir, "REL_1_3");
+    const run = (args: string[]) => git(args, { cwd: worktree, env }).stdout.trim();
+    write(join(worktree, "src", "a.c"), `${run(["show", "HEAD:src/a.c"]).replace("return 3", "return 4")}\n`);
+    run(["add", "src/a.c"]);
+    run(["am", "--continue"]);
+    const patches = listPatches(layout.patchesDir);
+    const completed = resolvedSeries(layout, "REL_1_3", base, patches);
+    exportRebased(layout, completed);
+    writePin(layout, { ...pin, tag: "REL_1_3", commit: base });
+    expect(checkSeries(layout, quiet).patches).toEqual(patches);
+    expect(readFileSync(join(layout.patchesDir, patches[0] ?? ""), "utf8")).toContain("+\treturn 4;");
+  });
+
+  test("the resolved worktree must exist at the documented path and belong to the target branch", () => {
+    const { layout, base, patches, run } = resolvedFixture();
+    expect(thrown(() => resolvedSeries(layout, "REL_1_3", base, patches)).message).toContain("does not exist");
+    run(["checkout", "--quiet", "--detach"]);
+    expect(thrown(() => resolvedSeries(layout, "REL_1_2", base, patches)).message).toContain(
+      "must be on branch work/REL_1_2",
+    );
+  });
+
+  test("a different repository at the worktree path cannot supply the resolution", () => {
+    const { layout, base, worktree, patches, env } = resolvedFixture();
+    removeWorktree(layout, worktree);
+    git(["init", "--quiet", "--initial-branch=work/REL_1_2", worktree], { cwd: layout.root, env });
+    expect(thrown(() => resolvedSeries(layout, "REL_1_2", base, patches)).message).toContain(
+      "not a worktree of the upstream cache",
+    );
+  });
+
+  test("the fetched target and ancestry must match, with no uncommitted resolution", () => {
+    const { layout, pin, base, worktree, patches, run } = resolvedFixture();
+    expect(thrown(() => resolvedSeries(layout, "REL_1_2", pin.commit, patches)).message).toContain(
+      "does not match the fetched target",
+    );
+    write(join(worktree, "src", "b.c"), "int dirty;\n");
+    expect(thrown(() => resolvedSeries(layout, "REL_1_2", base, patches)).message).toContain("uncommitted changes");
+    run(["reset", "--hard", pin.commit]);
+    expect(thrown(() => resolvedSeries(layout, "REL_1_2", base, patches)).message).toContain("HEAD does not descend");
+  });
+
+  test("an unfinished am or rebase cannot be adopted", () => {
+    const { layout, base, worktree, patches, run } = resolvedFixture();
+    const pending = resolve(worktree, run(["rev-parse", "--git-path", "rebase-apply"]));
+    mkdirSync(pending);
+    expect(thrown(() => resolvedSeries(layout, "REL_1_2", base, patches)).message).toContain(
+      "operation in progress (rebase-apply)",
+    );
+  });
+
+  test("renamed, additional or empty topic commits cannot silently change the series", () => {
+    const { layout, base, patches, run } = resolvedFixture();
+    run(["commit", "--quiet", "--amend", "-m", "different: topic"]);
+    expect(thrown(() => resolvedSeries(layout, "REL_1_2", base, patches)).message).toContain(
+      "exactly the expected topic series",
+    );
+    run(["commit", "--quiet", "--amend", "-m", "topic: return 2"]);
+    run(["commit", "--quiet", "--allow-empty", "-m", "empty: extra"]);
+    expect(thrown(() => resolvedSeries(layout, "REL_1_2", base, patches)).message).toContain(
+      "exactly the expected topic series",
+    );
+  });
+
+  test("committing an overlay path is refused", () => {
+    const { layout, base, patches, run } = resolvedFixture();
+    run(["add", "--force", "tools/run.sh"]);
+    run(["commit", "--quiet", "--amend", "--no-edit"]);
+    expect(thrown(() => resolvedSeries(layout, "REL_1_2", base, patches)).message).toContain(
+      "overlay paths already exist",
+    );
   });
 });
 

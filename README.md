@@ -459,15 +459,17 @@ Requirements: as for [the engine gate](#the-engine-gate-ci-and-releases), the ne
 comparison (without it the report says so and goes on).
 
 ```sh
-bun run bump <upstream tag> [--image <ref> | --lock] [--report <file>] [--trailer <trailer>]...
+bun run bump <upstream tag> [--resolved] [--image <ref> | --lock] [--report <file>] [--trailer <trailer>]...
 ```
 
 A new minor release of the pinned major (`REL_18_6` on a `REL_18_3` pin) goes in through **`bump`** (ADR-0001
 decision 7), run by hand or by [the weekly poll](#the-weekly-poll-and-the-next-major), unchanged.
+On an existing RC port it also accepts a higher RC number of the same major, or a transition to that
+major's final release. Stable pins cannot move back to an RC; beta adoption remains port work.
 
 - **It refuses** a tag of another major, a release, a beta or a release candidate alike (`REL_19_BETA4`: a new
   major is adopted deliberately, through a `port-<major>` branch rebased onto main, decision 8), anything but a
-  newer release of the pinned major (`REL_18_BETA1`, the pinned tag, an older one), a tag upstream does not have
+  newer supported release of the pinned major (`REL_18_BETA1`, the pinned tag, an older one), a tag upstream does not have
   (`git ls-remote`) or that does not resolve to a commit, and a working tree with changes.
 - **It applies** the series onto the tag: the tag is fetched into the upstream cache with its history since the
   pinned one (`--shallow-exclude`, so that the commits between them can be listed and diffed), and the patches
@@ -475,7 +477,9 @@ decision 7), run by hand or by [the weekly poll](#the-weekly-poll-and-the-next-m
   in the repository: the report names the patch, each conflicting file with the patch's hunks, where the plain
   apply stopped, the 3-way merge's conflict regions and their text, and the upstream commits between the tags
   that changed the file, marking those that changed the lines the hunks stand on. The conflict is then resolved
-  by hand in `patches:work <tag>`.
+  by hand in `patches:work <tag>`. Finish the worktree's patch commits, then run `bump <tag> --resolved`.
+  That mode verifies the worktree's base, branch, clean state and linear topic series before exporting it
+  and committing the new pin through the same checked flow. Do not edit `upstream.json` by hand.
 - **On a clean apply it commits the bump**: `patches/` re-exported onto the tag (context lines and blob ids
   move) and `upstream.json`'s tag and commit, proven by `patches:check`, in one commit, validated by the hook,
   whose subject is `upstream: bump the pin to <tag>` (`--trailer` adds trailers to its message). A failure

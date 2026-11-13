@@ -383,9 +383,10 @@ export class Postgres {
    * One exchange on the session: `message` (a startup packet, or one or more whole frontend messages) goes
    * in, and every byte the backend writes in response comes back, or, with a `stream`, goes to its `write`
    * as it is flushed (and an empty array comes back). SSL and GSS encryption requests are refused with `N`,
-   * as a server without either does; a cancel request and a Terminate are ignored, since the session ends
-   * with the instance. A throw that is not the runtime's own unwind means the wasm stack was abandoned
-   * mid-function, and an exit ({@link BackendExit}) means the backend tore its session down: either is
+   * as a server without either does; cancel requests are parsed but never dispatched by the embedded C
+   * adapter, and Terminate is ignored since the session ends with the instance. A throw that is not the
+   * runtime's own unwind means the wasm stack was abandoned mid-function, and an exit ({@link BackendExit})
+   * means the backend tore its session down: either is
    * rethrown, and every later exchange is refused.
    */
   exchange(message: Uint8Array, stream?: ExchangeStream): Uint8Array {
@@ -430,9 +431,14 @@ export class Postgres {
       this.#output.push(new Uint8Array([0x4e])); // 'N'
       return;
     }
-    if (code === CANCEL_REQUEST) return;
     const mod = this.module;
-    if (mod._ProcessStartupPacket(mod._pgwasm_getMyProcPort()) !== 0) {
+    const status = mod._ProcessStartupPacket(mod._pgwasm_getMyProcPort());
+    if (code === CANCEL_REQUEST) {
+      // RC2's one-argument adapter owns the pending request; it must never accept a cancel as a login.
+      if (status !== -1) throw new Error(`Postgres accepted an embedded cancel request (status ${status})`);
+      return;
+    }
+    if (status !== 0) {
       throw new Error(`Postgres rejected the startup packet:\n${this.recentOutput}`);
     }
     mod._pgwasm_sendConnData();

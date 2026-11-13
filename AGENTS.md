@@ -104,9 +104,14 @@ consumes the releases. Read [README.md](README.md) and
   release, beta or release candidate: majors are adopted deliberately, through a `port-<major>` branch rebased
   onto main, decision 8), anything but a newer release of the pinned major, a tag upstream lacks or that does not
   resolve to a commit, and a working tree with changes.
+- **An existing RC port advances through the same command.** It accepts a higher RC number of the
+  pinned major or that major's final release. A stable pin never moves back to an RC, and beta adoption
+  remains deliberate port work. After resolving a conflict in `patches:work <tag>`, finish its patch
+  commits and run `bun run bump <tag> --resolved`; the command validates and exports that worktree,
+  changes the pin and commits them together. Never edit the pin to make `patches:export` accept a bump.
 - **A conflict changes nothing.** `bump` writes the report (the patch, the conflicting files and hunks, the
-  upstream commits between the tags that changed those lines) and stops; the conflict is resolved by hand in
-  `bun run patches:work <tag>`, then `patches:export`, `patches:check` and a commit.
+  upstream commits between the tags that changed those lines) and stops; resolve it in
+  `bun run patches:work <tag>`, finish the patch commits, then resume with `bump <tag> --resolved`.
 - **`bump` never re-records a record, and neither does anyone before reading its report.** On a clean apply it
   commits the pin with the re-exported series, runs `gate --keep-going` and writes the report; the regress
   baseline, `exported_functions.txt` and `identity/prepopulated.json` are re-recorded afterwards, each in its own
