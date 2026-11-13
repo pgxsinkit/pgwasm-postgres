@@ -1,7 +1,7 @@
 diff -U3 expected/alter_operator.out results/alter_operator.out
 --- expected/alter_operator.out
 +++ results/alter_operator.out
-@@ -255,13 +255,18 @@
+@@ -265,7 +265,10 @@
  -- Clean up
  --
  DROP USER regress_alter_op_user;
@@ -12,11 +12,13 @@ diff -U3 expected/alter_operator.out results/alter_operator.out
  DROP OPERATOR === (boolean, real);
  DROP OPERATOR ==== (real, boolean);
  DROP OPERATOR !==== (boolean, real);
- DROP OPERATOR @= (real, boolean);
+@@ -273,7 +276,9 @@
  DROP OPERATOR @!= (boolean, real);
+ DROP OPERATOR @=@ (real, boolean);
  DROP FUNCTION customcontsel(internal, oid, internal, integer);
 +ERROR:  must be owner of function customcontsel
  DROP FUNCTION alter_op_test_fn(boolean, boolean);
 +ERROR:  must be owner of function alter_op_test_fn
  DROP FUNCTION alter_op_test_fn_bool_real(boolean, real);
  DROP FUNCTION alter_op_test_fn_real_bool(real, boolean);
+ DROP FUNCTION alter_op_test_fn_real_bool_int(real, boolean);

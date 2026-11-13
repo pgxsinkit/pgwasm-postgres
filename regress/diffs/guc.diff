@@ -1,7 +1,7 @@
 diff -U3 expected/guc.out results/guc.out
 --- expected/guc.out
 +++ results/guc.out
-@@ -577,9 +577,9 @@
+@@ -581,9 +581,9 @@
  -- Check what happens when you try to set a "custom" GUC within the
  -- namespace of an extension.
  SET plpgsql.extra_foo_warnings = true;  -- allowed if plpgsql is not loaded yet
@@ -13,7 +13,7 @@ diff -U3 expected/guc.out results/guc.out
  SET plpgsql.extra_foo_warnings = true;  -- now, it's an error
  ERROR:  invalid configuration parameter name "plpgsql.extra_foo_warnings"
  DETAIL:  "plpgsql" is a reserved prefix.
-@@ -681,10 +681,12 @@
+@@ -685,10 +685,12 @@
  SELECT current_user = 'regress_guc_user';
   ?column? 
  ----------
@@ -27,7 +27,7 @@ diff -U3 expected/guc.out results/guc.out
  --
  -- search_path should react to changes in pg_namespace
  --
-@@ -696,13 +698,15 @@
+@@ -700,13 +702,15 @@
  (1 row)
  
  create schema not_there_initially;
@@ -46,7 +46,7 @@ diff -U3 expected/guc.out results/guc.out
  select current_schemas(false);
   current_schemas 
  -----------------
-@@ -714,59 +718,59 @@
+@@ -718,59 +722,59 @@
  -- Test parsing of log_min_messages
  --
  SET log_min_messages TO foo;  -- fail
@@ -129,7 +129,7 @@ diff -U3 expected/guc.out results/guc.out
  --
  -- Tests for function-local GUC settings
  --
-@@ -910,15 +914,18 @@
+@@ -914,15 +918,18 @@
  -- Test that disabling track_activities disables query ID reporting in
  -- pg_stat_activity.
  SET compute_query_id = on;
@@ -149,7 +149,7 @@ diff -U3 expected/guc.out results/guc.out
  SELECT query_id IS NOT NULL AS qid_set FROM pg_stat_activity
    WHERE pid = pg_backend_pid();
   qid_set 
-@@ -927,7 +934,9 @@
+@@ -931,7 +938,9 @@
  (1 row)
  
  RESET track_activities;

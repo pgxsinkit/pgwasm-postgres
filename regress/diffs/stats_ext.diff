@@ -1,7 +1,7 @@
 diff -U3 expected/stats_ext.out results/stats_ext.out
 --- expected/stats_ext.out
 +++ results/stats_ext.out
-@@ -120,118 +120,145 @@
+@@ -142,118 +142,145 @@
  ERROR:  must be owner of statistics object ab1_a_b_stats
  RESET SESSION AUTHORIZATION;
  DROP ROLE regress_stats_ext;
@@ -171,7 +171,7 @@ diff -U3 expected/stats_ext.out results/stats_ext.out
  -- Tests for stats with inheritance
  CREATE TABLE stxdinh(a int, b int);
  CREATE TABLE stxdinh1() INHERITS(stxdinh);
-@@ -312,76 +339,115 @@
+@@ -334,76 +361,115 @@
  DROP TABLE stxdinp;
  -- basic test for statistics on expressions
  CREATE TABLE ab1 (a INTEGER, b INTEGER, c TIMESTAMP, d TIMESTAMPTZ);
@@ -306,7 +306,7 @@ diff -U3 expected/stats_ext.out results/stats_ext.out
  DO $$
  DECLARE
  	relname text := reltoastrelid::regclass FROM pg_class WHERE oid = 'tststats.t'::regclass;
-@@ -391,18 +457,15 @@
+@@ -413,18 +479,15 @@
  	RAISE NOTICE 'stats on toast table not created';
  END;
  $$;
@@ -332,7 +332,7 @@ diff -U3 expected/stats_ext.out results/stats_ext.out
  -- n-distinct tests
  CREATE TABLE ndistinct (
      filler1 TEXT,
-@@ -481,14 +544,7 @@
+@@ -503,14 +566,7 @@
    FROM pg_statistic_ext s, pg_statistic_ext_data d
   WHERE s.stxrelid = 'ndistinct'::regclass
     AND d.stxoid = s.oid;
@@ -348,7 +348,7 @@ diff -U3 expected/stats_ext.out results/stats_ext.out
  -- minor improvement, make sure the ctid does not break the matching
  SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY ctid, a, b');
   estimated | actual 
-@@ -566,14 +622,7 @@
+@@ -588,14 +644,7 @@
    FROM pg_statistic_ext s, pg_statistic_ext_data d
   WHERE s.stxrelid = 'ndistinct'::regclass
     AND d.stxoid = s.oid;
@@ -364,7 +364,7 @@ diff -U3 expected/stats_ext.out results/stats_ext.out
  -- correct estimates
  SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, b');
   estimated | actual 
-@@ -634,10 +683,7 @@
+@@ -656,10 +705,7 @@
    FROM pg_statistic_ext s, pg_statistic_ext_data d
   WHERE s.stxrelid = 'ndistinct'::regclass
     AND d.stxoid = s.oid;
@@ -376,7 +376,7 @@ diff -U3 expected/stats_ext.out results/stats_ext.out
  -- dropping the statistics results in under-estimates
  SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, b');
   estimated | actual 
-@@ -718,14 +764,7 @@
+@@ -740,14 +786,7 @@
    FROM pg_statistic_ext s, pg_statistic_ext_data d
   WHERE s.stxrelid = 'ndistinct'::regclass
     AND d.stxoid = s.oid;
@@ -392,7 +392,7 @@ diff -U3 expected/stats_ext.out results/stats_ext.out
  SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY (a+1), (b+100)');
   estimated | actual 
  -----------+--------
-@@ -770,14 +809,7 @@
+@@ -792,14 +831,7 @@
    FROM pg_statistic_ext s, pg_statistic_ext_data d
   WHERE s.stxrelid = 'ndistinct'::regclass
     AND d.stxoid = s.oid;
@@ -408,7 +408,7 @@ diff -U3 expected/stats_ext.out results/stats_ext.out
  SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, b');
   estimated | actual 
  -----------+--------
-@@ -2307,11 +2339,7 @@
+@@ -2329,11 +2361,7 @@
    FROM pg_statistic_ext s, pg_statistic_ext_data d
   WHERE s.stxname = 'mcv_lists_stats'
     AND d.stxoid = s.oid;
@@ -421,7 +421,7 @@ diff -U3 expected/stats_ext.out results/stats_ext.out
  -- check change of column type resets the MCV statistics
  ALTER TABLE mcv_lists ALTER COLUMN c TYPE numeric;
  SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a = 1 AND b = ''1''');
-@@ -2616,11 +2644,7 @@
+@@ -2638,11 +2666,7 @@
         pg_mcv_list_items(d.stxdmcv) m
   WHERE s.stxname = 'mcv_lists_stats'
     AND d.stxoid = s.oid;
@@ -434,7 +434,7 @@ diff -U3 expected/stats_ext.out results/stats_ext.out
  -- 2 distinct combinations with NULL values, all in the MCV list
  TRUNCATE mcv_lists;
  DROP STATISTICS mcv_lists_stats;
-@@ -2659,12 +2683,7 @@
+@@ -2681,12 +2705,7 @@
         pg_mcv_list_items(d.stxdmcv) m
   WHERE s.stxname = 'mcv_lists_stats'
     AND d.stxoid = s.oid;
@@ -448,7 +448,7 @@ diff -U3 expected/stats_ext.out results/stats_ext.out
  SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE b = ''x'' OR d = ''x''');
   estimated | actual 
  -----------+--------
-@@ -3217,15 +3236,24 @@
+@@ -3239,15 +3258,24 @@
  --
  -- Currently this is only relevant for MCV stats.
  CREATE SCHEMA tststats;
@@ -473,7 +473,7 @@ diff -U3 expected/stats_ext.out results/stats_ext.out
  -- Check printing info about extended statistics by \dX
  create table stts_t1 (a int, b int);
  create statistics (ndistinct) on a, b from stts_t1;
-@@ -3236,29 +3264,31 @@
+@@ -3258,29 +3286,31 @@
  create table stts_t3 (col1 int, col2 int, col3 int);
  create statistics stts_hoge on col1, col2, col3 from stts_t3;
  create schema stts_s1;
@@ -521,7 +521,7 @@ diff -U3 expected/stats_ext.out results/stats_ext.out
  
  \dX stts_t*
                               List of extended statistics
-@@ -3278,22 +3308,20 @@
+@@ -3300,22 +3330,20 @@
  (1 row)
  
  \dX+
@@ -558,7 +558,7 @@ diff -U3 expected/stats_ext.out results/stats_ext.out
  
  \dX+ stts_t*
                                      List of extended statistics
-@@ -3313,11 +3341,10 @@
+@@ -3335,11 +3363,10 @@
  (1 row)
  
  \dX+ stts_s2.stts_yama
@@ -574,7 +574,7 @@ diff -U3 expected/stats_ext.out results/stats_ext.out
  
  create statistics (mcv) ON a, b, (a+b), (a-b) FROM stts_t1;
  create statistics (mcv) ON a, b, (a+b), (a-b) FROM stts_t1;
-@@ -3337,26 +3364,29 @@
+@@ -3359,26 +3386,29 @@
  set search_path to public, stts_s1;
  \dX
                                                         List of extended statistics
@@ -616,7 +616,7 @@ diff -U3 expected/stats_ext.out results/stats_ext.out
   public | func_deps_stat         | (a * 2), upper(b), (c + 1::numeric) FROM functional_dependencies |           | defined      | 
   public | mcv_lists_arrays_stats | a, b, c FROM mcv_lists_arrays                                    |           |              | defined
   public | mcv_lists_bool_stats   | a, b, c FROM mcv_lists_bool                                      |           |              | defined
-@@ -3366,23 +3396,34 @@
+@@ -3388,23 +3418,34 @@
   public | stts_t1_a_b_stat1      | a, b FROM stts_t1                                                | defined   | defined      | 
   public | stts_t1_a_b_stat2      | a, b FROM stts_t1                                                | defined   | defined      | defined
   public | stts_t2_b_c_stat       | b, c FROM stts_t2                                                | defined   | defined      | defined
@@ -654,7 +654,7 @@ diff -U3 expected/stats_ext.out results/stats_ext.out
  -- Attempt to gain access using a leaky operator
  CREATE FUNCTION op_leak(int, int) RETURNS bool
      AS 'BEGIN RAISE NOTICE ''op_leak => %, %'', $1, $2; RETURN $1 < $2; END'
-@@ -3395,101 +3436,135 @@
+@@ -3417,101 +3458,135 @@
  CREATE OPERATOR <<< (procedure = op_leak, leftarg = record, rightarg = record,
                       restrict = scalarltsel);
  SELECT * FROM tststats.priv_test_tbl WHERE a <<< 0 AND b <<< 0; -- Permission denied
@@ -834,7 +834,7 @@ diff -U3 expected/stats_ext.out results/stats_ext.out
  -- privilege checks for pg_stats_ext and pg_stats_ext_exprs
  RESET SESSION AUTHORIZATION;
  CREATE TABLE stats_ext_tbl (id INT PRIMARY KEY GENERATED BY DEFAULT AS IDENTITY, col TEXT);
-@@ -3499,23 +3574,30 @@
+@@ -3521,23 +3596,30 @@
  ANALYZE stats_ext_tbl;
  -- unprivileged role should not have access
  SET SESSION AUTHORIZATION regress_stats_user1;
@@ -869,7 +869,7 @@ diff -U3 expected/stats_ext.out results/stats_ext.out
  SELECT statistics_name, most_common_vals FROM pg_stats_ext x
      WHERE tablename = 'stats_ext_tbl' ORDER BY ROW(x.*);
   statistics_name |             most_common_vals              
-@@ -3535,38 +3617,58 @@
+@@ -3557,38 +3639,58 @@
  -- CREATE STATISTICS checks for CREATE on the schema
  RESET SESSION AUTHORIZATION;
  CREATE SCHEMA sts_sch1 CREATE TABLE sts_sch1.tbl (a INT, b INT, c INT GENERATED ALWAYS AS (b * 2) STORED);
@@ -932,7 +932,7 @@ diff -U3 expected/stats_ext.out results/stats_ext.out
  -- Tidy up
  DROP OPERATOR <<< (int, int);
  DROP FUNCTION op_leak(int, int);
-@@ -3575,38 +3677,47 @@
+@@ -3597,38 +3699,47 @@
  RESET SESSION AUTHORIZATION;
  DROP TABLE stats_ext_tbl;
  DROP SCHEMA tststats CASCADE;

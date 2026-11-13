@@ -1,22 +1,22 @@
 {
   "$comment": "The pg_regress baseline (ADR-0001 decision 6): each test of the schedule on the pinned tag, run through the TCP bridge on the build, with --use-existing --max-connections=1. A failed test's normalised diff is regress/diffs/<test>.diff; an unstable test's outcome or diff differed between the recorded runs. `tests` and `summary` are written by `bun run regress --record`; `groups` (why each failing or unstable test fails) are written by hand and kept by --record. `bun run regress` fails on a new failure, a changed diff or a newly unstable test, and reports a vanished failure.",
   "upstream": {
-    "tag": "REL_19_RC1",
-    "commit": "0b8bff042a997fe50fcd1c4c83b9ef1cc9ed8a89"
+    "tag": "REL_19_RC2",
+    "commit": "dffcca2e3c81178c64d4c1f44543a3507d0b7508"
   },
   "schedule": "parallel_schedule",
   "runs": 8,
   "recordedWith": {
-    "postgres.js": "49f427bd890b89ba5b29cf96e3032dcc13cbaf5aadf62b782290480317ea0178",
-    "postgres.wasm": "3caccc979114e3ac7177a77bdc4511dab775738ea397bcdde04e6959ce682eb3",
-    "postgres.data": "be7b9fd708ddffcc627aefaff8fdc35310978d8f274a87046cfd232e306a861b",
+    "postgres.js": "6c6c65b7fcbc3651f8bb38a4536216b186eb8cd57bca5fca1ce712a1fcc83009",
+    "postgres.wasm": "9d3b5b288cd1e0dc5d7adcb4b7a17de0d6dd6f5545c1fa350b98f67f3ed15306",
+    "postgres.data": "eaa28b912167539490fedb7f37ccecfd4d569919b16da7708b2aad62442bde98",
     "initdb.js": "cf3fff4109879f3be1ba321f19b126c4f8d518d9909846927d3104b1ec0a8129",
-    "initdb.wasm": "71b468843c8b75dea04a5c3775606ca8d0612f0d3240953159b44132d29e0015"
+    "initdb.wasm": "2c9bb1c3ad3267b4ae5d21c1bc9ebfaf608ecfbb2e14e671ad4ed0a24657edb3"
   },
   "summary": {
-    "tests": 239,
-    "passed": 187,
-    "failed": 50,
+    "tests": 243,
+    "passed": 188,
+    "failed": 53,
     "unstable": 2
   },
   "groups": {
@@ -29,7 +29,7 @@
       "tests": ["collate.icu.utf8"]
     },
     "regress-library": {
-      "reason": "The tests' C functions are missing (binary_coercible, widget_in, interpt_pp, test_enc_setup, test_enc_conversion, test_bytea_to_text, make_tuple_indirect, trigger_return_old, test_fdw_handler, test_pglz_compress, test_pglz_decompress, …), and so is everything built on them (the widget type, the iexit view, the test foreign-data wrapper, opr_sanity's binary_coercible checks, conversion's test_enc_* checks, encoding's ascii() checks on invalid multibyte input, all of compression_pglz). The run's --dlpath holds no regress.so: the test library is not a shipped module, so its imports are outside the backend export contract. PG18 qualification found 32 missing imports (IsBinaryCoercible, pg_do_encoding_conversion_buf, lseg_intersect, cpu_operator_cost, pglz_compress, …), and its failed dlopen broke later module loads. The PG19 gate continues to omit the test library; it does not claim that old import count or dlopen behavior was remeasured on the new toolchain. Without the file, CREATE FUNCTION … AS :'regresslib' fails with 'could not access file' before any dlopen. conversion's and copy2's diffs also show session-authorization (DROP USER, and copy2's clean-up, after RESET SESSION AUTHORIZATION). PostgreSQL 19 adds test_translation (nls), test_fdw_connection, test_inline_in_from_support_func, test_instr_time and test_pg_locale_apis to the same missing-regress.so limitation. Failed SUPPORT registration leaves foo_from_bar as a Function Scan instead of the expected inline Seq Scan. nls fails on its missing C test helper, not on disabled translation support; upstream provides a non-NLS fallback.",
+      "reason": "The tests' C functions are missing (binary_coercible, widget_in, interpt_pp, test_enc_setup, test_enc_conversion, test_bytea_to_text, make_tuple_indirect, trigger_return_old, test_fdw_handler, test_pglz_compress, test_pglz_decompress, …), and so is everything built on them (the widget type, the iexit view, the test foreign-data wrapper, opr_sanity's binary_coercible checks, conversion's test_enc_* checks, encoding's ascii() checks on invalid multibyte input, all of compression_pglz). The run's --dlpath holds no regress.so: the test library is not a shipped module, so its imports are outside the backend export contract. PG18 qualification found 32 missing imports (IsBinaryCoercible, pg_do_encoding_conversion_buf, lseg_intersect, cpu_operator_cost, pglz_compress, …), and its failed dlopen broke later module loads. The PG19 gate continues to omit the test library; it does not claim that old import count or dlopen behavior was remeasured on the new toolchain. Without the file, CREATE FUNCTION … AS :'regresslib' fails with 'could not access file' before any dlopen. conversion's and copy2's diffs also show session-authorization (DROP USER, and copy2's clean-up, after RESET SESSION AUTHORIZATION). PostgreSQL 19 adds test_translation (nls), test_fdw_connection, test_inline_in_from_support_func, test_instr_time and test_pg_locale_apis to the same missing-regress.so limitation. Failed SUPPORT registration leaves foo_from_bar as a Function Scan instead of the expected inline Seq Scan. nls fails on its missing C test helper, not on disabled translation support; upstream provides a non-NLS fallback. RC2 adds expanded_record_identity, expanded_record_info and expanded_record_field_text in test_setup, so their callers in rowtypes and rowtypes_alter fail with missing-function errors. attribute_version's missing make_tuple_unversioned prevents its mixed legacy/versioned row inserts, which then produces missing-row cascades; it does not establish that the engine's composite-datum safety checks fail.",
       "tests": [
         "test_setup",
         "type_sanity",
@@ -49,7 +49,10 @@
         "opr_sanity",
         "conversion",
         "compression_pglz",
-        "nls"
+        "nls",
+        "rowtypes",
+        "rowtypes_alter",
+        "attribute_version"
       ]
     },
     "session-authorization": {
@@ -91,7 +94,7 @@
       "tests": ["create_schema"]
     },
     "walreceiver-libpq": {
-      "reason": "libpqwalreceiver.so loads, and CREATE SUBSCRIPTION … WITH (connect = false) works, but a connection attempt fails with 'libpq is incorrectly linked to backend functions' where 'port=-1' expects libpq's own 'invalid port number': the module links libpq statically without libpgcommon's frontend build, so libpq's pg_link_canary_is_frontend() is the backend's, which says no (and libpq's pg_char_to_encoding and pg_encoding_to_char stay unresolved, since the backend has them only as *_private). Its diff also shows session-authorization (the role tests at its end), and it is unstable through clock-resolution: in some runs (3 of 8 when recorded) two pg_stat_reset_subscription_stats calls fall in the same millisecond, so the second stats_reset is not later.",
+      "reason": "libpqwalreceiver.so loads, and CREATE SUBSCRIPTION … WITH (connect = false) works, but a connection attempt fails with 'libpq is incorrectly linked to backend functions' where 'port=-1' expects libpq's own 'invalid port number': the module links libpq statically without libpgcommon's frontend build, so libpq's pg_link_canary_is_frontend() is the backend's, which says no (and libpq's pg_char_to_encoding and pg_encoding_to_char stay unresolved, since the backend has them only as *_private). Its diff also shows session-authorization (the role tests at its end), and it is unstable through clock-resolution: in some runs (3 of 8 during RC1 qualification) two pg_stat_reset_subscription_stats calls fall in the same millisecond, so the second stats_reset is not later. Its diff also varies across RC2's eight qualification runs.",
       "tests": ["subscription"]
     },
     "wasm-stack": {
@@ -273,6 +276,7 @@
     "subscription": "unstable",
     "select_views": "failed",
     "portals_p2": "ok",
+    "portals_inflight": "ok",
     "foreign_key": "ok",
     "dependency": "failed",
     "guc": "failed",
@@ -288,6 +292,7 @@
     "indirect_toast": "failed",
     "equivclass": "failed",
     "stats_rewrite": "ok",
+    "alter_column_type": "ok",
     "json": "failed",
     "jsonb": "failed",
     "json_encoding": "ok",
@@ -310,11 +315,12 @@
     "alter_table": "failed",
     "sequence": "ok",
     "polymorphism": "ok",
-    "rowtypes": "ok",
+    "rowtypes": "failed",
     "returning": "ok",
     "largeobject": "failed",
     "with": "ok",
     "xml": "ok",
+    "rowtypes_alter": "failed",
     "partition_join": "ok",
     "partition_prune": "failed",
     "reloptions": "ok",
@@ -330,6 +336,7 @@
     "numa": "ok",
     "eager_aggregate": "ok",
     "planner_est": "ok",
+    "attribute_version": "failed",
     "compression": "ok",
     "compression_lz4": "ok",
     "compression_pglz": "failed",

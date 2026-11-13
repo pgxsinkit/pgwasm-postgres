@@ -1529,7 +1529,7 @@ diff -U3 expected/collate.icu.utf8.out results/collate.icu.utf8.out
  (1 row)
  
  CREATE TABLE test1cs (x text COLLATE case_sensitive);
-@@ -2980,6 +2619,7 @@
+@@ -3022,6 +2661,7 @@
  -- accents
  SET client_min_messages=WARNING;
  CREATE COLLATION ignore_accents (provider = icu, locale = '@colStrength=primary;colCaseLevel=yes', deterministic = false);

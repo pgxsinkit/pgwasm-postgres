@@ -1,7 +1,7 @@
 diff -U3 expected/partition_prune.out results/partition_prune.out
 --- expected/partition_prune.out
 +++ results/partition_prune.out
-@@ -4350,19 +4350,16 @@
+@@ -4366,19 +4366,16 @@
  -- Ensure that listp_12_2 is not scanned.  (The nested Append is not seen in
  -- the plan as it's pulled in setref.c due to having just a single subnode).
  select explain_parallel_append('select * from listp where a = (select 1);');
@@ -29,7 +29,7 @@ diff -U3 expected/partition_prune.out results/partition_prune.out
  
  -- Like the above but throw some more complexity at the planner by adding
  -- a UNION ALL.  We expect both sides of the union not to scan the
-@@ -4371,27 +4368,24 @@
+@@ -4387,27 +4384,24 @@
  'select * from listp where a = (select 1)
    union all
  select * from listp where a = (select 2);');

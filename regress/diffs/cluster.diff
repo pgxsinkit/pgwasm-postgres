@@ -145,7 +145,7 @@ diff -U3 expected/cluster.out results/cluster.out
  DO $$ BEGIN EXECUTE 'REPACK (ANALYZE) clstr_tst'; END $$;
  ERROR:  REPACK (ANALYZE) cannot be executed from a function or procedure
  CONTEXT:  SQL statement "REPACK (ANALYZE) clstr_tst"
-@@ -848,8 +825,12 @@
+@@ -875,9 +852,13 @@
  DROP TABLE clustertest;
  DROP TABLE clstr_1;
  DROP TABLE clstr_2;
@@ -155,6 +155,7 @@ diff -U3 expected/cluster.out results/cluster.out
 +ERROR:  table "clstr_4" does not exist
  DROP TABLE clstr_expression;
  DROP TABLE clstrpart;
+ DROP TABLE cluster_aborted_upd;
  DROP USER regress_clstr_user;
 +ERROR:  permission denied to drop role
 +DETAIL:  Only roles with the CREATEROLE attribute and the ADMIN option on the target roles may drop roles.

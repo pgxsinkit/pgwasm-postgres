@@ -1,0 +1,234 @@
+diff -U3 expected/attribute_version.out results/attribute_version.out
+--- expected/attribute_version.out
++++ results/attribute_version.out
+@@ -15,6 +15,7 @@
+ CREATE FUNCTION make_tuple_unversioned(anyelement)
+   RETURNS anyelement
+   AS :'regresslib' LANGUAGE C STRICT;
++ERROR:  could not access file "@abs_builddir@/lib/regress.so": No such file or directory
+ CREATE FUNCTION make_type_unversioned(p_rt regtype)
+   RETURNS void
+   LANGUAGE plpgsql
+@@ -79,6 +80,10 @@
+     ('1-cols-unver', make_tuple_unversioned(ROW(1)::rowold_comp)),
+     ('1-cols-wrongver', ROW(1)::rowold_comp)
+ ;
++ERROR:  function make_tuple_unversioned(rowold_comp) does not exist
++LINE 3:     ('1-cols-unver', make_tuple_unversioned(ROW(1)::rowold_c...
++                             ^
++DETAIL:  There is no function of that name.
+ ALTER TYPE rowold_comp ADD ATTRIBUTE c2 bytea;
+ -- insert tuples with 2 columns
+ INSERT INTO rowold_tbl
+@@ -86,6 +91,10 @@
+     ('2-cols-unver', make_tuple_unversioned(ROW(2, '\x4649584d45')::rowold_comp)),
+     ('2-cols-wrongver', ROW(2, '\x4649584d45')::rowold_comp)
+ ;
++ERROR:  function make_tuple_unversioned(rowold_comp) does not exist
++LINE 3:     ('2-cols-unver', make_tuple_unversioned(ROW(2, '\x464958...
++                             ^
++DETAIL:  There is no function of that name.
+ SELECT * FROM type_versions('rowold_comp');
+      rc      |     rt      | attnum | attname | attversion 
+ -------------+-------------+--------+---------+------------
+@@ -125,19 +134,21 @@
+     ('3-cols-unver', make_tuple_unversioned(ROW(3, '\x4649584d45', 333)::rowold_comp)),
+     ('3-cols-ver', ROW(3, '\x4649584d45', 333)::rowold_comp)
+ ;
++ERROR:  function make_tuple_unversioned(rowold_comp) does not exist
++LINE 3:     ('3-cols-unver', make_tuple_unversioned(ROW(3, '\x464958...
++                             ^
++DETAIL:  There is no function of that name.
+ -- Should be able to deform unversioned 1 & 2 column tuples, they were created before
+ -- the "upgrade"
+ SELECT c FROM rowold_tbl WHERE key = '1-cols-unver';
+-   c   
+--------
+- (1,,)
+-(1 row)
++ c 
++---
++(0 rows)
+ 
+ SELECT c FROM rowold_tbl WHERE key = '2-cols-unver';
+-          c           
+-----------------------
+- (2,"\\x4649584d45",)
+-(1 row)
++ c 
++---
++(0 rows)
+ 
+ -- The same holds for the 2 column tuple stamped with version 0
+ SELECT c FROM rowold_tbl WHERE key = '2-cols-ver0';
+@@ -149,23 +160,28 @@
+ -- But an unversioned 3 column tuple shouldn't be deformable, as it only could
+ -- have been created after the upgrade.
+ SELECT c FROM rowold_tbl WHERE key = '3-cols-unver';
+-ERROR:  row type of datum tuple was altered after the datum's creation
+-HINT:  See server log for additional details.
++ c 
++---
++(0 rows)
++
+ -- Should not be able to access versioned 1 & 2 column tuples, they have the
+ -- wrong versions (from before we reset the versions)
+ SELECT c FROM rowold_tbl WHERE key = '1-cols-wrongver';
+-ERROR:  using outdated tuple descriptor when deforming row type
+-HINT:  See server log for additional details.
++ c 
++---
++(0 rows)
++
+ SELECT c FROM rowold_tbl WHERE key = '2-cols-wrongver';
+-ERROR:  using outdated tuple descriptor when deforming row type
+-HINT:  See server log for additional details.
++ c 
++---
++(0 rows)
++
+ -- But the versioned 3 column tuple is from after the versions were reset and
+ -- thus should be deformable.
+ SELECT c FROM rowold_tbl WHERE key = '3-cols-ver';
+-            c            
+--------------------------
+- (3,"\\x4649584d45",333)
+-(1 row)
++ c 
++---
++(0 rows)
+ 
+ --
+ -- Test that if we alter a column after an upgrade, we can't deform
+@@ -196,8 +212,8 @@
+   ROLLBACK;
+ END;
+ $$;
+-NOTICE:  r1: ("(1,,)")
+-NOTICE:  r2 failed: row type of datum tuple was altered after the datum's creation
++NOTICE:  r1: ()
++NOTICE:  r2: ()
+ -- via cursors
+ BEGIN;
+ DECLARE c1_unver CURSOR WITH HOLD FOR
+@@ -216,36 +232,40 @@
+ BEGIN;
+ -- Should succeed, is versioned and the version is [for now] correct.
+ FETCH FIRST FROM c3_ver;
+-            c            
+--------------------------
+- (3,"\\x4649584d45",333)
+-(1 row)
++ c 
++---
++(0 rows)
+ 
+ DROP TABLE rowold_tbl;
+ ALTER TYPE rowold_comp ALTER ATTRIBUTE c2 TYPE text;
+ SAVEPOINT after_ddl;
+ -- Should succeed, c1 should still have version 0 after the ALTER of c2.
+ FETCH FIRST FROM c1_unver;
+-   c   
+--------
+- (1,,)
+-(1 row)
++ c 
++---
++(0 rows)
+ 
+ -- Should fail, from before version reset
+ FETCH FIRST FROM c1_wrongver;
+-ERROR:  using outdated tuple descriptor when deforming row type
+-HINT:  See server log for additional details.
++ c 
++---
++(0 rows)
++
+ ROLLBACK TO SAVEPOINT after_ddl;
+ -- Should error out, was changed, unversioned is interpreted as version 0,
+ -- which does not match anymore
+ FETCH FIRST FROM c2_unver;
+-ERROR:  row type of datum tuple was altered after the datum's creation
+-HINT:  See server log for additional details.
++ c 
++---
++(0 rows)
++
+ ROLLBACK TO SAVEPOINT after_ddl;
+ -- Should fail, from before version reset
+ FETCH FIRST FROM c2_wrongver;
+-ERROR:  row type of datum tuple was altered after the datum's creation
+-HINT:  See server log for additional details.
++ c 
++---
++(0 rows)
++
+ ROLLBACK TO SAVEPOINT after_ddl;
+ -- Should error out like c2_unver, version 0 does not match anymore
+ FETCH FIRST FROM c2_ver0;
+@@ -254,23 +274,23 @@
+ ROLLBACK TO SAVEPOINT after_ddl;
+ -- Should error out, schema was changed, version is wrong
+ FETCH FIRST FROM c3_ver;
+-ERROR:  row type of datum tuple was altered after the datum's creation
+-HINT:  See server log for additional details.
++ c 
++---
++(0 rows)
++
+ ROLLBACK TO SAVEPOINT after_ddl;
+ ROLLBACK;
+ -- Now that the DDL is rolled back, we should be able to again look at cursors
+ -- that failed due to the DDL
+ FETCH FIRST FROM c2_unver;
+-          c           
+-----------------------
+- (2,"\\x4649584d45",)
+-(1 row)
++ c 
++---
++(0 rows)
+ 
+ FETCH FIRST FROM c3_ver;
+-            c            
+--------------------------
+- (3,"\\x4649584d45",333)
+-(1 row)
++ c 
++---
++(0 rows)
+ 
+ FETCH FIRST FROM c2_ver0;
+           c           
+@@ -305,17 +325,18 @@
+ (1 row)
+ 
+ SELECT (make_tuple_unversioned(ROW(1, 2)::rowdirect_comp)).b;
+- b 
+----
+- 2
+-(1 row)
+-
++ERROR:  function make_tuple_unversioned(rowdirect_comp) does not exist
++LINE 1: SELECT (make_tuple_unversioned(ROW(1, 2)::rowdirect_comp)).b...
++                ^
++DETAIL:  There is no function of that name.
+ -- If the type's attributes are versioned, an unversioned datum is rejected,
+ -- even though it was formed with the current definition.
+ CREATE TYPE rowdirect_ver_comp AS (a int, b int);
+ SELECT (make_tuple_unversioned(ROW(1, 2)::rowdirect_ver_comp)).b;
+-ERROR:  row type of datum tuple was altered after the datum's creation
+-HINT:  See server log for additional details.
++ERROR:  function make_tuple_unversioned(rowdirect_ver_comp) does not exist
++LINE 1: SELECT (make_tuple_unversioned(ROW(1, 2)::rowdirect_ver_comp...
++                ^
++DETAIL:  There is no function of that name.
+ --
+ -- Test the composite_type_mismatch GUC
+ --
+@@ -434,4 +455,5 @@
+ DROP FUNCTION IF EXISTS make_type_unversioned(p_rt regtype);
+ DROP FUNCTION IF EXISTS type_versions(p_rt regtype);
+ DROP FUNCTION make_tuple_unversioned(anyelement);
++ERROR:  function make_tuple_unversioned(anyelement) does not exist
+ DROP ROLE regress_av_nosuper;

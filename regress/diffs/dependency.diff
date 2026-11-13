@@ -1,7 +1,7 @@
 diff -U3 expected/dependency.out results/dependency.out
 --- expected/dependency.out
 +++ results/dependency.out
-@@ -78,10 +78,12 @@
+@@ -77,10 +77,12 @@
  DROP OWNED BY regress_dep_user1;
  -- all grants revoked
  \z deptest1
@@ -18,7 +18,7 @@ diff -U3 expected/dependency.out results/dependency.out
  (1 row)
  
  -- table was dropped
-@@ -89,11 +91,14 @@
+@@ -88,11 +90,14 @@
  -- Test REASSIGN OWNED
  GRANT ALL ON deptest1 TO regress_dep_user1;
  GRANT CREATE ON DATABASE regression TO regress_dep_user1;
@@ -33,12 +33,11 @@ diff -U3 expected/dependency.out results/dependency.out
  CREATE FUNCTION deptest_func() RETURNS void LANGUAGE plpgsql
    AS $$ BEGIN END; $$;
  CREATE TYPE deptest_enum AS ENUM ('red');
-@@ -115,11 +120,13 @@
+@@ -114,11 +119,12 @@
  
  RESET SESSION AUTHORIZATION;
  REASSIGN OWNED BY regress_dep_user1 TO regress_dep_user2;
-+ERROR:  permission denied to reassign objects
-+DETAIL:  Only roles with privileges of role "regress_dep_user2" may reassign objects to it.
++ERROR:  must be able to SET ROLE "regress_dep_user2"
  \dt deptest
                  List of tables
   Schema |  Name   | Type  |       Owner       
@@ -48,7 +47,7 @@ diff -U3 expected/dependency.out results/dependency.out
  (1 row)
  
  SELECT typowner = relowner
-@@ -131,23 +138,21 @@
+@@ -130,23 +136,21 @@
  
  -- doesn't work: grant still exists
  DROP USER regress_dep_user1;

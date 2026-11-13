@@ -1,0 +1,60 @@
+diff -U3 expected/rowtypes.out results/rowtypes.out
+--- expected/rowtypes.out
++++ results/rowtypes.out
+@@ -1547,36 +1547,31 @@
+ CREATE TYPE expanded_comp AS (a int, b text);
+ -- A named rowtype must keep typmod -1, a RECORD must keep its blessed typmod.
+ SELECT expanded_record_info(ROW(1, 'named')::expanded_comp);
+-                expanded_record_info                 
+------------------------------------------------------
+- type expanded_comp, typmod is default: yes, natts 2
+-(1 row)
+-
++ERROR:  function expanded_record_info(expanded_comp) does not exist
++LINE 1: SELECT expanded_record_info(ROW(1, 'named')::expanded_comp);
++               ^
++DETAIL:  There is no function of that name.
+ SELECT expanded_record_info(ROW(2, 'anonymous'));
+-            expanded_record_info             
+----------------------------------------------
+- type record, typmod is default: no, natts 2
+-(1 row)
+-
++ERROR:  function expanded_record_info(record) does not exist
++LINE 1: SELECT expanded_record_info(ROW(2, 'anonymous'));
++               ^
++DETAIL:  There is no function of that name.
+ -- Round-tripping through an expanded record must preserve the value.
+ SELECT expanded_record_identity(ROW(3, 'roundtrip')::expanded_comp);
+- expanded_record_identity 
+---------------------------
+- (3,roundtrip)
+-(1 row)
+-
++ERROR:  function expanded_record_identity(expanded_comp) does not exist
++LINE 1: SELECT expanded_record_identity(ROW(3, 'roundtrip')::expande...
++               ^
++DETAIL:  There is no function of that name.
+ SELECT expanded_record_identity(ROW(4, 'anonymous roundtrip'));
+- expanded_record_identity  
+----------------------------
+- (4,"anonymous roundtrip")
+-(1 row)
+-
++ERROR:  function expanded_record_identity(record) does not exist
++LINE 1: SELECT expanded_record_identity(ROW(4, 'anonymous roundtrip'...
++               ^
++DETAIL:  There is no function of that name.
+ -- Reading a field forces a deform against the resolved descriptor.
+ SELECT expanded_record_field_text(ROW(5, 'field')::expanded_comp, 1),
+        expanded_record_field_text(ROW(5, 'field')::expanded_comp, 2);
+- expanded_record_field_text | expanded_record_field_text 
+-----------------------------+----------------------------
+- 5                          | field
+-(1 row)
+-
++ERROR:  function expanded_record_field_text(expanded_comp, integer) does not exist
++LINE 1: SELECT expanded_record_field_text(ROW(5, 'field')::expanded_...
++               ^
++DETAIL:  There is no function of that name.
+ DROP TYPE expanded_comp;

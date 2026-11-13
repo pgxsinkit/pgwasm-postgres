@@ -1,0 +1,32 @@
+diff -U3 expected/rowtypes_alter.out results/rowtypes_alter.out
+--- expected/rowtypes_alter.out
++++ results/rowtypes_alter.out
+@@ -1390,8 +1390,10 @@
+        rta_exec('ALTER TYPE rta_type ALTER ATTRIBUTE b TYPE text'),
+        expanded_record_field_text(x, 2)
+   FROM (SELECT '(aaa,\\x4649584d45)'::rta_type AS x OFFSET 0) s;
+-ERROR:  row type of datum tuple was altered after the datum's creation
+-HINT:  See server log for additional details.
++ERROR:  function expanded_record_field_text(rta_type, integer) does not exist
++LINE 1: SELECT expanded_record_field_text(x, 2),
++               ^
++DETAIL:  There is no function of that name.
+ DROP TYPE rta_type;
+ -- An expanded record built from a datum before the ALTER, with its field read
+ -- after it.  expanded_record_identity() returns the expanded record itself,
+@@ -1401,11 +1403,10 @@
+          expanded_record_identity(x),
+          2 + length(rta_exec('ALTER TYPE rta_type ALTER ATTRIBUTE b TYPE text')::text))
+   FROM (SELECT '(aaa,\\x4649584d45)'::rta_type AS x OFFSET 0) s;
+- expanded_record_field_text 
+-----------------------------
+- \x4649584d45
+-(1 row)
+-
++ERROR:  function expanded_record_identity(rta_type) does not exist
++LINE 2:          expanded_record_identity(x),
++                 ^
++DETAIL:  There is no function of that name.
+ DROP TYPE rta_type;
+ --
+ -- ALTER while a single expression is being evaluated, after the descriptor

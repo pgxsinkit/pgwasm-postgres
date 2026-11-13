@@ -2676,7 +2676,7 @@ diff -U3 expected/updatable_views.out results/updatable_views.out
  SELECT table_name, is_insertable_into
    FROM information_schema.tables
   WHERE table_name = 'rw_view2';
-@@ -3073,144 +3505,100 @@
+@@ -3073,82 +3505,52 @@
   ORDER BY ordinal_position;
   table_name | column_name | is_updatable 
  ------------+-------------+--------------
@@ -2787,6 +2787,11 @@ diff -U3 expected/updatable_views.out results/updatable_views.out
 -DETAIL:  drop cascades to view rw_view1
 -drop cascades to view rw_view2
 +ERROR:  must be owner of table base_tbl
+ -- INSERT .. ON CONFLICT through nested views: an inner security barrier
+ -- view's quals are checked before an outer view's, as they are in a scan,
+ -- so the outer view's quals are never evaluated against a row the inner
+@@ -3183,66 +3585,52 @@
+ DROP TABLE uv_upsert_hide_tab;
  -- security barrier view on top of table with rules
  CREATE TABLE base_tbl(id int PRIMARY KEY, data text, deleted boolean);
 +ERROR:  relation "base_tbl" already exists
@@ -2881,7 +2886,7 @@ diff -U3 expected/updatable_views.out results/updatable_views.out
  -- security barrier view based on inheritance set
  CREATE TABLE t1 (a int, b float, c text);
  CREATE INDEX t1_a_idx ON t1(a);
-@@ -3255,41 +3643,15 @@
+@@ -3287,41 +3675,15 @@
  
  EXPLAIN (VERBOSE, COSTS OFF)
  UPDATE v1 SET a=100 WHERE snoop(a) AND leakproof(a) AND a < 7 AND a != 6;
@@ -2931,7 +2936,7 @@ diff -U3 expected/updatable_views.out results/updatable_views.out
  SELECT * FROM v1 WHERE a=100; -- Nothing should have been changed to 100
   a | b | c | d 
  ---+---+---+---
-@@ -3302,104 +3664,79 @@
+@@ -3334,104 +3696,79 @@
  
  EXPLAIN (VERBOSE, COSTS OFF)
  UPDATE v1 SET a=a+1 WHERE snoop(a) AND leakproof(a) AND a = 8;
@@ -3096,7 +3101,7 @@ diff -U3 expected/updatable_views.out results/updatable_views.out
  CREATE TABLE tx1 (a integer);
  CREATE TABLE tx2 (b integer);
  CREATE TABLE tx3 (c integer);
-@@ -3824,44 +4161,54 @@
+@@ -4087,44 +4424,54 @@
  drop table uv_iocu_tab;
  -- ON CONFLICT DO SELECT/UPDATE permissions checks
  create user regress_view_user1;
@@ -3164,7 +3169,7 @@ diff -U3 expected/updatable_views.out results/updatable_views.out
  
  set session authorization regress_view_user1;
  grant select (a,b) on base_tbl to regress_view_user2;
-@@ -3869,55 +4216,77 @@
+@@ -4132,55 +4479,77 @@
  grant update (a,b) on base_tbl to regress_view_user2;
  set session authorization regress_view_user2;
  create view rw_view2 as select b as bb, c as cc, a as aa from base_tbl;
