@@ -33,6 +33,7 @@ _CreateTupleDescCopyConstr
 _CurrentMemoryContext
 _CurrentResourceOwner
 _DatumGetEOHP
+_DatumGetHeapTupleHeader
 _DecodeDateTime
 _DecrTupleDescRefCount
 _DefineCustomBoolVariable
@@ -119,6 +120,7 @@ _MemoryContextSetIdentifier
 _MemoryContextSetParent
 _MemoryContextStrdup
 _MemoryContextUnregisterResetCallback
+_MyBackendType
 _MyDatabaseId
 _MyLatch
 _MyProc
@@ -136,6 +138,7 @@ _PopActiveSnapshot
 _PostgresMainLongJmp
 _PostgresMainLoopOnce
 _PostgresSendReadyForQueryIfNecessary
+_PrimaryConnInfo
 _ProcDiePending
 _ProcessInterrupts
 _ProcessStartupPacket
@@ -563,7 +566,6 @@ _exp2
 _expand_array
 _expand_generated_columns_in_expr
 _expanded_record_fetch_field
-_expanded_record_fetch_tupdesc
 _expanded_record_get_tuple
 _expanded_record_lookup_field
 _expanded_record_set_field_internal
@@ -680,6 +682,8 @@ _hash_destroy
 _hash_search
 _hash_seq_init
 _hash_seq_search
+_heap_datum_check
+_heap_datum_update_type
 _heap_deform_tuple
 _heap_form_tuple
 _heap_freetuple
@@ -724,6 +728,7 @@ _jsonb_in
 _lappend
 _lappend_xid
 _ldexp
+_libpqsrv_is_valid_proxy_option
 _link
 _list_concat
 _list_copy
