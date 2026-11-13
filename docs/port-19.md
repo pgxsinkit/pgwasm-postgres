@@ -1,9 +1,11 @@
 # PostgreSQL 19 port
 
-`port-19` starts from main's `18.6.2` release (`bf7938a`) and pins PostgreSQL
+`port-19` starts from main's `18.6.2` release (`bf7938a`) and initially pinned PostgreSQL
 `REL_19_RC1`, commit `0b8bff042a997fe50fcd1c4c83b9ef1cc9ed8a89`. This was the newest
-PG19 tag returned by upstream on 2026-10-24. It is a release candidate; this branch
-does not adopt PG19 in main or publish a release.
+PG19 tag returned by upstream on 2026-10-24. That build was published as `19.0.0-rc.1`.
+The branch now pins `REL_19_RC2` (`dffcca2e3c81178c64d4c1f44543a3507d0b7508`);
+the [RC2 update record](pg19-rc2-update-assessment.md) tracks its qualification.
+PG19 remains an opt-in release-candidate line alongside stable PG18.
 
 The starting evidence is [readiness issue 1](https://github.com/pgxsinkit/pgwasm-postgres/issues/1),
 especially [the RC1 report](https://github.com/pgxsinkit/pgwasm-postgres/issues/1#issuecomment-6266756227).
@@ -18,8 +20,12 @@ The series remains five topic patches, regenerated from commits in
 - The backend Makefile keeps PG19's platform conditionals and adds a separate
   Emscripten link rule. The embedded backend targets are `pgwasm` and
   `install-pgwasm`; generated files remain `postgres.{js,wasm,data}`.
-- `ProcessStartupPacket` is exported with PG19's single `Port *` argument. The
-  driver declaration and call follow it.
+- `ProcessStartupPacket` keeps a single exported `Port *` argument. In RC2 an
+  Emscripten-only adapter supplies the upstream parser's added `PendingCancelRequest`
+  storage and refuses postmaster cancellation without dispatch or session termination.
+  Native startup retains upstream's deferred dispatch. The adapter also restores the
+  live connection's protocol after refused cancel packets. Driver smoke checks the
+  export's arity, valid and malformed cancel keys, no handshake output and later queries.
 - The single-process, encoding-shim and main-loop patches are rebased onto RC1.
   Upstream's loop body and bootstrap remain in place.
 - Internal PGlite names become `pgwasm` names throughout the patches, overlay,
@@ -30,8 +36,8 @@ The series remains five topic patches, regenerated from commits in
 
 ## Host ABI changes
 
-The 19 build requires coordinated changes in pgxsinkit's `pgwasm-c` and
-`pgwasm-pg-dump` hosts. The release has not been adopted there by this branch.
+The initial 19 build required coordinated changes in pgxsinkit's `pgwasm-c` and
+`pgwasm-pg-dump` hosts, adopted in toolkit `0.6.0-rc.1`. RC2 retains that host ABI.
 
 | Before                                            | On this branch                                    |
 | ------------------------------------------------- | ------------------------------------------------- |
@@ -186,7 +192,7 @@ baseline. The accepted gate's files are under `.cache/gate/<commit>/`.
 
 ### RC publication alongside PG18
 
-The current branch builds PG19 RC1 only. Retaining the PG18 control-file parser
+This branch builds PG19 only. Retaining the PG18 control-file parser
 and historical format declaration supports tooling and comparisons; it does not
 make the PG19 patches or binaries work as PG18.
 
@@ -212,10 +218,10 @@ PG18 remains the stable line. Publication follows this path:
    available separately.
 
 Publication and host adoption are separate. pgxsinkit's `scripts/pgwasm-pin.ts`
-currently accepts only final `N.N.N` tags and refuses a data-format change. An
-experimental consumer branch needs prerelease pin support, the host ABI changes
-above, an explicit format-2 store policy and its contract/browser checks before
-using this build. Publishing an RC alone does not migrate existing stores.
+accepts exact RC tags, updates both the server and pg_dump pins, and requires an
+explicit fresh-store opt-in for a data-format change. Toolkit RC1 adopted the
+host ABI above and format 2. Each later adoption still needs its contract/browser
+checks; publishing an RC alone does not migrate existing stores.
 
 ## Further Wasm work to investigate
 

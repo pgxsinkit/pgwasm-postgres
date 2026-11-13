@@ -118,6 +118,13 @@ await runCliAsync(async () => {
 
   const postgres = await Postgres.create(artefacts);
   try {
+    // This pinned glue exposes the Wasm function directly. A missing pointer argument can otherwise
+    // become address zero without trapping, so cancellation behavior alone cannot prove the ABI.
+    expect(
+      postgres.module._ProcessStartupPacket.length === 1,
+      "the exported startup adapter accepts exactly one argument",
+      postgres.module._ProcessStartupPacket.length,
+    );
     const filesystemTypes = postgres.module.FS.filesystems;
     expect(
       postgres.module.NODEFS !== undefined &&

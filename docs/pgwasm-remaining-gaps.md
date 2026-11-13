@@ -2,6 +2,7 @@
 
 Assessment date: 2026-10-25. Scope: the known PostgreSQL regression failures,
 PG19 adoption work, and Wasm follow-ups identified during the October review.
+Updated on 2026-11-13 for the RC2 qualification and its additional test helpers.
 This is not a claim to enumerate every possible defect in PostgreSQL, PGlite or
 the wider pgxsinkit toolkit.
 
@@ -20,18 +21,27 @@ when deciding what to fix next.
 
 ## What the numbers mean
 
-After the October correctness fixes, eight native regression runs on each branch gave:
+Eight native regression runs qualified the October fixes on both branches and the
+subsequent November RC2 update:
 
 | Branch           | Upstream     | Test programs | Passed | Stable failures | Unstable programs | Failures observed per run |
 | ---------------- | ------------ | ------------: | -----: | --------------: | ----------------: | ------------------------: |
 | `develop` / PG18 | `REL_18_6`   |           231 |    180 |              49 |                 2 |                        51 |
 | `port-19` / PG19 | `REL_19_RC1` |           239 |    187 |              50 |                 2 |                        52 |
+| `port-19` / PG19 | `REL_19_RC2` |           243 |    188 |              53 |                 2 |                        55 |
 
 Only `stats` and `subscription` remain unstable; their diffs vary. Both `psql`
-and `psql_pipeline` now pass every run. The other stable failure diffs did not
-change. The branch's [baseline](../regress/baseline.json) records the results and
+and `psql_pipeline` pass every run. RC2 adds four programs: `portals_inflight` and
+`alter_column_type` pass; `rowtypes_alter` and `attribute_version` depend on missing
+C helpers. The existing `rowtypes` program gains the same helper dependency and
+now fails. All three additions to the failing-program count belong to the existing
+test-library coverage gap. Changed older diffs were reviewed against upstream's
+new cases and retain their earlier causes; the
+[RC2 audit](pg19-rc2-update-assessment.md#regression-difference-review) records each.
+The branch's [baseline](../regress/baseline.json) records the results and
 primary causes; [the recorded diffs](../regress/diffs/) show the actual output
-differences. Read those paths on the branch named in the table.
+differences. RC1's figures are historical; its
+[release tag retains that baseline](https://github.com/pgxsinkit/pgwasm-postgres/blob/19.0.0-rc.1/regress/baseline.json).
 
 Each entry is a substantial test program, often containing many assertions. One
 failed assertion makes the whole program fail, and a missing fixture or incorrect
@@ -45,18 +55,18 @@ The groups below assign each failing program one primary cause; some contain
 secondary failures too. Counts must not be interpreted as independent bugs or
 added to estimates of affected clients.
 
-| Primary cause                           |   PG18 |   PG19 | Kind of work                                        | Main benefit                                                          |
-| --------------------------------------- | -----: | -----: | --------------------------------------------------- | --------------------------------------------------------------------- |
-| Session-authorization reset             |     21 |     21 | Embedding compatibility fix                         | Correct reset semantics and usable role-dependent regression fixtures |
-| Missing C regression helpers            |     18 |     19 | Test/build infrastructure                           | More real coverage and fewer fixture-induced cascades                 |
-| Reused session in the bridge            |      3 |      3 | Harness isolation / session capability              | More faithful reconnect and session-lifecycle tests                   |
-| Background/parallel process assumptions |      3 |      3 | Capability decision; potentially architectural      | Parallel plans and native worker-dependent features if needed         |
-| Recursion / stack-depth mismatch        |      2 |      2 | Resource-limit investigation and hardening          | Predictable handling of unusually deep input                          |
-| Root-only ICU data                      |      1 |      1 | Optional feature/data packaging                     | Language-tailored SQL collations                                      |
-| Startup defaults                        |      1 |      1 | Configuration review                                | Intentional, documented schema-resolution/catalog behavior            |
-| Clock/statistics behavior               |      1 |      1 | Timing/statistics fidelity                          | Better diagnostic precision and more stable reset comparisons         |
-| WAL receiver/libpq linkage              |      1 |      1 | Linkage fix, then a replication capability decision | Correct connection handling; groundwork for an optional capability    |
-| **Total**                               | **51** | **52** |                                                     |                                                                       |
+| Primary cause                           |   PG18 | PG19 RC1 | PG19 RC2 | Kind of work                                        | Main benefit                                                          |
+| --------------------------------------- | -----: | -------: | -------: | --------------------------------------------------- | --------------------------------------------------------------------- |
+| Session-authorization reset             |     21 |       21 |       21 | Embedding compatibility fix                         | Correct reset semantics and usable role-dependent regression fixtures |
+| Missing C regression helpers            |     18 |       19 |       22 | Test/build infrastructure                           | More real coverage and fewer fixture-induced cascades                 |
+| Reused session in the bridge            |      3 |        3 |        3 | Harness isolation / session capability              | More faithful reconnect and session-lifecycle tests                   |
+| Background/parallel process assumptions |      3 |        3 |        3 | Capability decision; potentially architectural      | Parallel plans and native worker-dependent features if needed         |
+| Recursion / stack-depth mismatch        |      2 |        2 |        2 | Resource-limit investigation and hardening          | Predictable handling of unusually deep input                          |
+| Root-only ICU data                      |      1 |        1 |        1 | Optional feature/data packaging                     | Language-tailored SQL collations                                      |
+| Startup defaults                        |      1 |        1 |        1 | Configuration review                                | Intentional, documented schema-resolution/catalog behavior            |
+| Clock/statistics behavior               |      1 |        1 |        1 | Timing/statistics fidelity                          | Better diagnostic precision and more stable reset comparisons         |
+| WAL receiver/libpq linkage              |      1 |        1 |        1 | Linkage fix, then a replication capability decision | Correct connection handling; groundwork for an optional capability    |
+| **Total**                               | **51** |   **52** |   **55** |                                                     |                                                                       |
 
 ## Why this can coexist with PGlite being useful and widely adopted
 
@@ -130,6 +140,12 @@ same limitation. This does not show that ordinary conversions, triggers,
 compression or type creation are generally broken. Those test programs can
 still execute unrelated assertions; the helper-dependent coverage is what is
 blocked. See `regress-library` in the [baseline](../regress/baseline.json).
+
+RC2's additional composite-data tests need `expanded_record_identity`,
+`expanded_record_info`, `expanded_record_field_text` and `make_tuple_unversioned`
+from that library. Their absence blocks direct C-helper coverage of legacy and
+expanded composite datums. The new SQL/PLpgSQL `alter_column_type` program passes,
+but does not replace the missing helper-dependent assertions.
 
 **Value of fixing:** obtain substantially better evidence about the engine and
 identify any real defects behind the fixture failures. It cannot responsibly be

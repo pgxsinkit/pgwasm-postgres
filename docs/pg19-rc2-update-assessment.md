@@ -1,9 +1,9 @@
 # PostgreSQL 19 RC2 update assessment
 
-Assessed on 2026-11-13 against pgwasm-postgres `port-19` at `4235071`, which pins
-`REL_19_RC1` (`0b8bff042a997fe50fcd1c4c83b9ef1cc9ed8a89`). This is an assessment,
-not a completed upgrade: no engine build, regression run, release or toolkit pin change
-was performed.
+Initially assessed on 2026-11-13 against pgwasm-postgres `port-19` at `4235071`,
+which pinned `REL_19_RC1` (`0b8bff042a997fe50fcd1c4c83b9ef1cc9ed8a89`). The
+initial assessment below preceded implementation; the final sections record the
+authorized update and its qualification.
 
 ## Recommendation
 
@@ -164,9 +164,92 @@ and additional semantic compatibility review; fresh stores/resync do not require
 that broader migration promise. The current RC runbook is authoritative over the
 older finals-only wording in `docs/port-19.md`'s adoption section.
 
-## Remaining uncertainty
+## Initial assessment limits
 
 Compilation, new dynamic imports, exact regression outcomes, prepopulated image changes
 and browser host behavior remain unmeasured. The concrete patch and startup ABI
 findings above identify where implementation must begin; they do not predict a green
 release gate. No dependency or tool pins were changed for this assessment.
+
+## Implementation and qualification
+
+The checked RC transition and resolved-worktree adoption were added in `54d40d4`.
+The update then ran through `bun run bump REL_19_RC2 --resolved --lock`, committing
+the pin and generated patch series as `d8a0e66`. Four topic patches are unchanged
+apart from their application context; the startup-export topic adds the C adapter
+described above. Source `package.json` versions remain placeholders.
+
+The published Emscripten 6.0.13 builder compiled the candidate successfully. Driver
+smoke passed normal startup, valid and malformed cancellation refusal, extended-error
+recovery, 4,000-error stack recovery, all 27 shipped modules, all 98 default encoding
+conversions, ICU collation, amcheck and pg_dump. A fresh initdb confirmed the complete
+existing format-2 tuple, including catalog version `202610061` and WAL magic `0xD122`.
+The compiler, ICU pin and browser floor were not changed.
+
+The generated glue assigns `Module["_ProcessStartupPacket"]` directly to the Wasm
+export. Smoke also requires its function arity to be one: a missing pointer argument
+can otherwise become address zero without immediately trapping. Cancellation checks
+use key lengths 1, 4, 256, 0 and 257 and verify no handshake output and a successful
+subsequent query. They establish the embedded adapter's behavior, not new public
+cancellation support in the toolkit.
+
+### Reviewed export changes
+
+The reference now has 1,131 symbols, six additions and one removal. Linked-Wasm
+imports were inspected in every shipped module with `wasm-dis`; no mandatory core
+export was removed.
+
+| Symbols                                                                 | Importing module                 | Source explanation                                                                                                                                                                                                                              |
+| ----------------------------------------------------------------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DatumGetHeapTupleHeader`, `heap_datum_check`, `heap_datum_update_type` | `plpgsql.so`                     | Composite-datum safety in [`79ddf5bb`](https://github.com/postgres/postgres/commit/79ddf5bb83d835d1a2547919979fe01d3f8c3e36).                                                                                                                   |
+| `PrimaryConnInfo`, `MyBackendType`, `libpqsrv_is_valid_proxy_option`    | `libpqwalreceiver.so`            | Connection-option validation in [`0adbf6bb`](https://github.com/postgres/postgres/commit/0adbf6bb1f4b5d7455ba84bec7bf5d4538487bf9).                                                                                                             |
+| Removed `expanded_record_fetch_tupdesc`                                 | No shipped module imports it now | [`4b7a4c2c`](https://github.com/postgres/postgres/commit/4b7a4c2c9e62e94737d0175e5a05173a58d2264e) acquires expanded-record descriptors eagerly, removing the inline accessor's fallback call. The backend compatibility function still exists. |
+
+### Prepopulated directory
+
+The candidate was generated at RC1's published release epoch, `1792895272`, and
+compared with that release's archive. Both have 999 entries; 340 entries are
+byte-identical. The new tar is 40,782,336 bytes, 245,760 bytes larger; its compressed
+asset is 4,473,955 bytes. It boots, has 421 `pg_class` relations and defaults to UTC.
+
+The differences include catalog relations, their indexes, WAL and pointer-bearing
+relcache files. Attribute versioning stores `pg_attver` in the existing
+`pg_attribute.attoptions` field, deliberately preserving catalog shape; its values
+derive from WAL insertion positions rather than wall-clock time. RC2 also adds
+`binary_upgrade_set_next_attribute_versions` to `pg_proc` and its description.
+Matching epochs therefore does not make RC1 and RC2 catalog bytes or WAL identical.
+This comparison does not attribute every changed byte or claim RC1 semantic schema
+compatibility. `identity/prepopulated.json` records the new artifacts at that epoch.
+
+### Regression difference review
+
+The initial comparison ran all 243 tests: 188 passed and 55 failed, with no backend
+failures. RC1's baseline had 187 passed, 50 failed and two unstable tests across 239
+tests. Both previously unstable tests failed in this single comparison. The four
+new tests and all changed failing diffs were reviewed before baseline recording.
+
+| Test                                                                         | Actual RC2 difference and reason                                                                                                                                                                                              |
+| ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `portals_inflight`, `alter_column_type`                                      | New tests pass.                                                                                                                                                                                                               |
+| `rowtypes`                                                                   | Newly fails only on missing `expanded_record_info`, `expanded_record_identity` and `expanded_record_field_text`, defined by `test_setup` using the non-shipped `regress.so`.                                                  |
+| `rowtypes_alter`                                                             | New test fails only on the same missing expanded-record helpers. No parallel-plan difference appears in the actual normalized diff.                                                                                           |
+| `attribute_version`                                                          | New test cannot define the C helper `make_tuple_unversioned`; its mixed inserts then fail, causing missing-row cascades. This is missing test coverage, not evidence that the composite safety checks fail.                   |
+| `test_setup`                                                                 | Three additional `CREATE FUNCTION` statements fail on the same absent test library.                                                                                                                                           |
+| `create_function_sql`                                                        | Existing authorization failures remain; upstream adds accepted functions, so its expected cleanup count changes from 38 to 41. Actual cleanup still fails on schema ownership.                                                |
+| `constraints`, `inherit`                                                     | Only diff positions move. New constraint cases match expected results; existing authorization failures remain.                                                                                                                |
+| `updatable_views`                                                            | New nested security-barrier and hidden-row `ON CONFLICT` cases match expected output. Existing ownership and stale-fixture failures remain; inserted matching cases split their diff hunks.                                   |
+| `privileges`                                                                 | New enum-cast cleanup runs after an ineffective `RESET SESSION AUTHORIZATION`, leaving the restricted role active; three ownership errors follow. New security checks themselves match expected output.                       |
+| `rowsecurity`                                                                | The new `DROP OWNED` case depends on a role whose creation already failed after the same ineffective reset. Its missing-role/policy cascade replaces an expected warning. New RLS `ON CONFLICT` checks match expected output. |
+| `alter_operator`                                                             | New incompatible-commutator rejection matches expected output. Existing ownership failures remain; only hunk positions and boundaries change.                                                                                 |
+| `collate.icu.utf8`                                                           | Only a hunk position changes. New Memoize/collation checks match expected output; missing language-specific ICU locales remain the cause.                                                                                     |
+| `create_role`, `stats_ext`, `guc`, `copy2`, `alter_table`, `partition_prune` | Diffs are byte-identical after ignoring only hunk headers. Added RC2 cases match expected output; existing authorization, missing test-library, session-persistence and no-worker limitations remain.                         |
+| `dependency`                                                                 | The existing failed reassignment now reports `must be able to SET ROLE` after upstream changes its privilege check; the ineffective authorization reset remains the cause of the unexpected refusal.                          |
+| `cluster`                                                                    | New aborted-subtransaction rewrite coverage matches expected output. A matching cleanup statement appears as context; existing permission failures remain unchanged.                                                          |
+
+The three additional failing test names belong to the existing `regress-library`
+group, with the new helper dependencies documented there. No old limitation was
+fixed or hidden as part of this update. Eight repeated runs recorded 188 passed,
+53 stable failures and two unstable programs across 243 tests. Every run had the
+same pass/fail counts and no backend failures; only the existing `stats` and
+`subscription` diffs varied. Release acceptance still requires the clean-commit
+engine gates, identical manifests and the published-image release workflow.

@@ -162,7 +162,10 @@ export function workSeries(layout: Layout, tag: string | undefined, options: Wor
       [
         ...describeAmFailure(failure, `${chosen} (${base})`),
         `The worktree is left mid-\`git am\` at ${where}. Resolve the conflicts there, \`git add\` the files and run`,
-        `\`git am --continue\` (again for each later patch that stops), then \`bun run ${chosen === pinnedTag ? "patches:export" : "bump"} ${chosen}${chosen === pinnedTag ? "" : " --resolved"}\`.`,
+        `\`git am --continue\` (again for each later patch that stops).`,
+        chosen === pinnedTag
+          ? `Then run \`bun run patches:export ${chosen}\`.`
+          : `For a supported same-major update, run \`bun run bump ${chosen} --resolved\`; for a major or beta port, follow docs/port-checklist.md.`,
       ].join("\n"),
     );
   }
@@ -176,7 +179,7 @@ export function workSeries(layout: Layout, tag: string | undefined, options: Wor
   );
   if (chosen !== pinnedTag) {
     log(
-      `patches:work: upstream.json pins ${pinnedTag}; adopt this resolved series with \`bun run bump ${chosen} --resolved\`.`,
+      `patches:work: upstream.json pins ${pinnedTag}; for a supported same-major update use \`bun run bump ${chosen} --resolved\`; for a major or beta port, follow docs/port-checklist.md.`,
     );
   }
   return worktree;
@@ -191,7 +194,7 @@ export function exportSeries(layout: Layout, tag: string | undefined, log: Log):
     throw new UserError(
       [
         `upstream.json pins ${pin.tag}, not ${chosen}: patches/ must apply on the pinned tag.`,
-        `To move the pin with this resolved worktree, run \`bun run bump ${chosen} --resolved\`.`,
+        `For a supported same-major update, run \`bun run bump ${chosen} --resolved\`; for a major or beta port, follow docs/port-checklist.md.`,
       ].join("\n"),
     );
   }
