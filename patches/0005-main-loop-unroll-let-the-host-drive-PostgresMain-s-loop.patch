@@ -64,7 +64,7 @@ Recovery fix derived from electric-sql/postgres-pglite 29b6424aa312ec3556247db06
  1 file changed, 307 insertions(+)
 
 diff --git a/src/backend/tcop/postgres.c b/src/backend/tcop/postgres.c
-index dbef734a93f15420f772e7fc1e0506d0576315c6..ff45e2c194ecd5d8ff81ea41dbc4c66413c74637 100644
+index afb77548dd11a9c7c8c2b86ec938bdcc8bc26839..1e30fd2131cf5cff96af6f927bda1e3a73d983dc 100644
 --- a/src/backend/tcop/postgres.c
 +++ b/src/backend/tcop/postgres.c
 @@ -155,7 +155,11 @@ static bool DoingCommandRead = false;
@@ -210,7 +210,7 @@ index dbef734a93f15420f772e7fc1e0506d0576315c6..ff45e2c194ecd5d8ff81ea41dbc4c664
  
  /* ----------------------------------------------------------------
   *		infrastructure for valgrind debugging
-@@ -4273,7 +4401,9 @@ PostgresSingleUserMain(int argc, char *argv[],
+@@ -4277,7 +4405,9 @@ PostgresSingleUserMain(int argc, char *argv[],
  void
  PostgresMain(const char *dbname, const char *username)
  {
@@ -220,7 +220,7 @@ index dbef734a93f15420f772e7fc1e0506d0576315c6..ff45e2c194ecd5d8ff81ea41dbc4c664
  
  	/* these must be volatile to ensure state is preserved across longjmp: */
  	volatile bool send_ready_for_query = true;
-@@ -4480,7 +4610,37 @@ PostgresMain(const char *dbname, const char *username)
+@@ -4484,7 +4614,37 @@ PostgresMain(const char *dbname, const char *username)
  	 * were inside a transaction.
  	 */
  
@@ -258,7 +258,7 @@ index dbef734a93f15420f772e7fc1e0506d0576315c6..ff45e2c194ecd5d8ff81ea41dbc4c664
  	{
  		/*
  		 * NOTE: if you are tempted to add more code in this if-block,
-@@ -4591,7 +4751,134 @@ PostgresMain(const char *dbname, const char *username)
+@@ -4595,7 +4755,134 @@ PostgresMain(const char *dbname, const char *username)
  
  		/* Now we can allow interrupts again */
  		RESUME_INTERRUPTS();
@@ -393,7 +393,7 @@ index dbef734a93f15420f772e7fc1e0506d0576315c6..ff45e2c194ecd5d8ff81ea41dbc4c664
  
  	/* We can now handle ereport(ERROR) */
  	PG_exception_stack = &local_sigjmp_buf;
-@@ -4604,6 +4891,7 @@ PostgresMain(const char *dbname, const char *username)
+@@ -4608,6 +4895,7 @@ PostgresMain(const char *dbname, const char *username)
  	 */
  
  	for (;;)
@@ -401,7 +401,7 @@ index dbef734a93f15420f772e7fc1e0506d0576315c6..ff45e2c194ecd5d8ff81ea41dbc4c664
  	{
  		int			firstchar;
  		StringInfoData input_message;
-@@ -4833,7 +5121,11 @@ PostgresMain(const char *dbname, const char *username)
+@@ -4837,7 +5125,11 @@ PostgresMain(const char *dbname, const char *username)
  		 * Sync.
  		 */
  		if (ignore_till_sync && firstchar != EOF)
@@ -413,7 +413,7 @@ index dbef734a93f15420f772e7fc1e0506d0576315c6..ff45e2c194ecd5d8ff81ea41dbc4c664
  
  		switch (firstchar)
  		{
-@@ -5089,6 +5381,19 @@ PostgresMain(const char *dbname, const char *username)
+@@ -5093,6 +5385,19 @@ PostgresMain(const char *dbname, const char *username)
  				 * it will fail to be called during other backend-shutdown
  				 * scenarios.
  				 */
@@ -433,7 +433,7 @@ index dbef734a93f15420f772e7fc1e0506d0576315c6..ff45e2c194ecd5d8ff81ea41dbc4c664
  				proc_exit(0);
  
  			case PqMsg_CopyData:
-@@ -5108,7 +5413,9 @@ PostgresMain(const char *dbname, const char *username)
+@@ -5112,7 +5417,9 @@ PostgresMain(const char *dbname, const char *username)
  						 errmsg("invalid frontend message type %d",
  								firstchar)));
  		}

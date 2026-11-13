@@ -4,18 +4,25 @@ Date: Sun, 27 Sep 2026 12:42:23 +0800
 Subject: [PATCH] startup-packet-export: export ProcessStartupPacket to the
  host
 
-Under __EMSCRIPTEN__, ProcessStartupPacket in backend_startup.c is no
-longer static and is marked EMSCRIPTEN_KEEPALIVE, so the host can run
-the startup-packet exchange for its connection itself. The file includes
-emscripten.h for the attribute.
+Under __EMSCRIPTEN__, expose a one-argument ProcessStartupPacket wrapper
+marked EMSCRIPTEN_KEEPALIVE, retaining the host's startup ABI. The private
+parser accepts PostgreSQL 19 RC2's PendingCancelRequest storage, and native
+BackendInitialize keeps upstream's deferred cancellation dispatch after
+its unsafe startup signal and timeout handlers have been disarmed.
+
+The embedded wrapper supplies zeroed storage but does not dispatch a
+postmaster cancel request or exit the live session. It returns STATUS_ERROR
+for both valid and malformed cancel packets and restores the connection's
+previous protocol, so a rejected packet cannot alter later exchanges.
 
 Derived from electric-sql/postgres-pglite b133782cd759f08b3aeb263b80a963b39c7b7af1 (PostgreSQL 18.3 fork, PostgreSQL License)
+Adapted for PostgreSQL commit f63b47aa18e6b9b205f51b74d7d5dffe010e8255 (deferred pre-auth cancellation dispatch, CVE-2026-116322).
 ---
- src/backend/tcop/backend_startup.c | 12 ++++++++++++
- 1 file changed, 12 insertions(+)
+ src/backend/tcop/backend_startup.c | 43 ++++++++++++++++++++++++++----
+ 1 file changed, 38 insertions(+), 5 deletions(-)
 
 diff --git a/src/backend/tcop/backend_startup.c b/src/backend/tcop/backend_startup.c
-index 912ad7dc9574cd0337db84e89e35f561bebda4b3..03300f7f402ba5323ece02eee2c74dbc241d5888 100644
+index 8f4bcf90bba62341b1fd3e218e468791f5125bc1..e1f91ef75ee11bc21c2374a643878d89b17ae38d 100644
 --- a/src/backend/tcop/backend_startup.c
 +++ b/src/backend/tcop/backend_startup.c
 @@ -42,6 +42,10 @@
@@ -29,27 +36,86 @@ index 912ad7dc9574cd0337db84e89e35f561bebda4b3..03300f7f402ba5323ece02eee2c74dbc
  /* GUCs */
  bool		Trace_connection_negotiation = false;
  uint32		log_connections = 0;
-@@ -59,7 +63,11 @@ ConnectionTiming conn_timing = {.ready_for_use = TIMESTAMP_MINUS_INFINITY};
+@@ -71,9 +75,12 @@ typedef struct PendingCancelRequest
  
  static void BackendInitialize(ClientSocket *client_sock, CAC_state cac);
  static int	ProcessSSLStartup(Port *port);
+-static int	ProcessStartupPacket(Port *port, PendingCancelRequest *cancel_req);
++static int	ProcessStartupPacketInternal(Port *port, PendingCancelRequest *cancel_req);
+ static void ProcessCancelRequestPacket(Port *port, void *pkt, int pktlen,
+ 									   PendingCancelRequest *cancel_req);
 +#if defined(__EMSCRIPTEN__)
 +int	ProcessStartupPacket(Port *port);
-+#else
- static int	ProcessStartupPacket(Port *port);
 +#endif
- static void ProcessCancelRequestPacket(Port *port, void *pkt, int pktlen);
  static void SendNegotiateProtocolVersion(List *unrecognized_protocol_options);
  static void process_startup_packet_die(SIGNAL_ARGS);
-@@ -482,7 +490,11 @@ reject:
-  * if we detect a communications failure.)
+ static void StartupPacketTimeoutHandler(void);
+@@ -306,7 +313,7 @@ BackendInitialize(ClientSocket *client_sock, CAC_state cac)
+ 	 * case it is delayed for later dispatch.
+ 	 */
+ 	if (status == STATUS_OK)
+-		status = ProcessStartupPacket(port, &cancel_req);
++		status = ProcessStartupPacketInternal(port, &cancel_req);
+ 
+ 	/*
+ 	 * If we're going to reject the connection due to database state, say so
+@@ -388,7 +395,7 @@ BackendInitialize(ClientSocket *client_sock, CAC_state cac)
+ 						  cancel_req.cancel_key_len);
+ 
+ 	/*
+-	 * Stop here if it was bad or a cancel packet.  ProcessStartupPacket
++	 * Stop here if it was bad or a cancel packet.  ProcessStartupPacketInternal
+ 	 * already did any appropriate error reporting.
+ 	 */
+ 	if (status != STATUS_OK)
+@@ -433,7 +440,7 @@ ProcessSSLStartup(Port *port)
+ 	if (firstbyte == EOF)
+ 	{
+ 		/*
+-		 * Like in ProcessStartupPacket, if we get no data at all, don't
++		 * Like in ProcessStartupPacketInternal, if we get no data at all, don't
+ 		 * clutter the log with a complaint.
+ 		 */
+ 		return STATUS_ERROR;
+@@ -506,7 +513,7 @@ reject:
   *
   */
-+#if defined(__EMSCRIPTEN__)
-+int EMSCRIPTEN_KEEPALIVE
-+#else
  static int
-+#endif
- ProcessStartupPacket(Port *port)
+-ProcessStartupPacket(Port *port, PendingCancelRequest *cancel_req)
++ProcessStartupPacketInternal(Port *port, PendingCancelRequest *cancel_req)
  {
  	int32		len;
+ 	char	   *buf = NULL;
+@@ -936,6 +943,32 @@ fail:
+ 	return STATUS_ERROR;
+ }
+ 
++#if defined(__EMSCRIPTEN__)
++/*
++ * Preserve the host's one-argument startup entry point.  Native backends pass
++ * their pending cancel request through BackendInitialize(), which dispatches it
++ * only after the unsafe startup signal and timeout handlers are disarmed.
++ * An embedded session has no postmaster to route a cancel packet through: parse
++ * it into valid storage, then reject it without dispatching or exiting.  Keep
++ * the live connection's protocol unchanged for valid and malformed cancels.
++ */
++int EMSCRIPTEN_KEEPALIVE
++ProcessStartupPacket(Port *port)
++{
++	PendingCancelRequest cancel_req = {0};
++	ProtocolVersion previous_proto = port->proto;
++	int			status;
++
++	status = ProcessStartupPacketInternal(port, &cancel_req);
++	if (port->proto == CANCEL_REQUEST_CODE)
++	{
++		port->proto = previous_proto;
++		return STATUS_ERROR;
++	}
++	return status;
++}
++#endif
++
+ /*
+  * The client has sent a cancel request packet, not a normal
+  * start-a-new-connection packet.  Parse, validate, then stash the parsed

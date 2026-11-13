@@ -70,7 +70,7 @@ index 4e911395fe3bae8edf33e5a05257872060146f09..2a4b919c69291150e40d4119391228af
 +*.undef.txt
 \ No newline at end of file
 diff --git a/configure b/configure
-index 7e3f83b04f3d4501661f051b7c7d5e57adc4da89..fae23b3466ca5ca028617283628cd01117b393cd 100755
+index 09b866cdc36536401bd779138ef6ff2a4e3fa55d..957bc6c96be45fd0bf11568b5ef4494b423d6ab7 100755
 --- a/configure
 +++ b/configure
 @@ -19753,7 +19753,7 @@ fi
@@ -272,10 +272,10 @@ index 5c2d4180980e8a9fa9ae5f35a8d01f8949ea35ce..847d8460f6ca84b6d2bda266c8109cf4
  clean distclean:
  	rm -f pg_ctl$(X) $(OBJS)
 diff --git a/src/bin/pg_dump/Makefile b/src/bin/pg_dump/Makefile
-index 79073b0a0ead829be90a0b52b3ee4e92a3b12e44..9cd8b5877780e5f8b75c4464f0056f94dbb5a156 100644
+index 5abd17a4cc176dca952c39ebdf80c43ef0cf46e3..26d5f07d9a70ac50314c06a33786402a8c8ef3cb 100644
 --- a/src/bin/pg_dump/Makefile
 +++ b/src/bin/pg_dump/Makefile
-@@ -58,6 +58,11 @@ install: all installdirs
+@@ -59,6 +59,11 @@ install: all installdirs
  	$(INSTALL_PROGRAM) pg_dump$(X) '$(DESTDIR)$(bindir)'/pg_dump$(X)
  	$(INSTALL_PROGRAM) pg_restore$(X) '$(DESTDIR)$(bindir)'/pg_restore$(X)
  	$(INSTALL_PROGRAM) pg_dumpall$(X) '$(DESTDIR)$(bindir)'/pg_dumpall$(X)
@@ -287,7 +287,7 @@ index 79073b0a0ead829be90a0b52b3ee4e92a3b12e44..9cd8b5877780e5f8b75c4464f0056f94
  
  installdirs:
  	$(MKDIR_P) '$(DESTDIR)$(bindir)'
-@@ -70,7 +75,13 @@ installcheck:
+@@ -71,7 +76,13 @@ installcheck:
  
  uninstall:
  	rm -f $(addprefix '$(DESTDIR)$(bindir)'/, pg_dump$(X) pg_restore$(X) pg_dumpall$(X))

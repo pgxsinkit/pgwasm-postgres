@@ -1,6 +1,6 @@
 {
   "$comment": "The upstream PostgreSQL release the series applies to. patches:check fetches the tag and refuses to proceed unless it resolves to exactly this commit.",
   "repository": "https://github.com/postgres/postgres.git",
-  "tag": "REL_19_RC1",
-  "commit": "0b8bff042a997fe50fcd1c4c83b9ef1cc9ed8a89"
+  "tag": "REL_19_RC2",
+  "commit": "dffcca2e3c81178c64d4c1f44543a3507d0b7508"
 }

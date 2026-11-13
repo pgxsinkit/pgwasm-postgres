@@ -53,10 +53,10 @@ index f164d87bc3e4d671b3b3b0654d63a463e933d7c4..30b4bbf99579d2fd6e63a6ae029be728
  		}
  
 diff --git a/src/backend/port/posix_sema.c b/src/backend/port/posix_sema.c
-index 53e4a7a5c38f9a67925b0c62446edeebbc48418c..c8edff46dfebac7d63e29d3b54d12b6892b26568 100644
+index 05a8b2222aa994600c08d3f6f229e50c02ca1663..bc02037ab3f04e56ceb093180c5ae77345d072f0 100644
 --- a/src/backend/port/posix_sema.c
 +++ b/src/backend/port/posix_sema.c
-@@ -287,6 +287,10 @@ PGSemaphoreCreate(void)
+@@ -292,6 +292,10 @@ PGSemaphoreCreate(void)
  void
  PGSemaphoreReset(PGSemaphore sema)
  {
@@ -67,7 +67,7 @@ index 53e4a7a5c38f9a67925b0c62446edeebbc48418c..c8edff46dfebac7d63e29d3b54d12b68
  	/*
  	 * There's no direct API for this in POSIX, so we have to ratchet the
  	 * semaphore down to 0 with repeated trywait's.
-@@ -302,6 +306,7 @@ PGSemaphoreReset(PGSemaphore sema)
+@@ -307,6 +311,7 @@ PGSemaphoreReset(PGSemaphore sema)
  			elog(FATAL, "sem_trywait failed: %m");
  		}
  	}
@@ -90,7 +90,7 @@ index 087120db0909d6ccaf7733e9a3ce104c794de7ad..dcde758f39abc3a1efda9d1cf1db7b06
  		/*
  		 * There's no point in doing slow checkpoints in a standalone backend,
 diff --git a/src/backend/storage/file/fd.c b/src/backend/storage/file/fd.c
-index 4cf4717f764b053c22ae5d35712af753ae845358..9f64caa6eda52ff977647fe40f3f385e82a99c3b 100644
+index abfb4c5ff2b4337a55698b953bdb15d4770bbfea..ed29a9e1bc65beaca63d22db73eea7ad277e2ee7 100644
 --- a/src/backend/storage/file/fd.c
 +++ b/src/backend/storage/file/fd.c
 @@ -525,6 +525,10 @@ pg_file_exists(const char *name)
@@ -104,7 +104,7 @@ index 4cf4717f764b053c22ae5d35712af753ae845358..9f64caa6eda52ff977647fe40f3f385e
  	/*
  	 * Right now file flushing is primarily used to avoid making later
  	 * fsync()/fdatasync() calls have less impact. Thus don't trigger flushes
-@@ -695,6 +699,7 @@ retry:
+@@ -698,6 +702,7 @@ retry:
  		return;
  	}
  #endif
