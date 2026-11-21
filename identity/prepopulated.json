@@ -4,7 +4,7 @@
   "sourceDateEpoch": 1792895272,
   "artefacts": {
     "postgres.js": "e3ce8a5d2b123b6e0cab190c987695e065d9eade671b53a7f0a828a68f3db399",
-    "postgres.wasm": "5934afc02711178271207d4f21430d82f2737a7433b5db2e69e1112538bcf317",
+    "postgres.wasm": "545cfdab5d664f1c8e382c497f8ee06abd98781369b70c4a6376807b9f1bf10f",
     "postgres.data": "59b01bd0a90fcbdc7fea17c9aae06bfdc53036f8ca0d7cffcaa8adabf4c42624",
     "initdb.js": "cf3fff4109879f3be1ba321f19b126c4f8d518d9909846927d3104b1ec0a8129",
     "initdb.wasm": "ca82d1ee91e260001f813de6076f2c3a87fb2e856362cb51b5d4059fbead9c76"

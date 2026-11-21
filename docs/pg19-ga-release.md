@@ -62,3 +62,13 @@ two passing gates from the same final clean commit with identical manifests,
 and a successful CI gate on that exact commit. The release job must reproduce
 the gated build before publication. Toolkit adoption then qualifies its worker,
 IndexedDB, OPFS and dump contracts against these server and dump assets.
+
+## Completed release qualification
+
+Commit `77228df75b0b80e633c6153cbc17db69ca3a7f6e` passed two independent clean
+local gates using the locked published builder. Their complete manifests were
+byte-identical, with SHA-256
+`89e117f0eea51612a5b917466158047c8ce540b5ba226c60e6c1828986524c49`.
+Every release checksum verified in both gate outputs. CI gate `44861023009` also
+passed on that exact commit. The final `19.0.0` tag identifies this commit.
+[CI gate](https://github.com/pgxsinkit/pgwasm-postgres/actions/runs/44861023009)
