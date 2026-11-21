@@ -52,7 +52,7 @@ index 06623e746bbf2766e74d7e945ba9c26d1b7183ff..df5be280d2710a84891d96ebb876e035
  							   const pg_compress_specification compression_spec,
  							   bool dosync, ArchiveMode mode,
 diff --git a/src/bin/pg_dump/pg_dump.c b/src/bin/pg_dump/pg_dump.c
-index 8b4c0b4c4d1d5c31044c77eca8f41d05cee4f26c..139cb12b595ad32e7cfc774f0cdac6fd5bf746bc 100644
+index ee71acb097ddb00bff37bcb49d15bb86081cde65..93f8f9ca5931783289b79f0a81d39ebf9d02adbb 100644
 --- a/src/bin/pg_dump/pg_dump.c
 +++ b/src/bin/pg_dump/pg_dump.c
 @@ -75,6 +75,28 @@
