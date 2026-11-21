@@ -70,10 +70,11 @@ ICU 79.1 from its checksum-verified release source, and Ubuntu's 2026-10-24
 snapshot. zlib 1.3.2 and libxml2 2.15.4 remain the latest releases when verified.
 The image must be published and its digest recorded before any release.
 
-Local and CI Bun pins are both 1.4.4, verified as the latest published version.
-The workspace dependencies were refreshed together: Bun types 1.4.4, oxfmt
-0.74.0, oxlint 1.89.0 and oxlint-tsgolint 7.0.2005; TypeScript 7.0.2 remained
-latest. Validation and gate commands run directly through `bun run`.
+Local and CI Bun pins are both 1.4.5, verified as the latest published version.
+The workspace dependencies were refreshed together with Bun types 1.4.5,
+oxlint 1.94.0 and oxlint-tsgolint 7.0.2007; TypeScript 7.0.2 remained latest.
+Formatting uses Bun's built-in formatter. Validation and gate commands run
+directly through `bun run`.
 
 The minimal data retains the root-only selection: `coll/root.res` and
 `coll/ucadata.icu`, extracted from the release's `source/data/in/icudt79l.dat`
