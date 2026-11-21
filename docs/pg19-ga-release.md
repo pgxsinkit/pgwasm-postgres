@@ -72,3 +72,35 @@ byte-identical, with SHA-256
 Every release checksum verified in both gate outputs. CI gate `44861023009` also
 passed on that exact commit. The final `19.0.0` tag identifies this commit.
 [CI gate](https://github.com/pgxsinkit/pgwasm-postgres/actions/runs/44861023009)
+
+## Post-release clock variation
+
+The first `19.0.1` develop CI gate reported a changed `subscription` diff while
+retaining 188 passes, 55 failures and zero backend failures. Its success-only
+artifact step was skipped, so the changed hunk cannot be recovered from that
+run. The CI result establishes output variation independently of the uniform
+local samples. [Failed CI gate](https://github.com/pgxsinkit/pgwasm-postgres/actions/runs/44865645005)
+
+Supplementary local investigation used the existing runner and cached native
+tools against the already-built `19.0.1` Wasm. Thirty-two focused executions of
+an exact upstream `subscription.sql` copy all matched the committed full-suite
+diff byte-for-byte, with zero backend failures. They establish the same local
+variant, without exposing the CI hunk.
+
+A separate focused SQL probe used the existing driver with its real host clock
+and the upstream reset/capture/reset/strict-comparison sequence. In three
+comparisons it observed both results. One pair advanced from
+`04:38:42.565+00` to `04:38:42.566+00` and returned true. Another pair had both
+timestamps at `04:38:42.569+00` and returned false. The focused output variants
+differ only in that boolean. The Wasm SHA-256 was
+`545cfdab5d664f1c8e382c497f8ee06abd98781369b70c4a6376807b9f1bf10f`.
+This reproduces the previously recorded millisecond-clock limitation on the
+current runtime. The missing CI hunk leaves its precise content unverified.
+
+The existing `combineRuns` and `recordBaseline` logic records this supplementary
+evidence for `subscription`. The develop baseline again classifies `stats` and
+`subscription` as unstable, with 188 passing programs and 53 recorded failures.
+Its original eight-run full-suite provenance and artefact hashes are retained.
+Every other program classification and retained diff is byte-identical to the
+previous record. The published `19.0.0` qualification remains in its tagged
+commit.

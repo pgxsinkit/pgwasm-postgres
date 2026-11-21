@@ -16,8 +16,8 @@
   "summary": {
     "tests": 243,
     "passed": 188,
-    "failed": 54,
-    "unstable": 1
+    "failed": 53,
+    "unstable": 2
   },
   "groups": {
     "clock-resolution": {
@@ -94,7 +94,7 @@
       "tests": ["create_schema"]
     },
     "walreceiver-libpq": {
-      "reason": "libpqwalreceiver.so loads, and CREATE SUBSCRIPTION … WITH (connect = false) works, but a connection attempt fails with 'libpq is incorrectly linked to backend functions' where 'port=-1' expects libpq's own 'invalid port number': the module links libpq statically without libpgcommon's frontend build, so libpq's pg_link_canary_is_frontend() is the backend's, which says no (and libpq's pg_char_to_encoding and pg_encoding_to_char stay unresolved, since the backend has them only as *_private). Its diff also shows session-authorization (the role tests at its end), and it is unstable through clock-resolution: in some runs (3 of 8 during RC1 qualification) two pg_stat_reset_subscription_stats calls fall in the same millisecond, so the second stats_reset is not later. Its diff also varies across RC2's eight qualification runs.",
+      "reason": "libpqwalreceiver.so loads, and CREATE SUBSCRIPTION … WITH (connect = false) works, but a connection attempt fails with 'libpq is incorrectly linked to backend functions' where 'port=-1' expects libpq's own 'invalid port number': the module links libpq statically without libpgcommon's frontend build, so libpq's pg_link_canary_is_frontend() is the backend's, which says no (and libpq's pg_char_to_encoding and pg_encoding_to_char stay unresolved, since the backend has them only as *_private). Its diff also shows session-authorization (the role tests at its end), and it is unstable through clock-resolution: in some runs (3 of 8 during RC1 qualification) two pg_stat_reset_subscription_stats calls fall in the same millisecond, so the second stats_reset is not later. Its diff also varies across RC2's eight qualification runs. Post-release 19.0.1 CI run 44865645005 reported a changed subscription diff without preserving its hunk. All 32 supplementary focused pg_regress executions locally matched one variant. A supplementary real-clock SQL probe on the same 19.0.1 Wasm reproduced both strict reset comparisons in three observations: true across a millisecond boundary and false when both reset timestamps were equal. This restores the known clock-sensitive classification; the original full-suite measurement count, artefact hashes and all other results are retained.",
       "tests": ["subscription"]
     },
     "wasm-stack": {
@@ -273,7 +273,7 @@
     "vacuum_parallel": "ok",
     "maintain_every": "ok",
     "publication": "failed",
-    "subscription": "failed",
+    "subscription": "unstable",
     "select_views": "failed",
     "portals_p2": "ok",
     "portals_inflight": "ok",
