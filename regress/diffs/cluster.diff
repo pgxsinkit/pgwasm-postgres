@@ -135,8 +135,17 @@ diff -U3 expected/cluster.out results/cluster.out
  ROLLBACK;
  -- REPACK (ANALYZE) is not allowed in a transaction block.
  BEGIN;
-@@ -810,6 +784,9 @@
+@@ -810,13 +784,14 @@
  ROLLBACK;
+ -- Shared rels are not allowed with USING INDEX.
+ REPACK pg_database USING INDEX pg_database_oid_index;
+-ERROR:  cannot execute REPACK ... USING INDEX on a shared catalog
+-DETAIL:  Marking an index as clustered on a shared catalog would only take effect in the current database.
++ERROR:  permission denied for table pg_database
+ CLUSTER pg_database USING pg_database_oid_index;
+-ERROR:  cannot execute CLUSTER on a shared catalog
+-DETAIL:  Marking an index as clustered on a shared catalog would only take effect in the current database.
++ERROR:  permission denied for table pg_database
  -- REPACK is allowed within a PL, as long as there's no ANALYZE.
  DO $$ BEGIN EXECUTE 'REPACK clstr_tst'; END $$;
 +ERROR:  permission denied for table clstr_tst
@@ -145,7 +154,7 @@ diff -U3 expected/cluster.out results/cluster.out
  DO $$ BEGIN EXECUTE 'REPACK (ANALYZE) clstr_tst'; END $$;
  ERROR:  REPACK (ANALYZE) cannot be executed from a function or procedure
  CONTEXT:  SQL statement "REPACK (ANALYZE) clstr_tst"
-@@ -875,9 +852,13 @@
+@@ -882,9 +857,13 @@
  DROP TABLE clustertest;
  DROP TABLE clstr_1;
  DROP TABLE clstr_2;

@@ -1,23 +1,23 @@
 {
   "$comment": "The pg_regress baseline (ADR-0001 decision 6): each test of the schedule on the pinned tag, run through the TCP bridge on the build, with --use-existing --max-connections=1. A failed test's normalised diff is regress/diffs/<test>.diff; an unstable test's outcome or diff differed between the recorded runs. `tests` and `summary` are written by `bun run regress --record`; `groups` (why each failing or unstable test fails) are written by hand and kept by --record. `bun run regress` fails on a new failure, a changed diff or a newly unstable test, and reports a vanished failure.",
   "upstream": {
-    "tag": "REL_19_RC2",
-    "commit": "dffcca2e3c81178c64d4c1f44543a3507d0b7508"
+    "tag": "REL_19_0",
+    "commit": "5c839a2a08b9b87a349be97371fac6c5a2873b10"
   },
   "schedule": "parallel_schedule",
   "runs": 8,
   "recordedWith": {
-    "postgres.js": "6c6c65b7fcbc3651f8bb38a4536216b186eb8cd57bca5fca1ce712a1fcc83009",
-    "postgres.wasm": "9d3b5b288cd1e0dc5d7adcb4b7a17de0d6dd6f5545c1fa350b98f67f3ed15306",
-    "postgres.data": "eaa28b912167539490fedb7f37ccecfd4d569919b16da7708b2aad62442bde98",
+    "postgres.js": "e3ce8a5d2b123b6e0cab190c987695e065d9eade671b53a7f0a828a68f3db399",
+    "postgres.wasm": "5934afc02711178271207d4f21430d82f2737a7433b5db2e69e1112538bcf317",
+    "postgres.data": "59b01bd0a90fcbdc7fea17c9aae06bfdc53036f8ca0d7cffcaa8adabf4c42624",
     "initdb.js": "cf3fff4109879f3be1ba321f19b126c4f8d518d9909846927d3104b1ec0a8129",
-    "initdb.wasm": "2c9bb1c3ad3267b4ae5d21c1bc9ebfaf608ecfbb2e14e671ad4ed0a24657edb3"
+    "initdb.wasm": "ca82d1ee91e260001f813de6076f2c3a87fb2e856362cb51b5d4059fbead9c76"
   },
   "summary": {
     "tests": 243,
     "passed": 188,
-    "failed": 53,
-    "unstable": 2
+    "failed": 54,
+    "unstable": 1
   },
   "groups": {
     "clock-resolution": {
@@ -273,7 +273,7 @@
     "vacuum_parallel": "ok",
     "maintain_every": "ok",
     "publication": "failed",
-    "subscription": "unstable",
+    "subscription": "failed",
     "select_views": "failed",
     "portals_p2": "ok",
     "portals_inflight": "ok",

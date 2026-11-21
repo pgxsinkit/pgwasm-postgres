@@ -1,7 +1,7 @@
 diff -U3 expected/create_function_sql.out results/create_function_sql.out
 --- expected/create_function_sql.out
 +++ results/create_function_sql.out
-@@ -606,8 +606,9 @@
+@@ -673,8 +673,9 @@
  CREATE FUNCTION functest_B_2(bigint) RETURNS bool LANGUAGE 'sql'
         IMMUTABLE AS 'SELECT $1 > 0';
  DROP FUNCTION functest_b_1;
@@ -12,7 +12,7 @@ diff -U3 expected/create_function_sql.out results/create_function_sql.out
  DROP FUNCTION functest_b_2;  -- error, ambiguous
  ERROR:  function name "functest_b_2" is not unique
  HINT:  Specify the argument list to select the function unambiguously.
-@@ -798,14 +799,19 @@
+@@ -865,14 +866,19 @@
  -- Put it into an operator class so that FmgrInfo will be cached in relcache.
  CREATE OPERATOR CLASS part_test_int4_ops_bad FOR TYPE int4 USING hash AS
    FUNCTION 2 part_hashint4_error(int4, int8);
@@ -36,11 +36,11 @@ diff -U3 expected/create_function_sql.out results/create_function_sql.out
  -- Things that shouldn't work:
  CREATE FUNCTION test1 (int) RETURNS int LANGUAGE SQL
      AS 'SELECT ''not an integer'';';
-@@ -846,47 +852,8 @@
+@@ -913,51 +919,8 @@
  RESET check_function_bodies;
  -- Cleanup
  DROP SCHEMA temp_func_test CASCADE;
--NOTICE:  drop cascades to 41 other objects
+-NOTICE:  drop cascades to 45 other objects
 -DETAIL:  drop cascades to function functest_a_1(text,date)
 -drop cascades to function functest_a_2(text[])
 -drop cascades to function functest_a_3()
@@ -66,6 +66,10 @@ diff -U3 expected/create_function_sql.out results/create_function_sql.out
 -drop cascades to function functest_s_10(text,date)
 -drop cascades to function functest_s_13()
 -drop cascades to function functest_s_15(integer)
+-drop cascades to function functest_out_point(double precision,double precision)
+-drop cascades to function functest_out_point2(double precision,double precision)
+-drop cascades to function functest_out_point_sql(double precision,double precision)
+-drop cascades to function functest_out_point2_sql(double precision,double precision)
 -drop cascades to function functest_b_2(bigint)
 -drop cascades to function functest_srf0()
 -drop cascades to function functest_sri1()
