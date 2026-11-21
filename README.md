@@ -12,11 +12,12 @@ the remaining native regression failures, coverage limits and optional work.
 
 ## Status
 
-The `port-19` branch targets PostgreSQL `REL_19_RC2` (`dffcca2e3c81`), with the five
+The PG19 line targets PostgreSQL `REL_19_0` (`5c839a2a08b9`), with the five
 topic patches ported, the internal names changed to `pgwasm`, and a new store format.
 Its builder uses Emscripten 6.0.13 and ICU 79.1. See [the port record](docs/port-19.md)
 for validation, host API changes and the adoption steps, and the
-[RC2 update record](docs/pg19-rc2-update-assessment.md) for the follow-up. The history below describes the 18.x releases.
+[GA qualification record](docs/pg19-ga-release.md) for the final release.
+The history below describes the 18.x releases.
 
 The series began as the split of ElectricSQL's PGlite fork (`electric-sql/postgres-pglite` at `b133782`,
 the PostgreSQL 18.3 tree PGlite 0.5.8 was built from), proven by tree identity and by rebuilding PGlite

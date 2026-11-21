@@ -3,9 +3,10 @@
 `port-19` starts from main's `18.6.2` release (`bf7938a`) and initially pinned PostgreSQL
 `REL_19_RC1`, commit `0b8bff042a997fe50fcd1c4c83b9ef1cc9ed8a89`. This was the newest
 PG19 tag returned by upstream on 2026-10-24. That build was published as `19.0.0-rc.1`.
-The branch now pins `REL_19_RC2` (`dffcca2e3c81178c64d4c1f44543a3507d0b7508`);
-the [RC2 update record](pg19-rc2-update-assessment.md) tracks its qualification.
-PG19 remains an opt-in release-candidate line alongside stable PG18.
+The branch now pins the final `REL_19_0` (`5c839a2a08b9b87a349be97371fac6c5a2873b10`).
+The [GA qualification record](pg19-ga-release.md) covers the final build.
+The [RC2 update record](pg19-rc2-update-assessment.md) preserves
+the previous candidate's qualification.
 
 The starting evidence is [readiness issue 1](https://github.com/pgxsinkit/pgwasm-postgres/issues/1),
 especially [the RC1 report](https://github.com/pgxsinkit/pgwasm-postgres/issues/1#issuecomment-6266756227).
@@ -89,10 +90,8 @@ server checks, and records `float8ByVal` as true on wasm32. The parser retains
 PG18's layout and rejects unknown layouts or a bad CRC. Historical 18 manifests
 keep their original tuple schema.
 
-An 18 data directory cannot be opened as a 19 directory. The consuming host must
-recreate or migrate stores when adopting format 2; that policy and adoption remain
-the maintainer's release decision. A subsequent PG19 prerelease may change the
-tuple again and must be checked before updating this pin.
+The final release retains the RC2 physical tuple and data format 2. Moving
+from a PG18 format-1 store to PG19 requires recreating it and resyncing.
 
 ## Export audit
 
@@ -182,16 +181,18 @@ same clean commit, with byte-identical `manifest.json` files. Each gate rebuilds
 runs smoke and record checks, then compares a fresh regression run with this
 baseline. The accepted gate's files are under `.cache/gate/<commit>/`.
 
-## Adoption after this branch
+## GA adoption
 
-1. Refresh and qualify the pin when upstream tags the next RC or final release.
-2. Publish the builder through the existing workflow and record its digest with
-   `builder:lock`; run the published-image gate.
-3. Coordinate the host ABI and format-2 store policy in pgxsinkit, then run its
-   contract gate on the candidate artefacts.
-4. Follow the existing rebase, review, fast-forward and tag release procedure.
+1. Qualify `REL_19_0` through the locked published builder and reviewed records.
+2. Run two clean gates with identical manifests and the CI gate on the release commit.
+3. Promote the qualified PG19 line to main and tag the candidate `19.0.0` through
+   the existing release procedure.
+4. Adopt server and pg_dump together in pgxsinkit and run its browser contract
+   gates. The native service upgrades follow separately.
 
-### RC publication alongside PG18
+### Historical RC publication alongside PG18
+
+The following sequence describes the opt-in candidates that preceded GA.
 
 This branch builds PG19 only. Retaining the PG18 control-file parser
 and historical format declaration supports tooling and comparisons; it does not
